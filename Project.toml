@@ -13,7 +13,7 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 [compat]
 Aqua = ">=0.8"
 Distributions = "0"
-JET = ">=0.9"
+JET = "0"
 LinearAlgebra = "<0.0.1, 1"
 Memoize = "0.4"
 Random = "<0.0.1, 1"
