@@ -1,15 +1,8 @@
-using GMRFs
-using Test
-using Aqua
-using JET
+using GMRFs, ReTest
+include("GMRFsTests.jl")
 
-@testset "GMRFs.jl" begin
-    @testset "Code quality (Aqua.jl)" begin
-        Aqua.test_all(GMRFs; ambiguities = false)
-        @test length(Test.detect_ambiguities(GMRFs)) == 0
-    end
-    @testset "Code linting (JET.jl)" begin
-        JET.test_package(GMRFs; target_defined_modules = true)
-    end
-    # Write your tests here.
+if "skip-aqua" in ARGS
+    GMRFTests.retest(r"\b(?!Aqua\b)\w+")
+else
+    GMRFTests.retest()
 end

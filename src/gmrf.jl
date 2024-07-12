@@ -5,7 +5,7 @@ using LinearAlgebra
 using Memoize
 using Random
 
-export AbstractGMRF, GMRF
+export AbstractGMRF, GMRF, precision_mat, precision_chol
 
 ########################################################
 #
@@ -15,7 +15,7 @@ export AbstractGMRF, GMRF
 #    Each subtype must implement the following methods:
 #    - length
 #    - mean
-#    - precision
+#    - precision_mat
 #
 ########################################################
 """
@@ -27,21 +27,21 @@ abstract type AbstractGMRF <: AbstractMvNormal end
 
 length(::AbstractGMRF) = error("length not implemented for GMRF")
 mean(::AbstractGMRF) = error("mean not implemented for GMRF")
-precision(::AbstractGMRF) = error("precision not implemented for GMRF")
+precision_mat(::AbstractGMRF) = error("precision_mat not implemented for GMRF")
 
 ### Generic derived methods
-invcov(d::AbstractGMRF) = precision(d)
-cov(d::AbstractGMRF) = precision_chol(d) \ Matrix{eltype(precision(d))}(I, size(precision(d))...)
+invcov(d::AbstractGMRF) = precision_mat(d)
+cov(d::AbstractGMRF) = precision_chol(d) \ Matrix{eltype(precision_mat(d))}(I, size(precision_mat(d))...)
 
-@memoize precision_chol(d::AbstractGMRF) = cholesky(precision(d))
+@memoize precision_chol(d::AbstractGMRF) = cholesky(precision_mat(d))
 
 logdetprecision(d::AbstractGMRF) = logdet(precision_chol(d))
 logdetcov(d::AbstractGMRF) = -logdetprecision(d)
 
-sqmahal(d::AbstractGMRF, x::AbstractVector) = dot(x, precision(d) * (x - mean(d)))
+sqmahal(d::AbstractGMRF, x::AbstractVector) = (Δ = x - mean(d); dot(Δ, precision_mat(d) * Δ))
 sqmahal!(r::AbstractVector, d::AbstractGMRF, x::AbstractVector) = (r .= sqmahal(d, x))
 
-gradlogpdf(d::AbstractGMRF, x::AbstractVector) = -precision(d) * (x .- mean(d))
+gradlogpdf(d::AbstractGMRF, x::AbstractVector) = -precision_mat(d) * (x .- mean(d))
 
 function _rand!(rng::AbstractRNG, d::AbstractGMRF, x::AbstractVector)
     randn!(rng, x)
@@ -73,4 +73,4 @@ end
 
 length(d::GMRF) = length(d.mean)
 mean(d::GMRF) = d.mean
-precision(d::GMRF) = d.precision
+precision_mat(d::GMRF) = d.precision
