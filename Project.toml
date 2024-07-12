@@ -1,0 +1,15 @@
+name = "GMRFs"
+uuid = "d5f06795-35bb-4323-9f0b-405ef76cfc5b"
+authors = ["Tim Weiland <hello@timwei.land> and contributors"]
+version = "1.0.0-DEV"
+
+[compat]
+julia = "1"
+
+[extras]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Aqua", "JET", "Test"]
