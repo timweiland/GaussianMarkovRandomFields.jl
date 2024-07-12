@@ -1,5 +1,5 @@
 module GMRFs
 
-# Write your package code here.
+include("gmrf.jl")
 
 end
