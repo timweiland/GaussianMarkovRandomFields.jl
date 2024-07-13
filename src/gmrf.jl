@@ -1,6 +1,6 @@
 import Base: length
-import Distributions: AbstractMvNormal, mean, cov, invcov, 
-        logdetcov, sqmahal, sqmahal!, gradlogpdf, _rand!
+import Distributions: AbstractMvNormal, mean, cov, invcov,
+    logdetcov, sqmahal, sqmahal!, gradlogpdf, _rand!
 using LinearAlgebra
 using Memoize
 using Random
@@ -38,7 +38,8 @@ cov(d::AbstractGMRF) = precision_chol(d) \ Matrix{eltype(precision_mat(d))}(I, s
 logdetprecision(d::AbstractGMRF) = logdet(precision_chol(d))
 logdetcov(d::AbstractGMRF) = -logdetprecision(d)
 
-sqmahal(d::AbstractGMRF, x::AbstractVector) = (Δ = x - mean(d); dot(Δ, precision_mat(d) * Δ))
+sqmahal(d::AbstractGMRF, x::AbstractVector) = (Δ = x - mean(d);
+dot(Δ, precision_mat(d) * Δ))
 sqmahal!(r::AbstractVector, d::AbstractGMRF, x::AbstractVector) = (r .= sqmahal(d, x))
 
 gradlogpdf(d::AbstractGMRF, x::AbstractVector) = -precision_mat(d) * (x .- mean(d))
