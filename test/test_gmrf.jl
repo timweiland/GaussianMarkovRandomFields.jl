@@ -55,4 +55,12 @@ using SparseArrays
             @test gradlogpdf(d, mean(d)) ≈ zeros(length(d))
         end
     end
+
+    low_noise_chol = cholesky(1e10 * Q_diag)
+    d_diag_low_noise_precomputed = GMRF(μ_diag, 1e10 * Q_diag, low_noise_chol)
+
+    @testset "Precomputed Cholesky factorization" begin
+        @test precision_chol(d_diag_low_noise_precomputed) === low_noise_chol
+        @test d_diag_low_noise.precision_chol_precomp === nothing
+    end
 end
