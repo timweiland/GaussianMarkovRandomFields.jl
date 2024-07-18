@@ -5,6 +5,7 @@ version = "1.0.0-DEV"
 
 [deps]
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+Ferrite = "c061ca5d-56c9-439f-9c0e-210fe06d3992"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Memoize = "c03570c3-d221-55d1-a50c-7939bbd78826"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
@@ -13,6 +14,7 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 [compat]
 Aqua = ">=0.8"
 Distributions = "0"
+Ferrite = ">=0.3"
 JET = "0"
 LinearAlgebra = "<0.0.1, 1"
 Memoize = "0.4"
@@ -26,9 +28,9 @@ julia = "1"
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 ReTest = "e0db7c4e-2690-44b9-bad6-7687da720f89"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["Aqua", "JET", "LinearAlgebra", "ReTest", "SparseArrays", "Test"]

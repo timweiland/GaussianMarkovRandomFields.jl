@@ -6,6 +6,7 @@ using Aqua
 using JET
 
 include("test_gmrf.jl")
+include("spdes/test_fem_discretization.jl")
 
 @testset "Code quality (Aqua.jl)" begin
     Aqua.test_all(GMRFs; ambiguities = false)
