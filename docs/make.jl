@@ -1,3 +1,3 @@
 using Documenter, GMRFs
 
-makedocs(sitename="GMRFs.jl")
+makedocs(sitename = "GMRFs.jl")
