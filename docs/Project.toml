@@ -1,0 +1,3 @@
+[deps]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+GMRFs = "d5f06795-35bb-4323-9f0b-405ef76cfc5b"
