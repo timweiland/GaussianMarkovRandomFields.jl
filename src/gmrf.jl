@@ -1,10 +1,20 @@
 import Base: length
 import Distributions:
-    AbstractMvNormal, mean, cov, invcov, logdetcov, sqmahal, sqmahal!, gradlogpdf, _rand!
+    AbstractMvNormal,
+    mean,
+    cov,
+    invcov,
+    logdetcov,
+    sqmahal,
+    sqmahal!,
+    gradlogpdf,
+    _rand!,
+    var,
+    std
 using LinearAlgebra
 using Memoize
 using Random
-using SparseArrays
+using SparseArrays, SparseInverseSubset
 
 export AbstractGMRF, GMRF, precision_mat, precision_chol
 
@@ -54,6 +64,10 @@ function _rand!(rng::AbstractRNG, d::AbstractGMRF, x::AbstractVector)
     x .+= mean(d)
     return x
 end
+
+# Use sparse partial inverse (Takahashi recursions)
+var(d::AbstractGMRF) = diag(sparseinv(precision_chol(d), depermute = true)[1])
+std(d::AbstractGMRF) = sqrt.(var(d))
 
 #####################
 #

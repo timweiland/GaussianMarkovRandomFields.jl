@@ -2,6 +2,7 @@ using GMRFs
 using Distributions
 using LinearAlgebra
 using SparseArrays
+using Random
 
 @testset "GMRF" begin
     μ_standard = zeros(3)
@@ -11,6 +12,8 @@ using SparseArrays
     d_standard = GMRF(μ_standard, Q_standard)
     d_diag = GMRF(μ_diag, Q_diag)
     d_diag_low_noise = GMRF(μ_diag, 1e10 * Q_diag)
+
+    rng = Random.MersenneTwister(2359025)
 
     @testset "Basic quantities" begin
         @test length(d_standard) == 3
@@ -62,5 +65,19 @@ using SparseArrays
     @testset "Precomputed Cholesky factorization" begin
         @test precision_chol(d_diag_low_noise_precomputed) === low_noise_chol
         @test d_diag_low_noise.precision_chol_precomp === nothing
+    end
+
+    @testset "Variance and standard deviation" begin
+        N = 100
+        for i = 1:5
+            Q = sprand(N, N, 0.2)
+            Q = (Q + Q') / 2 + N * I
+            Q⁻¹ = inv(Array(Q))
+            Q⁻¹ = (Q⁻¹ + Q⁻¹') / 2
+            d = GMRF(zeros(N), Q)
+            d2 = MvNormal(Q⁻¹)
+            @test var(d) ≈ var(d2)
+            @test std(d) ≈ sqrt.(var(d))
+        end
     end
 end

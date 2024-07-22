@@ -10,6 +10,7 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Memoize = "c03570c3-d221-55d1-a50c-7939bbd78826"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+SparseInverseSubset = "dc90abb0-5640-4711-901d-7e5b23a2fada"
 
 [compat]
 Aqua = ">=0.8"
@@ -20,6 +21,7 @@ Memoize = "0.4"
 Random = "<0.0.1, 1"
 ReTest = "0.3"
 SparseArrays = "<0.0.1, 1"
+SparseInverseSubset = ">=0.1"
 Test = "<0.0.1, 1"
 julia = "1"
 
