@@ -47,7 +47,7 @@ invcov(d::AbstractGMRF) = precision_mat(d)
 cov(d::AbstractGMRF) =
     precision_chol(d) \ Matrix{eltype(precision_mat(d))}(I, size(precision_mat(d))...)
 
-@memoize precision_chol(d::AbstractGMRF) = cholesky(precision_mat(d))
+@memoize precision_chol(d::AbstractGMRF) = cholesky(Hermitian(precision_mat(d)))
 
 logdetprecision(d::AbstractGMRF) = logdet(precision_chol(d))
 logdetcov(d::AbstractGMRF) = -logdetprecision(d)
@@ -66,7 +66,7 @@ function _rand!(rng::AbstractRNG, d::AbstractGMRF, x::AbstractVector)
 end
 
 # Use sparse partial inverse (Takahashi recursions)
-var(d::AbstractGMRF) = diag(sparseinv(precision_chol(d), depermute = true)[1])
+@memoize var(d::AbstractGMRF) = diag(sparseinv(precision_chol(d), depermute = true)[1])
 std(d::AbstractGMRF) = sqrt.(var(d))
 
 #####################
