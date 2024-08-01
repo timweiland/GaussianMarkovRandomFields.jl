@@ -1,5 +1,4 @@
-using GMRFs
-using Ferrite
+using GMRFs, Ferrite, SparseArrays
 
 @testset "FEMDiscretization" begin
     N_xy = 20
@@ -19,4 +18,14 @@ using Ferrite
     @test all(A .>= 0)
     @test all(A .<= 1)
     @test sum(A, dims = 2) ≈ ones(length(X))
+
+
+    node_idcs = [6, 13]
+    B = node_selection_matrix(f, node_idcs)
+    @test size(A) == (length(node_idcs), ndofs(f))
+    @test all(B .>= 0)
+    @test all(B .<= 1)
+    row_idcs, col_idcs, vals = findnz(B)
+    @test row_idcs == 1:length(node_idcs)
+    @test all(vals .≈ 1)
 end
