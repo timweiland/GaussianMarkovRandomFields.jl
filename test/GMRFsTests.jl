@@ -9,6 +9,7 @@ include("spdes/fem/test_fem_discretization.jl")
 include("spdes/fem/test_fem_derivatives.jl")
 include("spdes/test_matern.jl")
 include("test_gmrf_arithmetic.jl")
+include("test_mesh_utils.jl")
 
 @testset "Code quality (Aqua.jl)" begin
     Aqua.test_all(GMRFs; ambiguities = false)
