@@ -13,6 +13,7 @@ Memoize = "c03570c3-d221-55d1-a50c-7939bbd78826"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 SparseInverseSubset = "dc90abb0-5640-4711-901d-7e5b23a2fada"
+Tensors = "48a634ad-e948-5137-8d70-aa71f2a747f4"
 
 [compat]
 Aqua = ">=0.8"
@@ -26,6 +27,7 @@ Random = "<0.0.1, 1"
 ReTest = "0.3"
 SparseArrays = "<0.0.1, 1"
 SparseInverseSubset = ">=0.1"
+Tensors=">=1.16"
 Test = "<0.0.1, 1"
 julia = "1"
 
