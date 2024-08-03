@@ -5,8 +5,8 @@ using ReTest
 using Aqua
 
 include("test_gmrf.jl")
-include("spdes/test_fem_discretization.jl")
-include("spdes/test_fem_derivatives.jl")
+include("spdes/fem/test_fem_discretization.jl")
+include("spdes/fem/test_fem_derivatives.jl")
 include("spdes/test_matern.jl")
 include("test_gmrf_arithmetic.jl")
 
