@@ -16,28 +16,44 @@ struct FEMDiscretization{
     Q<:QuadratureRule{D},
     GI<:Interpolation{D},
     H<:DofHandler{D,G},
+    CH<:Union{ConstraintHandler{H},Nothing},
 }
     grid::G
     interpolation::I
     quadrature_rule::Q
     geom_interpolation::GI
     dof_handler::H
+    constraint_handler::CH
 
     function FEMDiscretization(
         grid::G,
         interpolation::I,
         quadrature_rule::Q,
+        fields = ((:u, 1),),
+        boundary_conditions = (),
     ) where {D,G<:Grid{D},I<:Interpolation{D},Q<:QuadratureRule{D}}
         geom_interpolation = interpolation
         dh = DofHandler(grid)
-        add!(dh, :u, 1)
+        for (field, n) in fields
+            add!(dh, field, n)
+        end
         close!(dh)
-        new{D,G,I,Q,I,DofHandler{D,G}}(
+
+        ch = nothing
+        if length(boundary_conditions) > 0
+            ch = ConstraintHandler(dh)
+            for bc in boundary_conditions
+                add!(ch, bc)
+            end
+            close!(ch)
+        end
+        new{D,G,I,Q,I,DofHandler{D,G},typeof(ch)}(
             grid,
             interpolation,
             quadrature_rule,
             geom_interpolation,
             dh,
+            ch,
         )
     end
 
@@ -50,12 +66,13 @@ struct FEMDiscretization{
         dh = DofHandler(grid)
         add!(dh, :u, 1)
         close!(dh)
-        new{D,G,I,Q,GI,DofHandler{D,G}}(
+        new{D,G,I,Q,GI,DofHandler{D,G},Nothing}(
             grid,
             interpolation,
             quadrature_rule,
             geom_interpolation,
             dh,
+            nothing,
         )
     end
 end
@@ -81,13 +98,17 @@ ndofs(f::FEMDiscretization) = f.dof_handler.ndofs.x
 Return the matrix A such that A[i, j] is the value of the j-th basis function
 at the i-th point in X.
 """
-function evaluation_matrix(f::FEMDiscretization{D}, X) where {D}
+function evaluation_matrix(f::FEMDiscretization, X; field = :default)
+    if field == :default
+        field = first(f.dof_handler.field_names)
+    end
+    dof_idcs = dof_range(f.dof_handler, field)
     A = spzeros(length(X), ndofs(f))
     peh = PointEvalHandler(f.grid, X)
     cc = CellCache(f.dof_handler)
     for i in eachindex(peh.cells)
         reinit!(cc, peh.cells[i])
-        dofs = celldofs(cc)
+        dofs = celldofs(cc)[dof_idcs]
         A[i, [dofs...]] = Ferrite.value(f.interpolation, peh.local_coords[i])
     end
     return A
@@ -99,14 +120,18 @@ end
 Return the matrix A such that A[i, j] = 1 if the j-th basis function
 is associated with the i-th node in node_ids.
 """
-function node_selection_matrix(f::FEMDiscretization, node_ids)
+function node_selection_matrix(f::FEMDiscretization, node_ids; field = :default)
+    if field == :default
+        field = first(f.dof_handler.field_names)
+    end
+    dof_idcs = dof_range(f.dof_handler, field)
     A = spzeros(length(node_ids), ndofs(f))
     node_coords = map(n -> f.grid.nodes[n].x, node_ids)
     peh = PointEvalHandler(f.grid, node_coords)
     cc = CellCache(f.dof_handler)
     for i in eachindex(peh.cells)
         reinit!(cc, peh.cells[i])
-        dofs = celldofs(cc)
+        dofs = celldofs(cc)[dof_idcs]
         coords = getcoordinates(cc)
         for j = 1:length(dofs)
             if coords[j] ≈ node_coords[i]

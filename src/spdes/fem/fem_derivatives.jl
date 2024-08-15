@@ -129,14 +129,23 @@ mats = derivative_matrices(disc, X; derivative_idcs=[2])
 `mats` contains a single matrix of size (2, ndofs(disc)) where the i-th row
 contains the derivative of all basis functions with respect to y at X[i].
 """
-function derivative_matrices(f::FEMDiscretization{D}, X; derivative_idcs = [1]) where {D}
+function derivative_matrices(
+    f::FEMDiscretization,
+    X;
+    derivative_idcs = [1],
+    field = :default,
+)
+    if field == :default
+        field = first(f.dof_handler.field_names)
+    end
+    dof_idcs = dof_range(f.dof_handler, field)
     mats = [spzeros(length(X), ndofs(f)) for _ in derivative_idcs]
     peh = PointEvalHandler(f.grid, X)
     cc = CellCache(f.dof_handler)
     for i in eachindex(peh.cells)
         reinit!(cc, peh.cells[i])
         dof_coords = getcoordinates(cc)
-        dofs = celldofs(cc)
+        dofs = celldofs(cc)[dof_idcs]
         ξ = peh.local_coords[i]
         J⁻¹ = inv(geom_jacobian(f, dof_coords, ξ))
         get_grad = (b) -> shape_gradient_global(f, dof_coords, b, ξ; J⁻¹ = J⁻¹)
@@ -173,17 +182,22 @@ laplacian = A + B
 ```
 """
 function second_derivative_matrices(
-    f::FEMDiscretization{D},
+    f::FEMDiscretization,
     X;
     derivative_idcs = [(1, 1)],
-) where {D}
+    field = :default,
+)
+    if field == :default
+        field = first(f.dof_handler.field_names)
+    end
+    dof_idcs = dof_range(f.dof_handler, field)
     mats = [spzeros(length(X), ndofs(f)) for _ in derivative_idcs]
     peh = PointEvalHandler(f.grid, X)
     cc = CellCache(f.dof_handler)
     for i in eachindex(peh.cells)
         reinit!(cc, peh.cells[i])
         dof_coords = getcoordinates(cc)
-        dofs = celldofs(cc)
+        dofs = celldofs(cc)[dof_idcs]
         J⁻¹ = inv(geom_jacobian(f, dof_coords, peh.local_coords[i]))
         geo_hessian = geom_hessian(f, dof_coords, peh.local_coords[i])
         ξ = peh.local_coords[i]

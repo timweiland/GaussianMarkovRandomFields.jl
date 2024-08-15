@@ -48,7 +48,7 @@ function assemble_C_G_matrices(cellvalues::CellScalarValues, dh::DofHandler, int
 
     for cell in CellIterator(dh)
         reinit!(cellvalues, cell)
-        Ce = assemble_mass_matrix(Ce, cellvalues, interpolation; lumping=true)
+        Ce = assemble_mass_matrix(Ce, cellvalues, interpolation; lumping = true)
         Ge = assemble_diffusion_matrix(Ge, cellvalues)
         assemble!(C_assembler, celldofs(cell), Ce)
         assemble!(G_assembler, celldofs(cell), Ge)

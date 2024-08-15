@@ -1,7 +1,6 @@
 using Ferrite, LinearAlgebra, SparseArrays
 
-export assemble_mass_matrix, assemble_diffusion_matrix, assemble_advection_matrix, 
-        lump_matrix, assemble_streamline_diffusion_matrix
+export assemble_mass_matrix, assemble_diffusion_matrix, lump_matrix
 
 """
     lump_matrix(A::AbstractMatrix, ::Lagrange{D, S, 1}) where {D, S}
@@ -28,7 +27,12 @@ function lump_matrix(A::AbstractMatrix, ::Lagrange)
 end
 
 
-function assemble_mass_matrix(Ce::SparseMatrixCSC, cellvalues::CellScalarValues, interpolation; lumping = true)
+function assemble_mass_matrix(
+    Ce::SparseMatrixCSC,
+    cellvalues::CellScalarValues,
+    interpolation;
+    lumping = true,
+)
     n_basefuncs = getnbasefunctions(cellvalues)
     # Reset to 0
     Ce = spzeros(size(Ce))
@@ -53,7 +57,11 @@ function assemble_mass_matrix(Ce::SparseMatrixCSC, cellvalues::CellScalarValues,
     return Ce
 end
 
-function assemble_diffusion_matrix(Ge::SparseMatrixCSC, cellvalues::CellScalarValues; diffusion_factor=I)
+function assemble_diffusion_matrix(
+    Ge::SparseMatrixCSC,
+    cellvalues::CellScalarValues;
+    diffusion_factor = I,
+)
     n_basefuncs = getnbasefunctions(cellvalues)
     # Reset to 0
     Ge = spzeros(size(Ge))
