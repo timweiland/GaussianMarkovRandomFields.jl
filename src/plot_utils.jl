@@ -93,6 +93,7 @@ function plot_spde_gmrf(
     plot_surface = false,
     limits = nothing,
     compute_std = true,
+field = :default,
 )
     means = mean(d)
     if compute_std
@@ -121,9 +122,9 @@ function plot_spde_gmrf(
             mp = hide_triangles(mp, vis_cells)
         end
         if plot_surface
-            FerriteViz.surface!(mp)
+            FerriteViz.surface!(mp; field = field)
         else
-            FerriteViz.solutionplot!(mp)
+            FerriteViz.solutionplot!(mp; field = field)
         end
     end
     axis_fn = plot_surface ? Axis3 : Axis
