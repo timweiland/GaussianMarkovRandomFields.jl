@@ -1,7 +1,8 @@
 using Ferrite, FerriteViz, WGLMakie
 import GeometryBasics
 
-export plot_spde_gmrf, get_coords, in_bounds, in_bounds_cell, hide_triangles
+export plot_spde_gmrf,
+    get_coords, in_bounds, in_bounds_cell, hide_triangles, plot_spatiotemporal_gmrf
 
 """
     get_coords(grid, cell_idx)
@@ -93,7 +94,7 @@ function plot_spde_gmrf(
     plot_surface = false,
     limits = nothing,
     compute_std = true,
-field = :default,
+    field = :default,
 )
     means = mean(d)
     if compute_std
@@ -141,6 +142,78 @@ field = :default,
         axis_fn(fig[pos...]; limits = limits)
         mp = MakiePlotter(dh, samples[i])
         plot_fn(mp)
+    end
+    return fig
+end
+
+function plot_spatiotemporal_gmrf(
+    x::ConstantMeshSTGMRF;
+    mean_pos = (1, 1),
+    std_pos = (1, 2),
+    sample_pos = [(2, 1), (2, 2)],
+    slider_row = 3,
+    plot_surface = false,
+    limits = nothing,
+    compute_std = true,
+    field = :default,
+)
+    means = time_means(x)
+    if compute_std
+        stds = time_stds(x)
+    else
+        stds = [spzeros(size(m)) for m in means]
+    end
+    rng = Random.default_rng()
+    samples = [time_rands(x, rng) for _ in sample_pos]
+
+    if limits === nothing
+        limits = plot_surface ? (nothing, nothing, nothing) : (nothing, nothing)
+    end
+    vis_cells = nothing
+    if !any(map(x -> x === nothing, limits))
+        vis_cells = map(
+            c -> in_bounds_cell(
+                x.discretization.grid,
+                ((limits[1], limits[2]), (limits[3], limits[4])),
+                c,
+            ),
+            eachindex(x.discretization.grid.cells),
+        )
+    end
+    function plot_fn(mp)
+        if vis_cells !== nothing
+            mp = hide_triangles(mp, vis_cells)
+        end
+        if plot_surface
+            FerriteViz.surface!(mp; field = field)
+        else
+            FerriteViz.solutionplot!(mp; field = field)
+        end
+    end
+    axis_fn = plot_surface ? Axis3 : Axis
+    dh = x.discretization.dof_handler
+
+    fig = Figure()
+    axis_fn(fig[mean_pos...]; limits = limits)
+    mp_mean = MakiePlotter(dh, Array(means[1]))
+    plot_fn(mp_mean)
+    axis_fn(fig[std_pos...]; limits = limits)
+    mp_std = MakiePlotter(dh, Array(stds[1]))
+    plot_fn(mp_std)
+    mp_samples = [MakiePlotter(dh, Array(sample[1])) for sample in samples]
+    for (i, pos) in enumerate(sample_pos)
+        axis_fn(fig[pos...]; limits = limits)
+        plot_fn(mp_samples[i])
+    end
+
+    time_slider =
+        Makie.Slider(fig[slider_row, 1:2], range = 1:length(means), startvalue = 1)
+    on(time_slider.value) do val
+        FerriteViz.update!(mp_mean, Array(means[val]))
+        FerriteViz.update!(mp_std, Array(stds[val]))
+        for (i, sample) in enumerate(samples)
+            FerriteViz.update!(mp_samples[i], Array(sample[val]))
+        end
     end
     return fig
 end
