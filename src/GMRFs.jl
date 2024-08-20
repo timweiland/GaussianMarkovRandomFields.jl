@@ -2,6 +2,7 @@ module GMRFs
 
 include("gmrf.jl")
 include("spdes/fem/fem_discretization.jl")
+include("spatiotemporal_gmrf.jl")
 include("spdes/fem/fem_derivatives.jl")
 include("spdes/fem/utils.jl")
 include("spdes/spde.jl")
