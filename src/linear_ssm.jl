@@ -70,7 +70,7 @@ function joint_ssm(
     F⁻¹A_fn::Function,
     ts::StepRangeLen,
 )
-    dt = ts.step
+    dt = Float64(ts.step)
     AᵀF⁻¹A = AᵀF⁻¹A_fn(dt)
     F⁻¹ = F⁻¹_fn(dt)
     F⁻¹A = F⁻¹A_fn(dt)
