@@ -1,6 +1,10 @@
 using Ferrite, LinearAlgebra, SparseArrays
 
-export assemble_mass_matrix, assemble_diffusion_matrix, lump_matrix
+export assemble_mass_matrix,
+    assemble_diffusion_matrix,
+    assemble_advection_matrix,
+    lump_matrix,
+    assemble_streamline_diffusion_matrix
 
 """
     lump_matrix(A::AbstractMatrix, ::Lagrange{D, S, 1}) where {D, S}
@@ -81,4 +85,58 @@ function assemble_diffusion_matrix(
         end
     end
     return Ge
+end
+
+function assemble_advection_matrix(
+    Be::SparseMatrixCSC,
+    cellvalues::CellScalarValues;
+    advection_velocity = 1,
+)
+    n_basefuncs = getnbasefunctions(cellvalues)
+    # Reset to 0
+    Be = spzeros(size(Be))
+    # Loop over quadrature points
+    for q_point = 1:getnquadpoints(cellvalues)
+        # Get the quadrature weight
+        dΩ = getdetJdV(cellvalues, q_point)
+        # Loop over test shape functions
+        for i = 1:n_basefuncs
+            ∇δu = shape_gradient(cellvalues, q_point, i)
+            # Loop over trial shape functions
+            for j = 1:n_basefuncs
+                u = shape_value(cellvalues, q_point, j)
+                # Add contribution to Ke
+                Be[i, j] += (advection_velocity ⋅ ∇δu ⋅ u) * dΩ
+            end
+        end
+    end
+    return Be
+end
+
+function assemble_streamline_diffusion_matrix(
+    Ge::SparseMatrixCSC,
+    cellvalues::CellScalarValues,
+    advection_velocity,
+    h,
+)
+    n_basefuncs = getnbasefunctions(cellvalues)
+    # Reset to 0
+    Ge = spzeros(size(Ge))
+    # Loop over quadrature points
+    for q_point = 1:getnquadpoints(cellvalues)
+        # Get the quadrature weight
+        dΩ = getdetJdV(cellvalues, q_point)
+        # Loop over test shape functions
+        for i = 1:n_basefuncs
+            ∇δu = shape_gradient(cellvalues, q_point, i)
+            # Loop over trial shape functions
+            for j = 1:n_basefuncs
+                ∇u = shape_gradient(cellvalues, q_point, j)
+                # Add contribution to Ke
+                Ge[i, j] += ((advection_velocity ⋅ ∇δu) ⋅ (advection_velocity ⋅ ∇u)) * dΩ
+            end
+        end
+    end
+    normalization_constant = h * (1 / norm(advection_velocity))
+    return normalization_constant * Ge
 end
