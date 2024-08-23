@@ -65,6 +65,20 @@ end
 
 function joint_ssm(
     x₀::GMRF,
+    AᵀF⁻¹A_fn::Function,
+    F⁻¹_fn::Function,
+    F⁻¹A_fn::Function,
+    ts::StepRangeLen,
+)
+    dt = ts.step
+    AᵀF⁻¹A = AᵀF⁻¹A_fn(dt)
+    F⁻¹ = F⁻¹_fn(dt)
+    F⁻¹A = F⁻¹A_fn(dt)
+    return joint_ssm(x₀, AᵀF⁻¹A, F⁻¹, F⁻¹A, ts)
+end
+
+function joint_ssm(
+    x₀::GMRF,
     AᵀF⁻¹A::AbstractMatrix,
     F⁻¹::AbstractMatrix,
     F⁻¹A::AbstractMatrix,
