@@ -68,9 +68,9 @@ function joint_ssm(
     AᵀF⁻¹A_fn::Function,
     F⁻¹_fn::Function,
     F⁻¹A_fn::Function,
-    ts::StepRangeLen,
+    ts::AbstractRange,
 )
-    dt = Float64(ts.step)
+    dt = Float64(step(ts))
     AᵀF⁻¹A = AᵀF⁻¹A_fn(dt)
     F⁻¹ = F⁻¹_fn(dt)
     F⁻¹A = F⁻¹A_fn(dt)
@@ -82,7 +82,7 @@ function joint_ssm(
     AᵀF⁻¹A::AbstractMatrix,
     F⁻¹::AbstractMatrix,
     F⁻¹A::AbstractMatrix,
-    ts::StepRangeLen,
+    ts::AbstractRange,
 )
     Nₛ = size(x₀.precision, 1)
     Nₜ = length(ts)
