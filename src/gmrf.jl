@@ -86,7 +86,7 @@ struct GMRF{T} <: AbstractGMRF
     function GMRF(
         mean::AbstractVector{T},
         precision::LinearMap{T},
-        solver_blueprint::AbstractSolverBlueprint = CholeskySolverBlueprint(),
+        solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
     ) where {T}
         n = length(mean)
         n == size(precision, 1) == size(precision, 2) ||
@@ -100,7 +100,7 @@ struct GMRF{T} <: AbstractGMRF
     GMRF(
         mean::AbstractVector{T},
         precision::AbstractMatrix{T},
-        solver_blueprint::AbstractSolverBlueprint = CholeskySolverBlueprint(),
+        solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
     ) where {T} = GMRF(mean, LinearMap(precision), solver_blueprint)
 end
 

@@ -17,7 +17,7 @@ struct LinearConditionalGMRF{G<:AbstractGMRF} <: AbstractGMRF
         Q_ϵ::AbstractMatrix,
         y::AbstractVector,
         b::AbstractVector = spzeros(size(A, 1)),
-        solver_blueprint::AbstractSolverBlueprint = CholeskySolverBlueprint(),
+        solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
     ) where {G}
         precision = prior.precision + LinearMap(Hermitian(A' * Q_ϵ * A))
         size(A, 1) == length(y) == length(b) || throw(ArgumentError("size mismatch"))

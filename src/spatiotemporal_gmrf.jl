@@ -73,7 +73,7 @@ struct ConstantMeshSTGMRF{T} <: AbstractSpatiotemporalGMRF
         precision::LinearMap{T},
         discretization::FEMDiscretization,
         ssm::ImplicitEulerSSM,
-        solver_blueprint::AbstractSolverBlueprint = CholeskySolverBlueprint(),
+        solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
     ) where {T}
         n = length(mean)
         n == size(precision, 1) == size(precision, 2) ||
