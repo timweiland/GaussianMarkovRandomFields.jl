@@ -1,11 +1,13 @@
 module GMRFs
 
+include("typedefs.jl")
 include("gmrf.jl")
 include("spdes/fem/fem_discretization.jl")
 include("spatiotemporal_gmrf.jl")
 include("linear_ssm.jl")
 include("spdes/fem/fem_derivatives.jl")
 include("spdes/fem/utils.jl")
+include("solvers/solver.jl")
 include("spdes/spde.jl")
 include("spdes/matern.jl")
 include("spdes/advection_diffusion.jl")
