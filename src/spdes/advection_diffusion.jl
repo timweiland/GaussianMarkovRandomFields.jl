@@ -1,4 +1,4 @@
-using Ferrite, LinearAlgebra, SparseArrays
+using Ferrite, LinearAlgebra, SparseArrays, LinearMaps
 
 export AdvectionDiffusionSPDE, discretize
 
@@ -74,7 +74,7 @@ function assemble_M_G_B_matrices(
     for cell in CellIterator(dh)
         reinit!(cellvalues, cell)
         Me = assemble_mass_matrix(Me, cellvalues, interpolation; lumping = true)
-        Ge = assemble_diffusion_matrix(Ge, cellvalues; diffusion_matrix = H)
+        Ge = assemble_diffusion_matrix(Ge, cellvalues; diffusion_factor = H)
         Be = assemble_advection_matrix(Be, cellvalues; advection_velocity = γ)
         if streamline_diffusion
             Se = assemble_streamline_diffusion_matrix(Se, cellvalues, γ, h)
@@ -105,7 +105,6 @@ function discretize(
     spde::AdvectionDiffusionSPDE{D},
     discretization::FEMDiscretization{D},
     ts::AbstractVector{Float64};
-    colored_noise = false,
     streamline_diffusion = false,
     h = 0.1,
 ) where {D}
@@ -140,28 +139,19 @@ function discretize(
 
     matern_spde = MaternSPDE{D}(5.0, 1)
     x₀ = discretize(matern_spde, discretization)
-    Q_s = x₀.precision
 
     if streamline_diffusion
-        E_fn = dt -> M + (dt / spde.c) * (K + B + S)
+        G_fn = dt -> LinearMap(M + (dt / spde.c) * (K + B + S))
     else
-        E_fn = dt -> M + (dt / spde.c) * (K + B)
+        G_fn = dt -> LinearMap(M + (dt / spde.c) * (K + B))
     end
 
-    β = dt -> (spde.c / (dt * τ^2))
-    if !colored_noise
-        F⁻¹_fn = dt -> β(dt) * E_fn(dt)' * M⁻¹ * E_fn(dt)
-        AF⁻¹A_fn = dt -> β(dt) * M
-        F⁻¹A_fn = dt -> β(dt) * E_fn(dt)'
-    else
-        M⁻¹Q = M⁻¹ * Q_s
-        M⁻¹QM⁻¹ = M⁻¹Q * M⁻¹
-        F⁻¹_fn = dt -> β(dt) * E_fn(dt)' * M⁻¹QM⁻¹ * E_fn(dt)
-        AF⁻¹A_fn = dt -> β(dt) * Q_s
-        F⁻¹A_fn = dt -> β(dt) * E_fn(dt)' * M⁻¹Q
-    end
+    β⁻¹ = dt -> sqrt(spde.c / (dt * τ^2))
+    β = dt -> sqrt((dt * τ^2) / spde.c)
 
-    X = joint_ssm(x₀, AF⁻¹A_fn, F⁻¹_fn, F⁻¹A_fn, ts)
-    X = ConstantMeshSTGMRF(X.mean, X.precision, discretization)
+    ssm =
+        ImplicitEulerSSM(x₀, G_fn, dt -> LinearMap(M), dt -> LinearMap(M⁻¹), β, β⁻¹, x₀, ts)
+    X = joint_ssm(ssm)
+    X = ConstantMeshSTGMRF(X.mean, X.precision, discretization, ssm)
     return X
 end

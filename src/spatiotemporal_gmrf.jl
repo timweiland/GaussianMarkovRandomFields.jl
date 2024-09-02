@@ -1,3 +1,5 @@
+using LinearMaps
+
 export AbstractSpatiotemporalGMRF,
     ConstantMeshSTGMRF,
     time_means,
@@ -34,14 +36,8 @@ abstract type AbstractSpatiotemporalGMRF <: AbstractGMRF end
 
 length(x::AbstractSpatiotemporalGMRF) = length(x.mean)
 mean(x::AbstractSpatiotemporalGMRF) = x.mean
-precision_mat(x::AbstractSpatiotemporalGMRF) = x.precision
-precision_chol_precomputed(x::AbstractSpatiotemporalGMRF) = x.precision_chol_precomp
-@memoize function precision_chol(x::AbstractSpatiotemporalGMRF)
-    if precision_chol_precomputed(x) === nothing
-        return cholesky(precision_mat(x))
-    end
-    return precision_chol_precomputed(x)
-end
+precision_map(x::AbstractSpatiotemporalGMRF) = x.precision
+ssm(x::AbstractSpatiotemporalGMRF) = x.ssm
 
 N_t(::AbstractSpatiotemporalGMRF) = error("N_t not implemented")
 time_means(::AbstractSpatiotemporalGMRF) = error("time_means not implemented")
@@ -67,21 +63,27 @@ A spatiotemporal GMRF with constant spatial discretization.
 """
 struct ConstantMeshSTGMRF{T} <: AbstractSpatiotemporalGMRF
     mean::AbstractVector{T}
-    precision::AbstractMatrix{T}
+    precision::LinearMap{T}
     discretization::FEMDiscretization
-    precision_chol_precomp::Union{Nothing,Cholesky,SparseArrays.CHOLMOD.Factor}
+    ssm::ImplicitEulerSSM
+    solver_ref::Base.RefValue{AbstractSolver}
 
     function ConstantMeshSTGMRF(
         mean::AbstractVector{T},
-        precision::AbstractMatrix{T},
+        precision::LinearMap{T},
         discretization::FEMDiscretization,
-        precision_chol::Union{Nothing,Cholesky,SparseArrays.CHOLMOD.Factor} = nothing,
+        ssm::ImplicitEulerSSM,
+        solver_blueprint::AbstractSolverBlueprint = CholeskySolverBlueprint(),
     ) where {T}
         n = length(mean)
         n == size(precision, 1) == size(precision, 2) ||
             throw(ArgumentError("size mismatch"))
         (n % ndofs(discretization)) == 0 || throw(ArgumentError("size mismatch"))
-        new{T}(mean, precision, discretization, precision_chol)
+
+        solver_ref = Base.RefValue{AbstractSolver}()
+        self = new{T}(mean, precision, discretization, ssm, solver_ref)
+        solver_ref[] = construct_solver(solver_blueprint, self)
+        return self
     end
 end
 
