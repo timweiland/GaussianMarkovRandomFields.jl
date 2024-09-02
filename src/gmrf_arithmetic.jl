@@ -23,7 +23,8 @@ function joint_gmrf(
     Q_ϵ::AbstractMatrix,
     b::AbstractVector = spzeros(size(A)[1]),
 )
-    x1_mean, x1_precision = mean(x1), precision_mat(x1)
+    # TODO: Think about using LinearMap implementation here
+    x1_mean, x1_precision = mean(x1), sparse(precision_map(x1))
     off_diagonal = -Q_ϵ * A
     Q_joint = [
         x1_precision+A'*Q_ϵ*A off_diagonal'
@@ -50,29 +51,8 @@ function condition_on_observations(
     A::AbstractMatrix,
     Q_ϵ::AbstractMatrix,
     y::AbstractVector = spzeros(size(A)[1]),
-    b::AbstractVector = spzeros(size(A)[1]),
+    b::AbstractVector = spzeros(size(A)[1]);
+    solver_blueprint::AbstractSolverBlueprint = CholeskySolverBlueprint(),
 )
-    x_mean, x_precision = mean(x), precision_mat(x)
-    Q_cond = x_precision + A' * Q_ϵ * A
-    Q_cond_chol = cholesky(Hermitian(Q_cond))
-    residual = y - (A * x_mean + b)
-    μ_cond = x_mean + Q_cond_chol \ (A' * (Q_ϵ * residual))
-    return GMRF(μ_cond, Q_cond, Q_cond_chol)
-end
-
-function condition_on_observations(
-    x::ConstantMeshSTGMRF,
-    A::AbstractMatrix,
-    Q_ϵ::AbstractMatrix,
-    y::AbstractVector = spzeros(size(A)[1]),
-    b::AbstractVector = spzeros(size(A)[1]),
-)
-    x_gmrf = GMRF(mean(x), precision_mat(x))
-    x_cond = condition_on_observations(x_gmrf, A, Q_ϵ, y, b)
-    return ConstantMeshSTGMRF(
-        mean(x_cond),
-        precision_mat(x_cond),
-        discretization_at_time(x, 1),
-        x_cond.precision_chol_precomp,
-    )
+    return LinearConditionalGMRF(x, A, Q_ϵ, y, b, solver_blueprint)
 end

@@ -2,6 +2,7 @@ module GMRFs
 
 include("typedefs.jl")
 include("gmrf.jl")
+include("linear_conditional_gmrf.jl")
 include("spdes/fem/fem_discretization.jl")
 include("spatiotemporal_gmrf.jl")
 include("linear_ssm.jl")

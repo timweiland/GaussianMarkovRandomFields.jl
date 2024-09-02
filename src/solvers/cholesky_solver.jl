@@ -14,6 +14,12 @@ function compute_mean(s::CholeskySolver)
     return s.gmrf.mean
 end
 
+function compute_mean(s::CholeskySolver{<:LinearConditionalGMRF})
+    x = s.gmrf
+    residual = x.y - (x.A * x.prior.mean + x.b)
+    return mean(x.prior) + s.precision_chol \ (x.A' * (x.Q_ϵ * residual))
+end
+
 function compute_variance(s::CholeskySolver)
     # Use sparse partial inverse (Takahashi recursions)
     return diag(sparseinv(s.precision_chol, depermute = true)[1])
