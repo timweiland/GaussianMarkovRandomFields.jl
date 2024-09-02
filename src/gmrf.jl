@@ -15,8 +15,9 @@ using LinearAlgebra
 using Memoize
 using Random
 using SparseArrays, SparseInverseSubset
+using LinearMaps
 
-export AbstractGMRF, GMRF, precision_mat, precision_chol
+export AbstractGMRF, GMRF, precision_map, precision_chol
 
 ########################################################
 #
@@ -39,34 +40,31 @@ is sparse. The zero entries in the precision correspond to conditional independe
 abstract type AbstractGMRF <: AbstractMvNormal end
 
 length(::AbstractGMRF) = error("length not implemented for GMRF")
-mean(::AbstractGMRF) = error("mean not implemented for GMRF")
-precision_mat(::AbstractGMRF) = error("precision_mat not implemented for GMRF")
+solver_ref(x::AbstractGMRF) = x.solver_ref
+@memoize mean(s::AbstractGMRF) = compute_mean(solver_ref(s)[])
+precision_map(::AbstractGMRF) = error("precision_mat not implemented for GMRF")
 
 ### Generic derived methods
-invcov(d::AbstractGMRF) = precision_mat(d)
+invcov(d::AbstractGMRF) = Hermitian(sparse(precision_map(d)))
 cov(d::AbstractGMRF) =
-    precision_chol(d) \ Matrix{eltype(precision_mat(d))}(I, size(precision_mat(d))...)
+    precision_chol(d) \ Matrix{eltype(precision_map(d))}(I, size(precision_map(d))...)
 
-@memoize precision_chol(d::AbstractGMRF) = cholesky(Hermitian(precision_mat(d)))
+# TODO: Throw this out at some point
+@memoize precision_chol(d::AbstractGMRF) = cholesky(invcov(d))
 
 logdetprecision(d::AbstractGMRF) = logdet(precision_chol(d))
 logdetcov(d::AbstractGMRF) = -logdetprecision(d)
 
 sqmahal(d::AbstractGMRF, x::AbstractVector) = (Δ = x - mean(d);
-dot(Δ, precision_mat(d) * Δ))
+dot(Δ, precision_map(d) * Δ))
 sqmahal!(r::AbstractVector, d::AbstractGMRF, x::AbstractVector) = (r .= sqmahal(d, x))
 
-gradlogpdf(d::AbstractGMRF, x::AbstractVector) = -precision_mat(d) * (x .- mean(d))
+gradlogpdf(d::AbstractGMRF, x::AbstractVector) = -precision_map(d) * (x .- mean(d))
 
-function _rand!(rng::AbstractRNG, d::AbstractGMRF, x::AbstractVector)
-    randn!(rng, x)
-    x .= precision_chol(d).UP \ x
-    x .+= mean(d)
-    return x
-end
+_rand!(rng::AbstractRNG, d::AbstractGMRF, x::AbstractVector) =
+    compute_rand!(solver_ref(d)[], rng, x)
 
-# Use sparse partial inverse (Takahashi recursions)
-@memoize var(d::AbstractGMRF) = diag(sparseinv(precision_chol(d), depermute = true)[1])
+@memoize var(d::AbstractGMRF) = compute_variance(solver_ref(d)[])
 std(d::AbstractGMRF) = sqrt.(var(d))
 
 #####################
@@ -75,35 +73,37 @@ std(d::AbstractGMRF) = sqrt.(var(d))
 #
 #####################
 """
-    GMRF{T}(mean, precision, precision_chol=nothing)
+    GMRF{T}(mean, precision, solver_ref)
 
 A Gaussian Markov Random Field with mean `mean` and precision matrix `precision`.
-Optionally, a precomputed Cholesky factorization `precision_chol` of the precision matrix
-may be provided. If not provided, it will be computed on the fly.
+Carries a reference to a solver for the GMRF quantities.
 """
 struct GMRF{T} <: AbstractGMRF
     mean::AbstractVector{T}
-    precision::AbstractMatrix{T}
-    precision_chol_precomp::Union{Nothing,Cholesky,SparseArrays.CHOLMOD.Factor}
+    precision::LinearMap{T}
+    solver_ref::Base.RefValue{AbstractSolver}
 
     function GMRF(
         mean::AbstractVector{T},
-        precision::AbstractMatrix{T},
-        precision_chol::Union{Nothing,Cholesky,SparseArrays.CHOLMOD.Factor} = nothing,
+        precision::LinearMap{T},
+        solver_blueprint::AbstractSolverBlueprint = CholeskySolverBlueprint(),
     ) where {T}
         n = length(mean)
         n == size(precision, 1) == size(precision, 2) ||
             throw(ArgumentError("size mismatch"))
-        new{T}(mean, precision, precision_chol)
+        solver_ref = Base.RefValue{AbstractSolver}()
+        self = new{T}(mean, precision, solver_ref)
+        solver_ref[] = construct_solver(solver_blueprint, self)
+        return self
     end
+
+    GMRF(
+        mean::AbstractVector{T},
+        precision::AbstractMatrix{T},
+        solver_blueprint::AbstractSolverBlueprint = CholeskySolverBlueprint(),
+    ) where {T} = GMRF(mean, LinearMap(precision), solver_blueprint)
 end
 
 length(d::GMRF) = length(d.mean)
 mean(d::GMRF) = d.mean
-precision_mat(d::GMRF) = d.precision
-@memoize function precision_chol(d::GMRF)
-    if d.precision_chol_precomp === nothing
-        return cholesky(d.precision)
-    end
-    return d.precision_chol_precomp
-end
+precision_map(d::GMRF) = d.precision
