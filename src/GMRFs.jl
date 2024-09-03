@@ -3,6 +3,7 @@ module GMRFs
 include("typedefs.jl")
 include("linear_maps/symmetric_block_tridiagonal.jl")
 include("preconditioners/preconditioner.jl")
+include("preconditioners/full_cholesky.jl")
 include("gmrf.jl")
 include("linear_conditional_gmrf.jl")
 include("spdes/fem/fem_discretization.jl")
