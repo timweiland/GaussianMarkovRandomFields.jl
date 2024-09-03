@@ -7,9 +7,10 @@ struct CGSolver{G<:AbstractGMRF} <: AbstractSolver
     reltol::Real
     abstol::Real
     maxiter::Int
+    Pl::Union{Identity, AbstractPreconditioner}
 
-    function CGSolver(gmrf::G, reltol::Real, abstol::Real, maxiter::Int) where {G}
-        new{G}(gmrf, reltol, abstol, maxiter)
+    function CGSolver(gmrf::G, reltol::Real, abstol::Real, maxiter::Int, Pl::Union{Identity, AbstractPreconditioner}) where {G}
+        new{G}(gmrf, reltol, abstol, maxiter, Pl)
     end
 end
 
@@ -28,6 +29,7 @@ function compute_mean(s::CGSolver{<:LinearConditionalGMRF})
         reltol = s.reltol,
         abstol = s.abstol,
         verbose = true,
+        Pl=s.Pl,
     )
 end
 
@@ -49,6 +51,7 @@ function compute_rand!(
             reltol = s.reltol,
             abstol = s.abstol,
             verbose = true,
+            Pl=s.Pl,
         )
 
     sample_resid = sample_kriging_mean - x
@@ -82,6 +85,7 @@ function compute_rand!(
             reltol = s.reltol,
             abstol = s.abstol,
             verbose = true,
+            Pl=s.Pl,
         )
         push!(xs, xₖ)
         t_prev = t
@@ -90,20 +94,42 @@ function compute_rand!(
     return x
 end
 
+function default_preconditioner_strategy(::AbstractGMRF)
+    return Identity()
+end
+
+function default_preconditioner_strategy(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF})
+    prior_diag_blocks = x.prior.precision.diagonal_blocks
+    update_term = sparse(x.A' * (x.Q_ϵ * x.A))
+    start = 1
+    stop = 0
+    sparse_blocks = []
+    for block in prior_diag_blocks
+        stop += size(block, 1)
+        push!(sparse_blocks, sparse(block) + update_term[start:stop, start:stop])
+        start = stop + 1
+    end
+    Ps = [FullCholeskyPreconditioner(b) for b in sparse_blocks]
+    return BlockJacobiPreconditioner(Ps)
+end
+
 struct CGSolverBlueprint <: AbstractSolverBlueprint
     reltol::Real
     abstol::Real
     maxiter::Int
+    preconditioner_strategy::Function
 
     function CGSolverBlueprint(
         reltol::Real = sqrt(eps(Float64)),
         abstol::Real = 0.0,
         maxiter::Int = 1000,
+        preconditioner_strategy::Function = default_preconditioner_strategy,
     )
-        new(reltol, abstol, maxiter)
+        new(reltol, abstol, maxiter, preconditioner_strategy)
     end
 end
 
 function construct_solver(bp::CGSolverBlueprint, gmrf::AbstractGMRF)
-    return CGSolver(gmrf, bp.reltol, bp.abstol, bp.maxiter)
+    Pl = bp.preconditioner_strategy(gmrf)
+    return CGSolver(gmrf, bp.reltol, bp.abstol, bp.maxiter, Pl)
 end
