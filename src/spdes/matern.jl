@@ -1,6 +1,7 @@
 using Ferrite
 using LinearAlgebra
 using SparseArrays
+using SpecialFunctions
 
 export MaternSPDE, α, ndim, discretize, assemble_C_G_matrices, lump_matrix
 
@@ -24,12 +25,14 @@ The stationary solutions to this SPDE are Matérn processes.
 struct MaternSPDE{D} <: SPDE
     κ::Real
     ν::Rational
+    σ²::Real
 
-    function MaternSPDE{D}(κ::Real, ν::Union{Integer,Rational}) where {D}
+    function MaternSPDE{D}(κ::Real, ν::Union{Integer,Rational}, σ² = 1.0) where {D}
         κ > 0 || throw(ArgumentError("κ must be positive"))
         ν >= 0 || throw(ArgumentError("ν must be non-negative"))
         (D >= 1 && isinteger(D)) || throw(ArgumentError("D must be a positive integer"))
-        new{D}(κ, ν)
+        (σ² > 0) || throw(ArgumentError("σ² must be positive"))
+        new{D}(κ, ν, σ²)
     end
 end
 
@@ -105,7 +108,13 @@ function discretize(
     )
     K = 𝒟.κ^2 * C̃ + G
     C̃⁻¹ = spdiagm(0 => 1 ./ diag(C̃))
-    Q = matern_precision(C̃⁻¹, K, Integer(α(𝒟)))
+
+    # Ratio to get user-specified variance
+    σ²_natural = gamma(𝒟.ν) / (gamma(𝒟.ν + D / 2) * (4π)^(D / 2) * 𝒟.κ^(2 * 𝒟.ν))
+    σ²_goal = 𝒟.σ²
+    ratio = σ²_natural / σ²_goal
+
+    Q = ratio * matern_precision(C̃⁻¹, K, Integer(α(𝒟)))
     Q = (Q + Q') / 2 # Ensure symmetry. TODO: Can this be guaranteed naturally?
     return GMRF(spzeros(size(Q, 1)), Q)
 end
