@@ -1,4 +1,4 @@
-using SparseArrays, LinearAlgebra, Distributions, IterativeSolvers, Preconditioners
+using SparseArrays, LinearAlgebra, Distributions, IterativeSolvers
 
 export CGSolver, CGSolverBlueprint, construct_solver, compute_mean
 
