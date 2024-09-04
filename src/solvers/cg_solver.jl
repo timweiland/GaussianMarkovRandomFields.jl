@@ -2,6 +2,8 @@ using SparseArrays, LinearAlgebra, Distributions, IterativeSolvers
 
 export CGSolver, CGSolverBlueprint, construct_solver, compute_mean
 
+import Base: step
+
 struct CGSolver{G<:AbstractGMRF} <: AbstractSolver
     gmrf::G
     reltol::Real
@@ -77,22 +79,29 @@ function compute_rand!(
     t_prev = ts[1]
     z = zeros(size(xₖ))
     xs = [xₖ]
+    if ssm.ts isa AbstractRange
+        G_cho = cholesky(Symmetric(sparse(ssm.G(Base.step(ssm.ts)))))
+    end
     for t in ts[2:end]
         Δt = t - t_prev
         G = ssm.G(Δt)
+        if !(ssm.ts isa AbstractRange)
+            G_cho = cholesky(Symmetric(sparse(G)))
+        end
         M = ssm.M(Δt)
         β = ssm.β(Δt)
         rand!(rng, ssm.spatial_noise, z)
         rhs = M * (xₖ + β * z)
-        xₖ = cg(
-            G,
-            Array(rhs);
-            maxiter = s.maxiter,
-            reltol = s.reltol,
-            abstol = s.abstol,
-            verbose = true,
-            Pl = s.Pl,
-        )
+        xₖ = G_cho \ rhs
+        # xₖ = cg(
+        #     G,
+        #     Array(rhs);
+        #     maxiter = s.maxiter,
+        #     reltol = s.reltol,
+        #     abstol = s.abstol,
+        #     verbose = true,
+        #     Pl = s.Pl,
+        # )
         push!(xs, xₖ)
         t_prev = t
     end
