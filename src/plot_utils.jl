@@ -147,7 +147,7 @@ function plot_spde_gmrf(
 end
 
 function plot_spatiotemporal_gmrf(
-    x::ConstantMeshSTGMRF;
+    x::Union{ConstantMeshSTGMRF,LinearConditionalGMRF{<:ConstantMeshSTGMRF}};
     mean_pos = (1, 1),
     std_pos = (1, 2),
     sample_pos = [(2, 1), (2, 2)],
@@ -157,6 +157,7 @@ function plot_spatiotemporal_gmrf(
     compute_std = true,
     field = :default,
 )
+    disc = discretization_at_time(x, 1)
     means = time_means(x)
     if compute_std
         stds = time_stds(x)
@@ -173,11 +174,11 @@ function plot_spatiotemporal_gmrf(
     if !any(map(x -> x === nothing, limits))
         vis_cells = map(
             c -> in_bounds_cell(
-                x.discretization.grid,
+                disc.grid,
                 ((limits[1], limits[2]), (limits[3], limits[4])),
                 c,
             ),
-            eachindex(x.discretization.grid.cells),
+            eachindex(disc.grid.cells),
         )
     end
     function plot_fn(mp)
@@ -191,7 +192,7 @@ function plot_spatiotemporal_gmrf(
         end
     end
     axis_fn = plot_surface ? Axis3 : Axis
-    dh = x.discretization.dof_handler
+    dh = disc.dof_handler
 
     fig = Figure()
     axis_fn(fig[mean_pos...]; limits = limits)
