@@ -80,19 +80,19 @@ function compute_rand!(
     z = zeros(size(xₖ))
     xs = [xₖ]
     if ssm.ts isa AbstractRange
-        G_cho = cholesky(Symmetric(sparse(ssm.G(Base.step(ssm.ts)))))
+        G_lu = lu(sparse(ssm.G(Base.step(ssm.ts))))
     end
     for t in ts[2:end]
         Δt = t - t_prev
         G = ssm.G(Δt)
         if !(ssm.ts isa AbstractRange)
-            G_cho = cholesky(Symmetric(sparse(G)))
+            G_lu = lu(sparse(G))
         end
         M = ssm.M(Δt)
         β = ssm.β(Δt)
         rand!(rng, ssm.spatial_noise, z)
         rhs = M * (xₖ + β * z)
-        xₖ = G_cho \ rhs
+        xₖ = G_lu \ rhs
         # xₖ = cg(
         #     G,
         #     Array(rhs);
