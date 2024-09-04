@@ -80,5 +80,5 @@ function sparse(A::SymmetricBlockTridiagonalMap)
         end
         start = stop + 1
     end
-    return M
+    return Symmetric(M)
 end
