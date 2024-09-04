@@ -1,4 +1,4 @@
-using SparseArrays, LinearAlgebra, Distributions, IterativeSolvers
+using SparseArrays, LinearAlgebra, Distributions, IterativeSolvers, Preconditioners
 
 export CGSolver, CGSolverBlueprint, construct_solver, compute_mean
 
@@ -7,9 +7,15 @@ struct CGSolver{G<:AbstractGMRF} <: AbstractSolver
     reltol::Real
     abstol::Real
     maxiter::Int
-    Pl::Union{Identity, AbstractPreconditioner}
+    Pl::Union{Identity,AbstractPreconditioner}
 
-    function CGSolver(gmrf::G, reltol::Real, abstol::Real, maxiter::Int, Pl::Union{Identity, AbstractPreconditioner}) where {G}
+    function CGSolver(
+        gmrf::G,
+        reltol::Real,
+        abstol::Real,
+        maxiter::Int,
+        Pl::Union{Identity,AbstractPreconditioner},
+    ) where {G}
         new{G}(gmrf, reltol, abstol, maxiter, Pl)
     end
 end
@@ -29,7 +35,7 @@ function compute_mean(s::CGSolver{<:LinearConditionalGMRF})
         reltol = s.reltol,
         abstol = s.abstol,
         verbose = true,
-        Pl=s.Pl,
+        Pl = s.Pl,
     )
 end
 
@@ -51,7 +57,7 @@ function compute_rand!(
             reltol = s.reltol,
             abstol = s.abstol,
             verbose = true,
-            Pl=s.Pl,
+            Pl = s.Pl,
         )
 
     sample_resid = sample_kriging_mean - x
@@ -85,7 +91,7 @@ function compute_rand!(
             reltol = s.reltol,
             abstol = s.abstol,
             verbose = true,
-            Pl=s.Pl,
+            Pl = s.Pl,
         )
         push!(xs, xₖ)
         t_prev = t
@@ -100,17 +106,26 @@ end
 
 function default_preconditioner_strategy(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF})
     prior_diag_blocks = x.prior.precision.diagonal_blocks
+    prior_off_blocks = x.prior.precision.off_diagonal_blocks
     update_term = sparse(x.A' * (x.Q_ϵ * x.A))
     start = 1
     stop = 0
-    sparse_blocks = []
-    for block in prior_diag_blocks
-        stop += size(block, 1)
-        push!(sparse_blocks, sparse(block) + update_term[start:stop, start:stop])
+    sparse_blocks = Vector{SparseMatrixCSC{Float64}}(undef, length(prior_diag_blocks))
+    sparse_off_blocks = Vector{SparseMatrixCSC{Float64}}(undef, length(prior_off_blocks))
+
+    start = 1
+    stop = size(prior_diag_blocks[1], 1)
+    sparse_blocks[1] = sparse(prior_diag_blocks[1]) + update_term[start:stop, start:stop]
+    i = 2
+    for (diag, off_diag) in zip(prior_diag_blocks[2:end], prior_off_blocks)
         start = stop + 1
+        stop += size(diag, 1)
+        sparse_blocks[i] = sparse(diag) + update_term[start:stop, start:stop]
+        sparse_off_blocks[i-1] =
+            sparse(off_diag) + update_term[start:stop, stop-size(off_diag, 2):stop-1]
+        i += 1
     end
-    Ps = [FullCholeskyPreconditioner(b) for b in sparse_blocks]
-    return BlockJacobiPreconditioner(Ps)
+    return TridiagSymmetricBlockGaussSeidelPreconditioner(sparse_off_blocks, sparse_blocks)
 end
 
 struct CGSolverBlueprint <: AbstractSolverBlueprint

@@ -67,18 +67,18 @@ function sparse(A::SymmetricBlockTridiagonalMap)
     stop = 0
     for (i, block) in enumerate(A.diagonal_blocks)
         stop += Base.size(block, 1)
-        M[start:stop, start:stop] .= sparse(block)
+        M[start:stop, start:stop] = sparse(block)
         if i > 1
             off_block = A.off_diagonal_blocks[i-1]
             off_block_size = Base.size(off_block, 2)
-            M[start:stop, start-off_block_size:start-1] .= sparse(off_block)
+            M[start:stop, start-off_block_size:start-1] = sparse(off_block)
         end
         if i < length(A.diagonal_blocks)
             off_block = A.off_diagonal_blocks[i]
             off_block_size = Base.size(off_block', 2)
-            M[start:stop, stop+1:stop+off_block_size] .= sparse(off_block')
+            M[start:stop, stop+1:stop+off_block_size] = sparse(off_block')
         end
         start = stop + 1
     end
-    return Symmetric(M)
+    return M
 end
