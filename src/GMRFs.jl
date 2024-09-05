@@ -1,6 +1,7 @@
 module GMRFs
 
 include("typedefs.jl")
+include("utils/to_matrix.jl")
 include("linear_maps/symmetric_block_tridiagonal.jl")
 include("preconditioners/preconditioner.jl")
 include("preconditioners/full_cholesky.jl")
