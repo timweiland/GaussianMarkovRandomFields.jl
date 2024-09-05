@@ -1,4 +1,4 @@
-using Ferrite, FerriteViz, WGLMakie
+using Ferrite, FerriteViz, Makie
 import GeometryBasics
 
 export plot_spde_gmrf,
