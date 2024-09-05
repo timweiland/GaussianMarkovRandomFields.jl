@@ -13,7 +13,7 @@ struct BlockJacobiPreconditioner <: AbstractPreconditioner
     blocks::Vector{<:AbstractPreconditioner}
 end
 
-function ldiv!(y, P::BlockJacobiPreconditioner, x)
+function ldiv!(y, P::BlockJacobiPreconditioner, x::AbstractVector)
     start = 1
     for block in P.blocks
         stop = start + size(block.cho, 1) - 1
@@ -23,9 +23,9 @@ function ldiv!(y, P::BlockJacobiPreconditioner, x)
     return y
 end
 
-ldiv!(P::BlockJacobiPreconditioner, x) = ldiv!(x, P, x)
+ldiv!(P::BlockJacobiPreconditioner, x::AbstractVector) = ldiv!(x, P, x)
 
-function \(P::BlockJacobiPreconditioner, x)
+function \(P::BlockJacobiPreconditioner, x::AbstractVector)
     y = similar(x)
     return ldiv!(y, P, x)
 end

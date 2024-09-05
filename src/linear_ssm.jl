@@ -1,5 +1,5 @@
 using Distributions, LinearAlgebra, Random, LinearMaps
-import Base
+import Base: step
 
 export joint_ssm, JointSSMMatrices
 

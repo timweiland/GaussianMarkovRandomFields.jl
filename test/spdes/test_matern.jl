@@ -35,12 +35,12 @@ using LinearAlgebra
             spde = MaternSPDE{d}(κ, ν)
 
             x = discretize(spde, disc)
-            Q = precision_mat(x)
+            Q = to_matrix(precision_map(x))
             @test size(Q) == (ndofs(disc), ndofs(disc))
-            @test cholesky(x.precision) isa Union{Cholesky,SparseArrays.CHOLMOD.Factor}
+            @test cholesky(Q) isa Union{Cholesky,SparseArrays.CHOLMOD.Factor}
             push!(precisions, Q)
         end
-        nnzs = [nnz(Q) for Q in precisions]
+        nnzs = [nnz(sparse(Q)) for Q in precisions]
         @test all(diff(nnzs) .> 0) # Increasing smoothness decreases sparsity
     end
 end

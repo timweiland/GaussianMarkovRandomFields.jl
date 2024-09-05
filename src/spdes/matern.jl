@@ -110,11 +110,13 @@ function discretize(
     C̃⁻¹ = spdiagm(0 => 1 ./ diag(C̃))
 
     # Ratio to get user-specified variance
-    σ²_natural = gamma(𝒟.ν) / (gamma(𝒟.ν + D / 2) * (4π)^(D / 2) * 𝒟.κ^(2 * 𝒟.ν))
-    σ²_goal = 𝒟.σ²
-    ratio = σ²_natural / σ²_goal
+    ratio = 1.0
+    if 𝒟.ν > 0 # TODO: What to do for ν = 0?
+        σ²_natural = gamma(𝒟.ν) / (gamma(𝒟.ν + D / 2) * (4π)^(D / 2) * 𝒟.κ^(2 * 𝒟.ν))
+        σ²_goal = 𝒟.σ²
+        ratio = σ²_natural / σ²_goal
+    end
 
     Q = ratio * matern_precision(C̃⁻¹, K, Integer(α(𝒟)))
-    Q = (Q + Q') / 2 # Ensure symmetry. TODO: Can this be guaranteed naturally?
-    return GMRF(spzeros(size(Q, 1)), Q)
+    return GMRF(spzeros(size(Q, 1)), Symmetric(Q))
 end

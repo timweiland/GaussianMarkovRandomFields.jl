@@ -1,4 +1,5 @@
 using Tensors, Ferrite, SparseArrays
+using Tensors: ⊗
 
 export derivative_matrices,
     second_derivative_matrices,

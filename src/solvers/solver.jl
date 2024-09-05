@@ -1,6 +1,6 @@
 using Random
 
-export gmrf, compute_mean, compute_variance, compute_rand, construct_solver
+export gmrf, compute_mean, compute_variance, compute_rand!, construct_solver
 
 """
     gmrf

@@ -30,8 +30,8 @@ using GMRFs, Ferrite, Random, LinearAlgebra, SparseArrays
         x1 = x
         x2 = joint_gmrf(x1, A, Q_ϵ, b)
         @test x2.mean ≈ [x1.mean; A * x1.mean + b]
-        @test x2.precision ≈ [
-            x1.precision+A'*Q_ϵ*A -A'*Q_ϵ
+        @test sparse(x2.precision) ≈ [
+            sparse(x1.precision)+A'*Q_ϵ*A -A'*Q_ϵ
             -Q_ϵ*A Q_ϵ
         ]
     end
@@ -43,7 +43,7 @@ using GMRFs, Ferrite, Random, LinearAlgebra, SparseArrays
         b = randn(rng, 5)
         x1 = x
         x2 = condition_on_observations(x1, A, Q_ϵ, y, b)
-        @test A * x2.mean ≈ y - b
+        @test A * mean(x2) ≈ y - b
         @test mean(var(x2)) < mean(var(x1))
     end
 end

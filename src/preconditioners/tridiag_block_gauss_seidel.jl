@@ -26,7 +26,7 @@ struct TridiagonalBlockGaussSeidelPreconditioner <: AbstractPreconditioner
     end
 end
 
-function ldiv!(y, P::TridiagonalBlockGaussSeidelPreconditioner, x)
+function ldiv!(y, P::TridiagonalBlockGaussSeidelPreconditioner, x::AbstractVector)
     L_blocks, D⁻¹_blocks = P.L_blocks, P.D⁻¹_blocks
     start = 1
     stop = size(D⁻¹_blocks[1], 1)
@@ -40,9 +40,9 @@ function ldiv!(y, P::TridiagonalBlockGaussSeidelPreconditioner, x)
     return y
 end
 
-ldiv!(P::TridiagonalBlockGaussSeidelPreconditioner, x) = ldiv!(x, P, x)
+ldiv!(P::TridiagonalBlockGaussSeidelPreconditioner, x::AbstractVector) = ldiv!(x, P, x)
 
-function \(P::TridiagonalBlockGaussSeidelPreconditioner, x)
+function \(P::TridiagonalBlockGaussSeidelPreconditioner, x::AbstractVector)
     y = similar(x)
     return ldiv!(y, P, x)
 end
@@ -73,7 +73,7 @@ struct TridiagSymmetricBlockGaussSeidelPreconditioner <: AbstractPreconditioner
     end
 end
 
-function ldiv!(y, P::TridiagSymmetricBlockGaussSeidelPreconditioner, x)
+function ldiv!(y, P::TridiagSymmetricBlockGaussSeidelPreconditioner, x::AbstractVector)
     L_blocks, D⁻¹_blocks = P.L_blocks, P.D⁻¹_blocks
 
     # Forward solve
@@ -98,9 +98,9 @@ function ldiv!(y, P::TridiagSymmetricBlockGaussSeidelPreconditioner, x)
     return y
 end
 
-ldiv!(P::TridiagSymmetricBlockGaussSeidelPreconditioner, x) = ldiv!(x, P, x)
+ldiv!(P::TridiagSymmetricBlockGaussSeidelPreconditioner, x::AbstractVector) = ldiv!(x, P, x)
 
-function \(P::TridiagSymmetricBlockGaussSeidelPreconditioner, x)
+function \(P::TridiagSymmetricBlockGaussSeidelPreconditioner, x::AbstractVector)
     y = similar(x)
     return ldiv!(y, P, x)
 end

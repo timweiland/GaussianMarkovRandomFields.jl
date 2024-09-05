@@ -5,7 +5,7 @@ struct CholeskySolver{G<:AbstractGMRF} <: AbstractSolver
     precision_chol::Union{Cholesky,SparseArrays.CHOLMOD.Factor}
 
     function CholeskySolver(gmrf::G) where {G}
-        precision_chol = cholesky(sparse(precision_map(gmrf)))
+        precision_chol = cholesky(to_matrix(precision_map(gmrf)))
         new{G}(gmrf, precision_chol)
     end
 end

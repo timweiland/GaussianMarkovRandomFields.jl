@@ -21,8 +21,8 @@ using Random
 
         @test mean(d_standard) == μ_standard
         @test mean(d_diag) == μ_diag
-        @test precision_mat(d_standard) == Q_standard
-        @test precision_mat(d_diag) == Q_diag
+        @test sparse(precision_map(d_standard)) == Q_standard
+        @test sparse(precision_map(d_diag)) == Q_diag
 
         @test invcov(d_standard) == Q_standard
         @test invcov(d_diag) == Q_diag
@@ -47,7 +47,7 @@ using Random
         @test sqmahal(d_standard, x) ≈ dot(x, x)
         x = rand(4)
         for d in [d_diag, d_diag_low_noise]
-            @test sqmahal(d, x) ≈ dot(x - mean(d), precision_mat(d) * (x - mean(d)))
+            @test sqmahal(d, x) ≈ dot(x - mean(d), precision_map(d) * (x - mean(d)))
             @test sqmahal(d, mean(d)) ≈ 0.0
         end
     end
@@ -57,14 +57,6 @@ using Random
         for d in [d_standard, d_diag, d_diag_low_noise]
             @test gradlogpdf(d, mean(d)) ≈ zeros(length(d))
         end
-    end
-
-    low_noise_chol = cholesky(1e10 * Q_diag)
-    d_diag_low_noise_precomputed = GMRF(μ_diag, 1e10 * Q_diag, low_noise_chol)
-
-    @testset "Precomputed Cholesky factorization" begin
-        @test precision_chol(d_diag_low_noise_precomputed) === low_noise_chol
-        @test d_diag_low_noise.precision_chol_precomp === nothing
     end
 
     @testset "Variance and standard deviation" begin

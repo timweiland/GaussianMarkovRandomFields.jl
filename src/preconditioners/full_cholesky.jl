@@ -25,8 +25,8 @@ struct FullCholeskyPreconditioner <: AbstractPreconditioner
     end
 end
 
-ldiv!(y, P::FullCholeskyPreconditioner, x) = (y .= P.cho \ x)
-ldiv!(P::FullCholeskyPreconditioner, x) = (x .= P.cho \ x)
-\(P::FullCholeskyPreconditioner, x) = P.cho \ x
+ldiv!(y, P::FullCholeskyPreconditioner, x::AbstractVector) = (y .= P.cho \ x)
+ldiv!(P::FullCholeskyPreconditioner, x::AbstractVector) = (x .= P.cho \ x)
+\(P::FullCholeskyPreconditioner, x::AbstractVector) = P.cho \ x
 Base.size(P::FullCholeskyPreconditioner) = size(P.cho)
 Base.size(P::FullCholeskyPreconditioner, i) = size(P.cho, i)

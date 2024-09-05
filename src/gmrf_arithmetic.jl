@@ -35,7 +35,7 @@ function joint_gmrf(
         x2_mean += b
     end
     μ_joint = [x1_mean; x2_mean]
-    return GMRF(μ_joint, Q_joint)
+    return GMRF(μ_joint, Symmetric(Q_joint))
 end
 
 """"
