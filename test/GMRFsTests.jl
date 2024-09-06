@@ -5,6 +5,7 @@ using ReTest
 using Aqua
 
 include("test_gmrf.jl")
+include("linear_maps/test_ad_jacobian.jl")
 include("preconditioners/test_full_cholesky.jl")
 include("preconditioners/test_block_jacobi.jl")
 include("spdes/fem/test_fem_discretization.jl")
