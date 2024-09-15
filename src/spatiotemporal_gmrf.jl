@@ -61,27 +61,27 @@ discretization_at_time(::AbstractSpatiotemporalGMRF, ::Int) =
 
 A spatiotemporal GMRF with constant spatial discretization.
 """
-struct ConstantMeshSTGMRF{T} <: AbstractSpatiotemporalGMRF
+struct ConstantMeshSTGMRF{D,T} <: AbstractSpatiotemporalGMRF
     mean::AbstractVector{T}
     precision::LinearMap{T}
-    discretization::FEMDiscretization
+    discretization::FEMDiscretization{D}
     ssm::ImplicitEulerSSM
     solver_ref::Base.RefValue{AbstractSolver}
 
     function ConstantMeshSTGMRF(
         mean::AbstractVector{T},
         precision::LinearMap{T},
-        discretization::FEMDiscretization,
+        discretization::FEMDiscretization{D},
         ssm::ImplicitEulerSSM,
         solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
-    ) where {T}
+    ) where {D,T}
         n = length(mean)
         n == size(precision, 1) == size(precision, 2) ||
             throw(ArgumentError("size mismatch"))
         (n % ndofs(discretization)) == 0 || throw(ArgumentError("size mismatch"))
 
         solver_ref = Base.RefValue{AbstractSolver}()
-        self = new{T}(mean, precision, discretization, ssm, solver_ref)
+        self = new{D,T}(mean, precision, discretization, ssm, solver_ref)
         solver_ref[] = construct_solver(solver_blueprint, self)
         return self
     end
