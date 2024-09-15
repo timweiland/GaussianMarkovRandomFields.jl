@@ -44,10 +44,14 @@ struct ADJacobianAdjointMap{T} <: LinearMaps.LinearMap{T}
     f::Function
     x₀::AbstractVector{T}
     N_outputs::Int
-    f_val::Union{Real, AbstractVector}
+    f_val::Union{Real,AbstractVector}
     f_pullback::Function
 
-    function ADJacobianAdjointMap(f::Function, x₀::AbstractVector{T}, N_outputs::Int) where {T}
+    function ADJacobianAdjointMap(
+        f::Function,
+        x₀::AbstractVector{T},
+        N_outputs::Int,
+    ) where {T}
         N_outputs > 0 || throw(ArgumentError("N_outputs must be positive"))
         f_val, f_pullback = Zygote.pullback(f, x₀)
         new{T}(f, x₀, N_outputs, f_val, f_pullback)
