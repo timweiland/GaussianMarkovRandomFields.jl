@@ -1,12 +1,18 @@
 using SparseArrays, LinearAlgebra, Distributions
 
-struct CholeskySolver{G<:AbstractGMRF} <: AbstractSolver
+export CholeskySolver, CholeskySolverBlueprint
+
+struct CholeskySolver{G<:AbstractGMRF,V<:AbstractVarianceStrategy} <: AbstractSolver
     gmrf::G
+    var_strategy::V
     precision_chol::Union{Cholesky,SparseArrays.CHOLMOD.Factor}
 
-    function CholeskySolver(gmrf::G) where {G}
+    function CholeskySolver(
+        gmrf::G,
+        var_strategy::V,
+    ) where {G<:AbstractGMRF,V<:AbstractVarianceStrategy}
         precision_chol = cholesky(to_matrix(precision_map(gmrf)))
-        new{G}(gmrf, precision_chol)
+        new{G,V}(gmrf, var_strategy, precision_chol)
     end
 end
 
@@ -21,8 +27,7 @@ function compute_mean(s::CholeskySolver{<:LinearConditionalGMRF})
 end
 
 function compute_variance(s::CholeskySolver)
-    # Use sparse partial inverse (Takahashi recursions)
-    return diag(sparseinv(s.precision_chol, depermute = true)[1])
+    return compute_variance(s.var_strategy, s)
 end
 
 function compute_rand!(s::CholeskySolver, rng::Random.AbstractRNG, x::AbstractVector)
@@ -33,11 +38,14 @@ function compute_rand!(s::CholeskySolver, rng::Random.AbstractRNG, x::AbstractVe
 end
 
 struct CholeskySolverBlueprint <: AbstractSolverBlueprint
-    function CholeskySolverBlueprint()
-        new()
+    var_strategy::AbstractVarianceStrategy
+    function CholeskySolverBlueprint(
+        var_strategy::AbstractVarianceStrategy = RBMCStrategy(100),
+    )
+        new(var_strategy)
     end
 end
 
-function construct_solver(::CholeskySolverBlueprint, gmrf::AbstractGMRF)
-    return CholeskySolver(gmrf)
+function construct_solver(bp::CholeskySolverBlueprint, gmrf::AbstractGMRF)
+    return CholeskySolver(gmrf, bp.var_strategy)
 end
