@@ -26,20 +26,31 @@ struct MaternSPDE{D} <: SPDE
     κ::Real
     ν::Rational
     σ²::Real
+    diffusion_factor::Union{AbstractMatrix,UniformScaling}
 
-    function MaternSPDE{D}(κ::Real, ν::Union{Integer,Rational}, σ² = 1.0) where {D}
+    function MaternSPDE{D}(
+        κ::Real,
+        ν::Union{Integer,Rational},
+        σ² = 1.0,
+        diffusion_factor = I,
+    ) where {D}
         κ > 0 || throw(ArgumentError("κ must be positive"))
         ν >= 0 || throw(ArgumentError("ν must be non-negative"))
         (D >= 1 && isinteger(D)) || throw(ArgumentError("D must be a positive integer"))
         (σ² > 0) || throw(ArgumentError("σ² must be positive"))
-        new{D}(κ, ν, σ²)
+        new{D}(κ, ν, σ², diffusion_factor)
     end
 end
 
 α(𝒟::MaternSPDE{D}) where {D} = 𝒟.ν + D // 2
 ndim(::MaternSPDE{D}) where {D} = D
 
-function assemble_C_G_matrices(cellvalues::CellScalarValues, dh::DofHandler, interpolation)
+function assemble_C_G_matrices(
+    cellvalues::CellScalarValues,
+    dh::DofHandler,
+    interpolation,
+    diffusion_factor,
+)
     C, G = create_sparsity_pattern(dh), create_sparsity_pattern(dh)
 
     n_basefuncs = getnbasefunctions(cellvalues)
@@ -52,7 +63,7 @@ function assemble_C_G_matrices(cellvalues::CellScalarValues, dh::DofHandler, int
     for cell in CellIterator(dh)
         reinit!(cellvalues, cell)
         Ce = assemble_mass_matrix(Ce, cellvalues, interpolation; lumping = true)
-        Ge = assemble_diffusion_matrix(Ge, cellvalues)
+        Ge = assemble_diffusion_matrix(Ge, cellvalues; diffusion_factor = diffusion_factor)
         assemble!(C_assembler, celldofs(cell), Ce)
         assemble!(G_assembler, celldofs(cell), Ge)
     end
@@ -105,6 +116,7 @@ function discretize(
         cellvalues,
         discretization.dof_handler,
         discretization.interpolation,
+        𝒟.diffusion_factor,
     )
     K = 𝒟.κ^2 * C̃ + G
     C̃⁻¹ = spdiagm(0 => 1 ./ diag(C̃))
