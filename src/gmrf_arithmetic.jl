@@ -48,11 +48,14 @@ Condition a GMRF `x` on observations `y = A * x + b + ϵ` where `ϵ ~ N(0, Q_ϵ)
 """
 function condition_on_observations(
     x::AbstractGMRF,
-    A::AbstractMatrix,
-    Q_ϵ::AbstractMatrix,
-    y::AbstractVector = spzeros(size(A)[1]),
-    b::AbstractVector = spzeros(size(A)[1]);
+    A::Union{AbstractMatrix,LinearMap},
+    Q_ϵ::Union{AbstractMatrix,LinearMap,Real},
+    y::AbstractVector = spzeros(Base.size(A)[1]),
+    b::AbstractVector = spzeros(Base.size(A)[1]);
     solver_blueprint::AbstractSolverBlueprint = CholeskySolverBlueprint(),
 )
+if Q_ϵ isa Real
+        Q_ϵ = LinearMaps.UniformScalingMap(Q_ϵ, Base.size(A)[1])
+    end
     return LinearConditionalGMRF(x, A, Q_ϵ, y, b, solver_blueprint)
 end
