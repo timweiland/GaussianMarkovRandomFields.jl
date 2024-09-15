@@ -1,6 +1,6 @@
 using LinearAlgebra
 
-export condition_on_observations, joint_gmrf
+export condition_on_observations, joint_gmrf, gauss_newton_step
 
 # Adding a deterministic vector to a GMRF
 Base.:+(d::GMRF, b::AbstractVector) = GMRF(d.mean + b, d.precision)
@@ -54,8 +54,29 @@ function condition_on_observations(
     b::AbstractVector = spzeros(Base.size(A)[1]);
     solver_blueprint::AbstractSolverBlueprint = CholeskySolverBlueprint(),
 )
-if Q_ϵ isa Real
+    if Q_ϵ isa Real
         Q_ϵ = LinearMaps.UniformScalingMap(Q_ϵ, Base.size(A)[1])
     end
     return LinearConditionalGMRF(x, A, Q_ϵ, y, b, solver_blueprint)
+end
+
+function gauss_newton_step(
+    x::AbstractGMRF,
+    f::Function,
+    Q_ϵ::Union{AbstractMatrix,LinearMap,Real},
+    y::AbstractVector,
+    solver_blueprint::AbstractSolverBlueprint = CholeskySolverBlueprint(),
+)
+    if Q_ϵ isa Real
+        Q_ϵ = LinearMaps.UniformScalingMap(Q_ϵ, length(y))
+    end
+    J = ADJacobianMap(f, mean(x), length(y))
+    y_linear = J * mean(x) + y - f(mean(x))
+    return condition_on_observations(
+        x,
+        J,
+        Q_ϵ,
+        y_linear,
+        solver_blueprint = solver_blueprint,
+    )
 end
