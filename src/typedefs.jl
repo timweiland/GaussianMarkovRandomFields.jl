@@ -1,4 +1,4 @@
-export AbstractSolver, AbstractSolverBlueprint
+export AbstractSolver, AbstractSolverBlueprint, AbstractVarianceStrategy
 
 """
     AbstractSolver
@@ -16,3 +16,10 @@ A blueprint contains parameters and settings for a solver which are
 independent of the concrete GMRF it will be used on.
 """
 abstract type AbstractSolverBlueprint end
+
+"""
+    AbstractVarianceStrategy
+
+An abstract type for a strategy to compute the variance of a GMRF.
+"""
+abstract type AbstractVarianceStrategy end
