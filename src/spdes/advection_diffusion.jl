@@ -25,6 +25,7 @@ struct AdvectionDiffusionSPDE{D} <: SPDE
     γ::AbstractVector
     c::Real
     τ::Real
+    νₛ::Real
 
     function AdvectionDiffusionSPDE{D}(
         κ::Real,
@@ -33,12 +34,14 @@ struct AdvectionDiffusionSPDE{D} <: SPDE
         γ::AbstractVector,
         c::Real,
         τ::Real,
+        νₛ::Real,
     ) where {D}
         κ > 0 || throw(ArgumentError("κ must be positive"))
         α >= 0 || throw(ArgumentError("α must be non-negative"))
         τ > 0 || throw(ArgumentError("τ must be positive"))
+        νₛ > 0 || throw(ArgumentError("νₛ must be positive"))
         (D >= 1 && isinteger(D)) || throw(ArgumentError("D must be a positive integer"))
-        new{D}(κ, α, H, γ, c, τ)
+        new{D}(κ, α, H, γ, c, τ, νₛ)
     end
 end
 
@@ -137,8 +140,12 @@ function discretize(
     M⁻¹ = spdiagm(0 => 1 ./ diag(M))
     K = (spde.κ^2 * M + G)^spde.α
 
-    matern_spde = MaternSPDE{D}(5.0, 1)
-    x₀ = discretize(matern_spde, discretization)
+    matern_spde_spatial = MaternSPDE{D}(spde.κ, spde.νₛ, 1.0, spde.H)
+    xₛ = discretize(matern_spde_spatial, discretization)
+
+    matern_spde_t₀ =
+        MaternSPDE{D}(spde.κ, spde.α + α(matern_spde_spatial) - D // 2, 1.0, spde.H)
+    x₀ = discretize(matern_spde_t₀, discretization)
 
     if streamline_diffusion
         G_fn = dt -> LinearMap(M + (dt / spde.c) * (K + B + S))
@@ -150,7 +157,7 @@ function discretize(
     β = dt -> sqrt((dt * τ^2) / spde.c)
 
     ssm =
-        ImplicitEulerSSM(x₀, G_fn, dt -> LinearMap(M), dt -> LinearMap(M⁻¹), β, β⁻¹, x₀, ts)
+        ImplicitEulerSSM(x₀, G_fn, dt -> LinearMap(M), dt -> LinearMap(M⁻¹), β, β⁻¹, xₛ, ts)
     X = joint_ssm(ssm)
     X = ConstantMeshSTGMRF(X.mean, X.precision, discretization, ssm)
     return X
