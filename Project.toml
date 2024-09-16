@@ -4,6 +4,7 @@ authors = ["Tim Weiland <hello@timwei.land> and contributors"]
 version = "1.0.0-DEV"
 
 [deps]
+AMD = "14f7f29c-3bd6-536c-9a0b-7339e30b5a3e"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Ferrite = "c061ca5d-56c9-439f-9c0e-210fe06d3992"
 FerriteGmsh = "4f95f4f8-b27c-4ae5-9a39-ea55e634e36b"
@@ -27,6 +28,7 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
 Aqua = ">=0.8"
+AMD = ">=0.5"
 Distributions = "0"
 Ferrite = ">=0.3"
 FerriteGmsh = ">=1.2"
