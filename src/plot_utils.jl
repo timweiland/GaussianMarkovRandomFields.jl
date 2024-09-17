@@ -292,11 +292,11 @@ function _plot_spatiotemporal_gmrf_separate(
     rng = Random.default_rng()
     samples = [time_rands(x, rng) for _ in sample_pos]
 
-    means = [eval_mat * m for m in means]
+    means = [eval_mat * Array(m) for m in means]
     cur_means = Observable(means[1])
-    stds = [eval_mat * s for s in stds]
+    stds = [eval_mat * Array(s) for s in stds]
     cur_stds = Observable(stds[1])
-    samples = [[eval_mat * s for s in sample] for sample in samples]
+    samples = [[eval_mat * Array(s) for s in sample] for sample in samples]
     cur_samples = [Observable(sample[1]) for sample in samples]
 
     if limits === nothing
@@ -348,11 +348,11 @@ function _plot_spatiotemporal_gmrf_combined(
     rng = Random.default_rng()
     samples = [time_rands(x, rng) for _ = 1:N_samples]
 
-    means = [eval_mat * m for m in means]
+    means = [eval_mat * Array(m) for m in means]
     cur_means = Observable(means[1])
-    stds = [eval_mat * s for s in stds]
+    stds = [eval_mat * Array(s) for s in stds]
     cur_stds = Observable(stds[1])
-    samples = [[eval_mat * s for s in sample] for sample in samples]
+    samples = [[eval_mat * Array(s) for s in sample] for sample in samples]
     cur_confs = @lift(1.96 * $cur_stds)
     upper = @lift($cur_means + $cur_confs)
     lower = @lift($cur_means - $cur_confs)
