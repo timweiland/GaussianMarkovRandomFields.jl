@@ -48,16 +48,17 @@ end
 function assemble_M_G_B_matrices(
     cellvalues::CellScalarValues,
     dh::DofHandler,
+    ch,
     interpolation,
     H,
     γ;
     streamline_diffusion = false,
     h = 0.1,
 )
-    M, G, B, S = create_sparsity_pattern(dh),
-    create_sparsity_pattern(dh),
-    create_sparsity_pattern(dh),
-    create_sparsity_pattern(dh)
+    M, G, B, S = create_sparsity_pattern(dh, ch),
+    create_sparsity_pattern(dh, ch),
+    create_sparsity_pattern(dh, ch),
+    create_sparsity_pattern(dh, ch)
 
     n_basefuncs = getnbasefunctions(cellvalues)
     Me = spzeros(n_basefuncs, n_basefuncs)
@@ -113,10 +114,12 @@ function discretize(
 ) where {D}
     cellvalues =
         CellScalarValues(discretization.quadrature_rule, discretization.interpolation)
+    ch = discretization.constraint_handler
     if streamline_diffusion
         M, G, B, S = assemble_M_G_B_matrices(
             cellvalues,
             discretization.dof_handler,
+            ch,
             discretization.interpolation,
             spde.H,
             spde.γ;
@@ -131,13 +134,15 @@ function discretize(
         M, G, B = assemble_M_G_B_matrices(
             cellvalues,
             discretization.dof_handler,
+            ch,
             discretization.interpolation,
             spde.H,
             spde.γ,
         )
         τ = spde.τ
     end
-    M⁻¹ = spdiagm(0 => 1 ./ diag(M))
+    apply!(M, zeros(Base.size(M, 2)), ch)
+    apply!(G, zeros(Base.size(M, 2)), ch)
     K = (spde.κ^2 * M + G)^spde.α
 
     matern_spde_spatial = MaternSPDE{D}(spde.κ, spde.νₛ, 1.0, spde.H)
@@ -147,18 +152,44 @@ function discretize(
         MaternSPDE{D}(spde.κ, spde.α + α(matern_spde_spatial) - D // 2, 1.0, spde.H)
     x₀ = discretize(matern_spde_t₀, discretization)
 
+    apply!(B, zeros(Base.size(B, 2)), ch)
+    propagation_mat = K + B
     if streamline_diffusion
-        G_fn = dt -> LinearMap(M + (dt / spde.c) * (K + B + S))
-    else
-        G_fn = dt -> LinearMap(M + (dt / spde.c) * (K + B))
+        apply!(S, zeros(Base.size(S, 2)), ch)
+        propagation_mat += S
     end
+    for dof in ch.prescribed_dofs
+        M[dof, dof] = 1e-10 # TODO
+        propagation_mat[dof, dof] = 0.0
+    end
+    G_fn = dt -> LinearMap(M + (dt / spde.c) * propagation_mat)
+    M⁻¹ = spdiagm(0 => 1 ./ diag(M))
 
-    β⁻¹ = dt -> sqrt(spde.c / (dt * τ^2))
-    β = dt -> sqrt((dt * τ^2) / spde.c)
+    noise_mat = spdiagm(0 => fill(τ / sqrt(spde.c), Base.size(M, 2)))
+    for dof in ch.prescribed_dofs
+        noise_mat[dof, dof] = 1e-10
+    end
+    inv_noise_mat = spdiagm(0 => 1 ./ diag(noise_mat))
+    β = dt -> sqrt(dt) * noise_mat
+    β⁻¹ = dt -> (1 / sqrt(dt)) * inv_noise_mat
+    # TODO
+    # β⁻¹ = dt -> sqrt(spde.c / (dt * τ^2))
+    # β = dt -> sqrt((dt * τ^2) / spde.c)
 
-    ssm =
-        ImplicitEulerSSM(x₀, G_fn, dt -> LinearMap(M), dt -> LinearMap(M⁻¹), β, β⁻¹, xₛ, ts)
+    ssm = ImplicitEulerSSM(
+        x₀.inner_gmrf,
+        G_fn,
+        dt -> LinearMap(M),
+        dt -> LinearMap(M⁻¹),
+        β,
+        β⁻¹,
+        xₛ,
+        ts,
+    )
     X = joint_ssm(ssm)
     X = ConstantMeshSTGMRF(X.mean, X.precision, discretization, ssm)
+    if length(ch.prescribed_dofs) > 0
+        return ConstrainedGMRF(X, ch)
+    end
     return X
 end
