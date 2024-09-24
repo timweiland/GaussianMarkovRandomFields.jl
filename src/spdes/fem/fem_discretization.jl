@@ -39,14 +39,13 @@ struct FEMDiscretization{
         end
         close!(dh)
 
-        ch = nothing
+        ch = ConstraintHandler(dh)
         if length(boundary_conditions) > 0
-            ch = ConstraintHandler(dh)
             for bc in boundary_conditions
                 add!(ch, bc)
             end
-            close!(ch)
         end
+        close!(ch)
         new{D,G,I,Q,I,DofHandler{D,G},typeof(ch)}(
             grid,
             interpolation,

@@ -48,10 +48,11 @@ ndim(::MaternSPDE{D}) where {D} = D
 function assemble_C_G_matrices(
     cellvalues::CellScalarValues,
     dh::DofHandler,
+    ch::ConstraintHandler,
     interpolation,
     diffusion_factor,
 )
-    C, G = create_sparsity_pattern(dh), create_sparsity_pattern(dh)
+    C, G = create_sparsity_pattern(dh, ch), create_sparsity_pattern(dh, ch)
 
     n_basefuncs = getnbasefunctions(cellvalues)
     Ce = spzeros(n_basefuncs, n_basefuncs)
@@ -62,10 +63,19 @@ function assemble_C_G_matrices(
 
     for cell in CellIterator(dh)
         reinit!(cellvalues, cell)
-        Ce = assemble_mass_matrix(Ce, cellvalues, interpolation; lumping = true)
+        Ce = assemble_mass_matrix(Ce, cellvalues, interpolation; lumping = false)
         Ge = assemble_diffusion_matrix(Ge, cellvalues; diffusion_factor = diffusion_factor)
         assemble!(C_assembler, celldofs(cell), Ce)
         assemble!(G_assembler, celldofs(cell), Ge)
+    end
+    N = size(C, 1)
+    apply!(C, zeros(N), ch)
+    apply!(G, zeros(N), ch)
+    C = lump_matrix(C, interpolation)
+
+    for dof in ch.prescribed_dofs
+        G[dof, dof] = 1.0
+        C[dof, dof] = 1e-10 # TODO
     end
     return C, G
 end
@@ -115,6 +125,7 @@ function discretize(
     C̃, G = assemble_C_G_matrices(
         cellvalues,
         discretization.dof_handler,
+        discretization.constraint_handler,
         discretization.interpolation,
         𝒟.diffusion_factor,
     )
@@ -130,5 +141,10 @@ function discretize(
     end
 
     Q = ratio * matern_precision(C̃⁻¹, K, Integer(α(𝒟)))
-    return GMRF(spzeros(size(Q, 1)), Symmetric(Q))
+
+    x = GMRF(spzeros(size(Q, 1)), Symmetric(Q))
+    if length(discretization.constraint_handler.prescribed_dofs) > 0
+        return ConstrainedGMRF(x, discretization.constraint_handler)
+    end
+    return x
 end

@@ -24,7 +24,7 @@ struct LinearConditionalGMRF{G<:AbstractGMRF} <: AbstractGMRF
     ) where {G}
         A = ensure_linearmap(A)
         Q_ϵ = ensure_linearmap(Q_ϵ)
-        precision = prior.precision + OuterProductMap(A, Q_ϵ)
+        precision = precision_map(prior) + OuterProductMap(A, Q_ϵ)
         Base.size(A, 1) == length(y) == length(b) || throw(ArgumentError("size mismatch"))
         solver_ref = Base.RefValue{AbstractSolver}()
         x = new{G}(prior, precision, A, Q_ϵ, y, b, solver_ref)
