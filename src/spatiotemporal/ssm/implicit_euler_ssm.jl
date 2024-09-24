@@ -11,7 +11,7 @@ differential equation.
 The state-space model is given by
 
 ```
-G(Δt) xₖ = M(Δt) xₖ + β(Δt) M(Δt) zₛ
+G(Δt) xₖ = M(Δt) xₖ + M(Δt) β(Δt) zₛ
 ```
 
 where `zₛ` is (possibly colored) spatial noise. 
@@ -41,12 +41,13 @@ struct ImplicitEulerJointSSMMatrices <: JointSSMMatrices
         G = sparse(ssm.G(Δt))
         M⁻¹ = sparse(ssm.M⁻¹(Δt))
         β⁻¹ = ssm.β⁻¹(Δt)
-        β⁻² = β⁻¹^2
-        Q_s = sparse(ssm.spatial_noise.precision)
+        # β⁻² = β⁻¹^2
+        Q_s = to_matrix(precision_map(ssm.spatial_noise))
 
-        F⁻¹ = β⁻² * G' * M⁻¹' * Q_s * M⁻¹ * G
-        AᵀF⁻¹A = β⁻² * Q_s
-        F⁻¹A = β⁻² * G' * M⁻¹ * Q_s
+        β⁻¹M⁻¹ = β⁻¹ * M⁻¹
+        F⁻¹ = G' * β⁻¹M⁻¹' * Q_s * β⁻¹M⁻¹ * G
+        AᵀF⁻¹A = β⁻¹' * Q_s * β⁻¹
+        F⁻¹A = G' * β⁻¹M⁻¹' * Q_s * β⁻¹
         return new(Δt, AᵀF⁻¹A, F⁻¹, F⁻¹A)
     end
 end
