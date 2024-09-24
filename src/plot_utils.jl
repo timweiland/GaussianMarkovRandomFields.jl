@@ -149,7 +149,7 @@ end
 
 ### 1D ###
 function plot_spde_gmrf(
-    d::GMRF,
+    d::AbstractGMRF,
     disc::FEMDiscretization{1};
     mean_pos = (1, 1),
     std_pos = (1, 2),
@@ -164,15 +164,15 @@ function plot_spde_gmrf(
 
     eval_mat = evaluation_matrix(disc, [Tensors.Vec(x) for x in plot_points]; field = field)
 
-    means = mean(d)
+    means = full_mean(d)
     if compute_std
-        stds = std(d)
+        stds = full_std(d)
     else
         stds = spzeros(size(means))
     end
     means = eval_mat * means
     stds = eval_mat * stds
-    samples = rand(d, (length(sample_pos),))
+    samples = [full_rand(Random.default_rng(), d) for _ in sample_pos]
     samples = [eval_mat * s for s in samples]
 
     if limits === nothing

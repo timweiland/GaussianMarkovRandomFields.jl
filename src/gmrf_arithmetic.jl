@@ -60,6 +60,40 @@ function condition_on_observations(
     return LinearConditionalGMRF(x, A, Q_ϵ, y, b, solver_blueprint)
 end
 
+function condition_on_observations(
+    x::ConstrainedGMRF,
+    A::Union{AbstractMatrix,LinearMap},
+    Q_ϵ::Union{AbstractMatrix,LinearMap,Real},
+    y::AbstractVector = spzeros(Base.size(A)[1]),
+    b::AbstractVector = spzeros(Base.size(A)[1]);
+    solver_blueprint::AbstractSolverBlueprint = CholeskySolverBlueprint(),
+)
+    A_mat = to_matrix(A)
+    free_to_prescribed_mat = to_matrix(x.free_to_prescribed_map)
+    for (i, p_dof) in enumerate(x.prescribed_dofs)
+        col_i = A_mat[:, p_dof]
+        f_dofs, coeffs = findnz(free_to_prescribed_mat[i, :])
+        rhs = x.free_to_prescribed_offset[i]
+        y -= rhs * col_i
+        for (f_dof, coeff) in zip(f_dofs, coeffs)
+            A_mat[:, f_dof] += coeff * col_i
+        end
+        A_mat[:, p_dof] .= 0
+    end
+    A = LinearMap(A_mat)
+    if Q_ϵ isa Real
+        Q_ϵ = LinearMaps.UniformScalingMap(Q_ϵ, Base.size(A)[1])
+    end
+    inner_gmrf = LinearConditionalGMRF(x.inner_gmrf, A, Q_ϵ, y, b, solver_blueprint)
+    return ConstrainedGMRF(
+        inner_gmrf,
+        x.prescribed_dofs,
+        x.free_dofs,
+        x.free_to_prescribed_map,
+        x.free_to_prescribed_offset,
+    )
+end
+
 function gauss_newton_step(
     x::AbstractGMRF,
     f::Function,
