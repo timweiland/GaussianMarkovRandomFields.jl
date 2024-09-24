@@ -264,9 +264,16 @@ function plot_spatiotemporal_gmrf(
     return fig
 end
 
+ST_GMRF_1D = Union{
+    ConstantMeshSTGMRF{1},
+    LinearConditionalGMRF{<:ConstantMeshSTGMRF{1}},
+    ConstrainedGMRF{<:ConstantMeshSTGMRF{1}},
+    ConstrainedGMRF{<:LinearConditionalGMRF{<:ConstantMeshSTGMRF}},
+}
+
 ### 1D ###
 function _plot_spatiotemporal_gmrf_separate(
-    x::Union{ConstantMeshSTGMRF{1},LinearConditionalGMRF{<:ConstantMeshSTGMRF{1}}};
+    x::ST_GMRF_1D;
     mean_pos = (1, 1),
     std_pos = (1, 2),
     sample_pos = [(2, 1), (2, 2)],
@@ -325,7 +332,7 @@ function _plot_spatiotemporal_gmrf_separate(
 end
 
 function _plot_spatiotemporal_gmrf_combined(
-    x::Union{ConstantMeshSTGMRF{1},LinearConditionalGMRF{<:ConstantMeshSTGMRF{1}}};
+    x::ST_GMRF_1D;
     limits = nothing,
     compute_std = true,
     N_samples = N_samples,
@@ -380,9 +387,8 @@ function _plot_spatiotemporal_gmrf_combined(
     return fig
 end
 
-
 function plot_spatiotemporal_gmrf(
-    x::Union{ConstantMeshSTGMRF{1},LinearConditionalGMRF{<:ConstantMeshSTGMRF{1}}};
+    x::ST_GMRF_1D;
     combined = true,
     mean_pos = (1, 1),
     std_pos = (1, 2),
