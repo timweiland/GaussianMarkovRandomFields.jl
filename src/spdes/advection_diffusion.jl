@@ -111,6 +111,7 @@ function discretize(
     ts::AbstractVector{Float64};
     streamline_diffusion = false,
     h = 0.1,
+    mean_offset = 0.0,
 ) where {D}
     cellvalues =
         CellScalarValues(discretization.quadrature_rule, discretization.interpolation)
@@ -187,7 +188,7 @@ function discretize(
         ts,
     )
     X = joint_ssm(ssm)
-    X = ConstantMeshSTGMRF(X.mean, X.precision, discretization, ssm)
+    X = ConstantMeshSTGMRF(X.mean .+ mean_offset, X.precision, discretization, ssm)
     if length(ch.prescribed_dofs) > 0
         return ConstrainedGMRF(X, ch)
     end
