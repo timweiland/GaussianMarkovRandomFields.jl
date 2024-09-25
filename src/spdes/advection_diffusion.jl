@@ -177,7 +177,7 @@ function discretize(
     # β = dt -> sqrt((dt * τ^2) / spde.c)
 
     ssm = ImplicitEulerSSM(
-        x₀.inner_gmrf,
+        (x₀ isa ConstrainedGMRF) ? x₀.inner_gmrf : x₀,
         G_fn,
         dt -> LinearMap(M),
         dt -> LinearMap(M⁻¹),
