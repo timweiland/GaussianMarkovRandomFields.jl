@@ -69,17 +69,7 @@ function condition_on_observations(
     solver_blueprint::AbstractSolverBlueprint = CholeskySolverBlueprint(),
 )
     A_mat = to_matrix(A)
-    free_to_prescribed_mat = to_matrix(x.free_to_prescribed_map)
-    for (i, p_dof) in enumerate(x.prescribed_dofs)
-        col_i = A_mat[:, p_dof]
-        f_dofs, coeffs = findnz(free_to_prescribed_mat[i, :])
-        rhs = x.free_to_prescribed_offset[i]
-        y -= rhs * col_i
-        for (f_dof, coeff) in zip(f_dofs, coeffs)
-            A_mat[:, f_dof] += coeff * col_i
-        end
-        A_mat[:, p_dof] .= 0
-    end
+    A_mat = constrainify_matrix(A, x)
     A = LinearMap(A_mat)
     if Q_ϵ isa Real
         Q_ϵ = LinearMaps.UniformScalingMap(Q_ϵ, Base.size(A)[1])

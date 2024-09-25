@@ -1,7 +1,7 @@
 using Random, LinearMaps, Ferrite
 import Random: rand!
 
-export ConstrainedGMRF, full_mean, full_var, full_std, full_rand, transform_free_to_full
+export ConstrainedGMRF, full_mean, full_var, full_std, full_rand, transform_free_to_full, constrainify_matrix
 
 #####################
 #
@@ -95,3 +95,18 @@ full_mean(d::AbstractGMRF) = mean(d)
 full_rand(rng::AbstractRNG, d::AbstractGMRF) = rand(rng, d)
 full_var(d::AbstractGMRF) = var(d)
 full_std(d::AbstractGMRF) = sqrt.(full_var(d))
+
+function constrainify_matrix(A::AbstractArray, x::ConstrainedGMRF)
+    free_to_prescribed_mat = to_matrix(x.free_to_prescribed_map)
+    for (i, p_dof) in enumerate(x.prescribed_dofs)
+        col_i = A[:, p_dof]
+        f_dofs, coeffs = findnz(free_to_prescribed_mat[i, :])
+        rhs = x.free_to_prescribed_offset[i]
+        y -= rhs * col_i
+        for (f_dof, coeff) in zip(f_dofs, coeffs)
+            A[:, f_dof] += coeff * col_i
+        end
+        A[:, p_dof] .= 0
+    end
+    return A
+end
