@@ -69,7 +69,7 @@ function condition_on_observations(
     solver_blueprint::AbstractSolverBlueprint = CholeskySolverBlueprint(),
 )
     A_mat = to_matrix(A)
-    A_mat = constrainify_matrix(A, x)
+    A_mat, y = constrainify_linear_system(A, y, x)
     A = LinearMap(A_mat)
     if Q_ϵ isa Real
         Q_ϵ = LinearMaps.UniformScalingMap(Q_ϵ, Base.size(A)[1])
