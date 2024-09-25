@@ -26,6 +26,7 @@ struct AdvectionDiffusionSPDE{D} <: SPDE
     c::Real
     τ::Real
     νₛ::Real
+    κₛ::Real
 
     function AdvectionDiffusionSPDE{D}(
         κ::Real,
@@ -35,13 +36,15 @@ struct AdvectionDiffusionSPDE{D} <: SPDE
         c::Real,
         τ::Real,
         νₛ::Real,
+        κₛ::Real = κ
     ) where {D}
-        κ > 0 || throw(ArgumentError("κ must be positive"))
+        κ >= 0 || throw(ArgumentError("κ must be non-negative"))
+        κₛ > 0 || throw(ArgumentError("κ must be positive"))
         α >= 0 || throw(ArgumentError("α must be non-negative"))
         τ > 0 || throw(ArgumentError("τ must be positive"))
         νₛ > 0 || throw(ArgumentError("νₛ must be positive"))
         (D >= 1 && isinteger(D)) || throw(ArgumentError("D must be a positive integer"))
-        new{D}(κ, α, H, γ, c, τ, νₛ)
+        new{D}(κ, α, H, γ, c, τ, νₛ, κₛ)
     end
 end
 
@@ -146,11 +149,11 @@ function discretize(
     apply!(G, zeros(Base.size(M, 2)), ch)
     K = (spde.κ^2 * M + G)^spde.α
 
-    matern_spde_spatial = MaternSPDE{D}(spde.κ, spde.νₛ, 1.0, spde.H)
+    matern_spde_spatial = MaternSPDE{D}(spde.κₛ, spde.νₛ, 1.0, spde.H)
     xₛ = discretize(matern_spde_spatial, discretization)
 
     matern_spde_t₀ =
-        MaternSPDE{D}(spde.κ, spde.α + α(matern_spde_spatial) - D // 2, 1.0, spde.H)
+        MaternSPDE{D}(spde.κₛ, spde.α + α(matern_spde_spatial) - D // 2, 1.0, spde.H)
     x₀ = discretize(matern_spde_t₀, discretization)
 
     apply!(B, zeros(Base.size(B, 2)), ch)
