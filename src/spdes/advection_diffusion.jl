@@ -169,6 +169,7 @@ function discretize(
     noise_mat = spdiagm(0 => fill(τ / sqrt(spde.c), Base.size(M, 2)))
     for dof in ch.prescribed_dofs
         noise_mat[dof, dof] = 1e-10
+        mean_offset[dof] = 0.0
     end
     inv_noise_mat = spdiagm(0 => 1 ./ diag(noise_mat))
     β = dt -> sqrt(dt) * noise_mat
