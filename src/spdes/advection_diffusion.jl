@@ -36,7 +36,7 @@ struct AdvectionDiffusionSPDE{D} <: SPDE
         c::Real,
         τ::Real,
         νₛ::Real,
-        κₛ::Real = κ
+        κₛ::Real = κ,
     ) where {D}
         κ >= 0 || throw(ArgumentError("κ must be non-negative"))
         κₛ > 0 || throw(ArgumentError("κ must be positive"))
@@ -115,6 +115,7 @@ function discretize(
     streamline_diffusion = false,
     h = 0.1,
     mean_offset = 0.0,
+    prescribed_noise = 1e-4,
 ) where {D}
     cellvalues =
         CellScalarValues(discretization.quadrature_rule, discretization.interpolation)
@@ -163,7 +164,7 @@ function discretize(
         propagation_mat += S
     end
     for dof in ch.prescribed_dofs
-        M[dof, dof] = 1e-10 # TODO
+        M[dof, dof] = prescribed_noise # TODO
         propagation_mat[dof, dof] = 0.0
     end
     G_fn = dt -> LinearMap(M + (dt / spde.c) * propagation_mat)
@@ -175,7 +176,7 @@ function discretize(
     total_ndofs = Nₛ * length(ts)
     mean_offset = fill(mean_offset, total_ndofs)
     for dof in ch.prescribed_dofs
-        noise_mat[dof, dof] = 1e-10
+        noise_mat[dof, dof] = prescribed_noise
         st_dofs = dof:Nₛ:total_ndofs
         mean_offset[st_dofs] .= 0.0
     end
