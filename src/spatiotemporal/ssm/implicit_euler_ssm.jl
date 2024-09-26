@@ -44,10 +44,11 @@ struct ImplicitEulerJointSSMMatrices <: JointSSMMatrices
         # β⁻² = β⁻¹^2
         Q_s = to_matrix(precision_map(ssm.spatial_noise))
 
-        β⁻¹M⁻¹ = β⁻¹ * M⁻¹
-        F⁻¹ = G' * β⁻¹M⁻¹' * Q_s * β⁻¹M⁻¹ * G
-        AᵀF⁻¹A = β⁻¹' * Q_s * β⁻¹
-        F⁻¹A = G' * β⁻¹M⁻¹' * Q_s * β⁻¹
+        AᵀF⁻¹A = sparse(β⁻¹') * (Q_s * β⁻¹)
+        M⁻¹G = M⁻¹ * G
+        F⁻¹A = sparse(M⁻¹G') * AᵀF⁻¹A
+        F⁻¹ = F⁻¹A * M⁻¹G
+
         return new(Δt, AᵀF⁻¹A, F⁻¹, F⁻¹A)
     end
 end
