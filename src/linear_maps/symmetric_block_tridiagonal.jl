@@ -63,22 +63,31 @@ end
 
 function sparse(A::SymmetricBlockTridiagonalMap)
     M = spzeros(Base.size(A))
+    Is = []
+    Js = []
+    Vs = []
     start = 1
     stop = 0
     for (i, block) in enumerate(A.diagonal_blocks)
         stop += Base.size(block, 1)
-        M[start:stop, start:stop] = sparse(block)
+        diag_I, diag_J, diag_V = findnz(to_matrix(block))
+        diag_I .+= start - 1
+        diag_J .+= start - 1
+        push!(Is, diag_I)
+        push!(Js, diag_J)
+        push!(Vs, diag_V)
         if i > 1
-            off_block = A.off_diagonal_blocks[i-1]
+            off_block = to_matrix(A.off_diagonal_blocks[i-1])
             off_block_size = Base.size(off_block, 2)
-            M[start:stop, start-off_block_size:start-1] = sparse(off_block)
-        end
-        if i < length(A.diagonal_blocks)
-            off_block = A.off_diagonal_blocks[i]
-            off_block_size = Base.size(off_block', 2)
-            M[start:stop, stop+1:stop+off_block_size] = sparse(off_block')
+            off_diag_I, off_diag_J, off_diag_V = findnz(off_block)
+            off_diag_I .+= start - 1
+            off_diag_J .+= start - off_block_size - 1
+            push!(Is, off_diag_I)
+            push!(Js, off_diag_J)
+            push!(Vs, off_diag_V)
         end
         start = stop + 1
     end
-    return Symmetric(M)
+    M = sparse(vcat(Is...), vcat(Js...), vcat(Vs...), Base.size(A, 1), Base.size(A, 2))
+    return Symmetric(M, :L)
 end
