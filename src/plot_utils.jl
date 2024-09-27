@@ -87,8 +87,8 @@ Plot the mean, standard deviation, and samples of a GMRF derived from a FEM
 discretization of an SPDE.
 """
 function plot_spde_gmrf(
-    d::GMRF,
-    disc::FEMDiscretization;
+    d::AbstractGMRF,
+    disc::FEMDiscretization{2};
     mean_pos = (1, 1),
     std_pos = (1, 2),
     sample_pos = [(2, 1), (2, 2)],
@@ -97,13 +97,13 @@ function plot_spde_gmrf(
     compute_std = true,
     field = :default,
 )
-    means = mean(d)
+    means = full_mean(d)
     if compute_std
-        stds = std(d)
+        stds = full_std(d)
     else
-        stds = spzeros(size(means))
+        stds = spzeros(Base.size(means))
     end
-    samples = rand(d, (length(sample_pos),))
+    samples = [full_rand(Random.default_rng(), d) for _ in sample_pos]
 
     if limits === nothing
         limits = plot_surface ? (nothing, nothing, nothing) : (nothing, nothing)
