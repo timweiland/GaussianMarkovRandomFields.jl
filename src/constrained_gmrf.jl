@@ -1,7 +1,13 @@
 using Random, LinearMaps, Ferrite
 import Random: rand!
 
-export ConstrainedGMRF, full_mean, full_var, full_std, full_rand, transform_free_to_full, constrainify_linear_system
+export ConstrainedGMRF,
+    full_mean,
+    full_var,
+    full_std,
+    full_rand,
+    transform_free_to_full,
+    constrainify_linear_system
 
 #####################
 #
@@ -55,11 +61,16 @@ struct ConstrainedGMRF{G<:AbstractGMRF,T} <: AbstractGMRF
         free_to_prescribed_offset = zeros(length(prescribed_dofs))
         for (i, p_dof) in enumerate(prescribed_dofs)
             constraint_idx = constraint_handler.dofmapping[p_dof]
-            for (f_dof, val) in constraint_handler.dofcoefficients[constraint_idx]
-                free_to_prescribed_mat[i, f_dof] = val
+            dofcoefficients = constraint_handler.dofcoefficients[constraint_idx]
+            if dofcoefficients !== nothing
+                for (f_dof, val) in constraint_handler.dofcoefficients[constraint_idx]
+                    free_to_prescribed_mat[i, f_dof] = val
+                end
             end
-            free_to_prescribed_offset[i] =
-                constraint_handler.affine_inhomogeneities[constraint_idx]
+            affine_inhomogeneity = constraint_handler.affine_inhomogeneities[constraint_idx]
+            if affine_inhomogeneity !== nothing
+                free_to_prescribed_offset[i] = affine_inhomogeneity
+            end
         end
         free_to_prescribed_map = LinearMap(free_to_prescribed_mat)
         ConstrainedGMRF(
