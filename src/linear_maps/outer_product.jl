@@ -27,6 +27,10 @@ LinearAlgebra.transpose(L::OuterProductMap) = L
 
 function to_matrix(L::OuterProductMap)
     A_mat = to_matrix(L.A)
+
+    if L.Q isa LinearMaps.UniformScalingMap
+        return Symmetric(L.Q.λ * A_mat' * A_mat)
+    end
     Q_mat = to_matrix(L.Q)
     return Symmetric(A_mat' * Q_mat * A_mat)
 end
