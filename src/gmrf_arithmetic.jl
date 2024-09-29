@@ -89,12 +89,13 @@ function gauss_newton_step(
     f::Function,
     Q_ϵ::Union{AbstractMatrix,LinearMap,Real},
     y::AbstractVector,
-    solver_blueprint::AbstractSolverBlueprint = CholeskySolverBlueprint(),
+    solver_blueprint::AbstractSolverBlueprint = CholeskySolverBlueprint();
+    J_fn::Function = x -> ADJacobianMap(f, x, length(y)),
 )
     if Q_ϵ isa Real
         Q_ϵ = LinearMaps.UniformScalingMap(Q_ϵ, length(y))
     end
-    J = ADJacobianMap(f, mean(x), length(y))
+    J = J_fn(mean(x))
     y_linear = J * mean(x) + y - f(mean(x))
     return condition_on_observations(
         x,
