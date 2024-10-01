@@ -36,20 +36,28 @@ struct ImplicitEulerJointSSMMatrices <: JointSSMMatrices
     AᵀF⁻¹A::AbstractMatrix
     F⁻¹::AbstractMatrix
     F⁻¹A::AbstractMatrix
+    AᵀF⁻¹_sqrt::AbstractMatrix
+    F⁻¹_sqrt::AbstractMatrix
 
     function ImplicitEulerJointSSMMatrices(ssm::ImplicitEulerSSM, Δt::Real)
         G = sparse(ssm.G(Δt))
         M⁻¹ = sparse(ssm.M⁻¹(Δt))
         β⁻¹ = ssm.β⁻¹(Δt)
         # β⁻² = β⁻¹^2
-        Q_s = to_matrix(precision_map(ssm.spatial_noise))
+        Q_s = precision_map(ssm.spatial_noise)
+        Q_s_sqrt = to_matrix(linmap_sqrt(Q_s))
+        Q_s = to_matrix(Q_s)
 
         AᵀF⁻¹A = sparse(β⁻¹') * (Q_s * β⁻¹)
         M⁻¹G = M⁻¹ * G
         F⁻¹A = sparse(M⁻¹G') * AᵀF⁻¹A
         F⁻¹ = F⁻¹A * M⁻¹G
 
-        return new(Δt, AᵀF⁻¹A, F⁻¹, F⁻¹A)
+        #F⁻¹ = G' * β⁻¹M⁻¹' * Q_s * β⁻¹M⁻¹ * G
+        AᵀF⁻¹_sqrt = sparse(β⁻¹') * Q_s_sqrt
+        F⁻¹_sqrt = sparse((M⁻¹G)') * AᵀF⁻¹_sqrt
+
+        return new(Δt, AᵀF⁻¹A, F⁻¹, F⁻¹A, AᵀF⁻¹_sqrt, F⁻¹_sqrt)
     end
 end
 

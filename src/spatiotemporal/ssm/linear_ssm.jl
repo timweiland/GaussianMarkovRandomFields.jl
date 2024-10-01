@@ -9,6 +9,8 @@ step(x::JointSSMMatrices) = x.Δt
 get_AᵀF⁻¹A(x::JointSSMMatrices) = x.AᵀF⁻¹A
 get_F⁻¹(x::JointSSMMatrices) = x.F⁻¹
 get_F⁻¹A(x::JointSSMMatrices) = x.F⁻¹A
+get_F⁻¹_sqrt(x::JointSSMMatrices) = x.F⁻¹_sqrt
+get_AᵀF⁻¹_sqrt(x::JointSSMMatrices) = x.AᵀF⁻¹_sqrt
 
 
 @doc raw"""
@@ -64,6 +66,8 @@ function joint_ssm(x₀::GMRF, ssm_mats::JointSSMMatrices, ts::AbstractRange)
     AᵀF⁻¹A = get_AᵀF⁻¹A(ssm_mats)
     F⁻¹ = get_F⁻¹(ssm_mats)
     F⁻¹A = get_F⁻¹A(ssm_mats)
+    F⁻¹_sqrt = get_F⁻¹_sqrt(ssm_mats)
+    AᵀF⁻¹_sqrt = get_AᵀF⁻¹_sqrt(ssm_mats)
 
     Nₜ = length(ts)
     M = F⁻¹ + AᵀF⁻¹A
@@ -75,5 +79,12 @@ function joint_ssm(x₀::GMRF, ssm_mats::JointSSMMatrices, ts::AbstractRange)
     means[1] = mean(x₀)
 
     precision = SymmetricBlockTridiagonalMap(diagonal_blocks, off_diagonal_blocks)
+    Q_s_sqrt = linmap_sqrt(precision_map(x₀))
+    A = hcat(Q_s_sqrt, AᵀF⁻¹_sqrt)
+    B = hcat(ZeroMap{Float64}(size(Q_s_sqrt)...), -F⁻¹_sqrt)
+    C = hcat(ZeroMap{Float64}(size(Q_s_sqrt)...), AᵀF⁻¹_sqrt)
+    precision_sqrt = SSMBidiagonalMap(A, B, C, Nₜ)
+    precision = LinearMapWithSqrt(precision, precision_sqrt)
+
     return GMRF(vcat(means...), precision)
 end
