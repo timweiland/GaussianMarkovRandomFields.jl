@@ -34,6 +34,7 @@ include("spdes/spde.jl")
 include("spdes/matern.jl")
 include("spdes/advection_diffusion.jl")
 include("gmrf_arithmetic.jl")
+include("gauss_newton.jl")
 include("plot_utils.jl")
 include("mesh_utils.jl")
 
