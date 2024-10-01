@@ -113,28 +113,12 @@ function default_preconditioner_strategy(::AbstractGMRF)
     return Identity()
 end
 
-function default_preconditioner_strategy(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF})
-    prior_diag_blocks = x.prior.precision.diagonal_blocks
-    prior_off_blocks = x.prior.precision.off_diagonal_blocks
-    update_term = sparse(x.A' * (x.Q_ϵ * x.A))
-    start = 1
-    stop = 0
-    sparse_blocks = Vector{SparseMatrixCSC{Float64}}(undef, length(prior_diag_blocks))
-    sparse_off_blocks = Vector{SparseMatrixCSC{Float64}}(undef, length(prior_off_blocks))
-
-    start = 1
-    stop = size(prior_diag_blocks[1], 1)
-    sparse_blocks[1] = sparse(prior_diag_blocks[1]) + update_term[start:stop, start:stop]
-    i = 2
-    for (diag, off_diag) in zip(prior_diag_blocks[2:end], prior_off_blocks)
-        start = stop + 1
-        stop += size(diag, 1)
-        sparse_blocks[i] = sparse(diag) + update_term[start:stop, start:stop]
-        sparse_off_blocks[i-1] =
-            sparse(off_diag) + update_term[start:stop, stop-size(off_diag, 2):stop-1]
-        i += 1
-    end
-    return TridiagSymmetricBlockGaussSeidelPreconditioner(sparse_off_blocks, sparse_blocks)
+function default_preconditioner_strategy(
+    x::Union{<:ConstantMeshSTGMRF,LinearConditionalGMRF{<:ConstantMeshSTGMRF}},
+)
+    block_size = N_spatial(x)
+    Q = sparse(to_matrix(precision_map(x)))
+    return temporal_block_gauss_seidel(Q, block_size)
 end
 
 struct CGSolverBlueprint <: AbstractSolverBlueprint
