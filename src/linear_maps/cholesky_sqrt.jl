@@ -39,3 +39,11 @@ end
 function LinearAlgebra.size(L::CholeskySqrt)
     return size(L.cho, 1), size(L.cho, 1)
 end
+
+function to_matrix(L::CholeskySqrt)
+    if L.cho isa Cholesky
+        return L.cho.L
+    else
+        return sparse(L.cho.L)[invperm(L.cho.p), :]
+    end
+end
