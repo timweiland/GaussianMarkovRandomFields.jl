@@ -34,3 +34,10 @@ function to_matrix(L::OuterProductMap)
     Q_mat = to_matrix(L.Q)
     return Symmetric(A_mat' * Q_mat * A_mat)
 end
+
+function linmap_sqrt(OP::OuterProductMap)
+    if OP.Q isa LinearMaps.UniformScalingMap
+        return sqrt(OP.Q.λ) * OP.A'
+    end
+    return OP.A' * linmap_sqrt(OP.Q)
+end

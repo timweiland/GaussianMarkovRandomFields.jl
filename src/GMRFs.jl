@@ -2,6 +2,7 @@ module GMRFs
 
 include("typedefs.jl")
 include("utils/to_matrix.jl")
+include("utils/linmap_sqrt.jl")
 include("linear_maps/ad_jacobian.jl")
 include("linear_maps/sparse_ad_jacobian.jl")
 include("linear_maps/symmetric_block_tridiagonal.jl")
