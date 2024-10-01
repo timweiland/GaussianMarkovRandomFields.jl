@@ -96,16 +96,33 @@ equation approach. Journal of the Royal Statistical Society: Series B
 - `K::AbstractMatrix`: The stiffness matrix.
 - `α::Integer`: The parameter α = ν + d/2 of the Matérn SPDE.
 """
-function matern_precision(C_inv::AbstractMatrix, K::AbstractMatrix, α::Integer)
+function matern_precision(
+    C_inv::AbstractMatrix,
+    K::AbstractMatrix,
+    α::Integer,
+    scaling_factor = 1.0,
+)
     if α < 1
         throw(ArgumentError("α must be positive and non-zero"))
     end
+    scaling_factor_sqrt = sqrt(scaling_factor)
     if α == 1
-        return K
+        K_sym = Symmetric(K * scaling_factor)
+        K_sqrt = CholeskySqrt(cholesky(K_sym))
+        return LinearMapWithSqrt(LinearMap(K_sym), K_sqrt)
     elseif α == 2
-        return K * C_inv * K
+        C_inv_sqrt = spdiagm(0 => sqrt.(diag(C_inv)))
+        Q = LinearMap(Symmetric(scaling_factor * K * C_inv * K))
+        Q_sqrt = LinearMap(scaling_factor_sqrt * K * C_inv_sqrt)
+        return LinearMapWithSqrt(Q, Q_sqrt)
     else
-        return K * C_inv * matern_precision(C_inv, K, α - 2) * C_inv * K
+        Q_inner = matern_precision(C_inv, K, α - 2)
+        Q_outer = LinearMap(
+            Symmetric(scaling_factor * K * C_inv * to_matrix(Q_inner.A) * C_inv * K),
+        )
+        Q_outer_sqrt =
+            LinearMap(scaling_factor_sqrt * K * C_inv * to_matrix(Q_inner.A_sqrt))
+        return LinearMapWithSqrt(Q_outer, Q_outer_sqrt)
     end
 end
 
@@ -140,9 +157,9 @@ function discretize(
         ratio = σ²_natural / σ²_goal
     end
 
-    Q = ratio * matern_precision(C̃⁻¹, K, Integer(α(𝒟)))
+    Q = matern_precision(C̃⁻¹, K, Integer(α(𝒟)), ratio)
 
-    x = GMRF(spzeros(size(Q, 1)), Symmetric(Q))
+    x = GMRF(spzeros(Base.size(Q, 1)), Q)
     if length(discretization.constraint_handler.prescribed_dofs) > 0
         return ConstrainedGMRF(x, discretization.constraint_handler)
     end
