@@ -1,4 +1,4 @@
-using SparseArrays, LinearAlgebra, Distributions, IterativeSolvers
+using SparseArrays, LinearAlgebra, Distributions, IterativeSolvers, LinearMaps
 
 export CGSolver, CGSolverBlueprint, construct_solver, compute_mean
 
@@ -10,6 +10,7 @@ struct CGSolver{G<:AbstractGMRF} <: AbstractSolver
     abstol::Real
     maxiter::Int
     Pl::Union{Identity,AbstractPreconditioner}
+    Q_sqrt::LinearMaps.LinearMap
 
     function CGSolver(
         gmrf::G,
@@ -18,7 +19,8 @@ struct CGSolver{G<:AbstractGMRF} <: AbstractSolver
         maxiter::Int,
         Pl::Union{Identity,AbstractPreconditioner},
     ) where {G}
-        new{G}(gmrf, reltol, abstol, maxiter, Pl)
+        Q_sqrt = linmap_sqrt(gmrf.precision)
+        new{G}(gmrf, reltol, abstol, maxiter, Pl, Q_sqrt)
     end
 end
 
@@ -41,73 +43,23 @@ function compute_mean(s::CGSolver{<:LinearConditionalGMRF})
     )
 end
 
-function compute_rand!(
-    s::CGSolver{<:LinearConditionalGMRF},
-    rng::Random.AbstractRNG,
-    x::AbstractVector,
-)
-    rand!(rng, s.gmrf.prior, x)
-    x_cond = s.gmrf
-    prior_mean = mean(x_cond.prior)
-    residual = x_cond.A * (x - prior_mean) - x_cond.b
-    rhs = x_cond.A' * (x_cond.Q_ϵ * residual)
-    sample_kriging_mean =
-        prior_mean + cg(
-            s.gmrf.precision,
-            Array(rhs);
-            maxiter = s.maxiter,
-            reltol = s.reltol,
-            abstol = s.abstol,
-            verbose = true,
-            Pl = s.Pl,
-        )
-
-    sample_resid = sample_kriging_mean - x
-    x .= mean(x_cond) + sample_resid
+function compute_rand!(s::CGSolver, rng::Random.AbstractRNG, x::AbstractVector)
+    w = s.Q_sqrt * randn(rng, Base.size(s.Q_sqrt, 2))
+    x .= zeros(size(w))
+    cg!(
+        x,
+        s.gmrf.precision,
+        w;
+        maxiter = s.maxiter,
+        reltol = s.reltol,
+        abstol = s.abstol,
+        verbose = true,
+        Pl = s.Pl,
+    )
+    x .+= mean(s.gmrf)
     return x
 end
 
-function compute_rand!(
-    s::CGSolver{<:ConstantMeshSTGMRF},
-    rng::Random.AbstractRNG,
-    x::AbstractVector,
-)
-    ssm = s.gmrf.ssm
-    xₖ = zeros(size(ssm.x₀))
-    rand!(rng, ssm.x₀, xₖ) # Sample from x₀
-    ts = ssm.ts
-    t_prev = ts[1]
-    z = zeros(size(xₖ))
-    xs = [xₖ]
-    if ssm.ts isa AbstractRange
-        G_lu = lu(sparse(ssm.G(Base.step(ssm.ts))))
-    end
-    for t in ts[2:end]
-        Δt = t - t_prev
-        G = ssm.G(Δt)
-        if !(ssm.ts isa AbstractRange)
-            G_lu = lu(sparse(G))
-        end
-        M = ssm.M(Δt)
-        β = ssm.β(Δt)
-        rand!(rng, ssm.spatial_noise, z)
-        rhs = M * (xₖ + β * z)
-        xₖ = G_lu \ rhs
-        # xₖ = cg(
-        #     G,
-        #     Array(rhs);
-        #     maxiter = s.maxiter,
-        #     reltol = s.reltol,
-        #     abstol = s.abstol,
-        #     verbose = true,
-        #     Pl = s.Pl,
-        # )
-        push!(xs, xₖ)
-        t_prev = t
-    end
-    x .= vcat(xs...)
-    return x
-end
 
 function default_preconditioner_strategy(::AbstractGMRF)
     return Identity()
