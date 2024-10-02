@@ -12,8 +12,8 @@ struct RBMCStrategy <: AbstractVarianceStrategy
 end
 
 function compute_variance(s::RBMCStrategy, solver::AbstractSolver)
-    Q = to_matrix(gmrf(solver).precision)
-    D = diag(Q)
+    Q = to_matrix(precision_map(gmrf(solver)))
+    D = Array(diag(Q))
     D⁻¹ = 1 ./ D
 
     samples = [zeros(Base.size(Q, 1)) for _ = 1:s.n_samples]
@@ -22,8 +22,8 @@ function compute_variance(s::RBMCStrategy, solver::AbstractSolver)
     end
     sample_mat = hcat(samples...)
 
-    Q̃ = Q - Diagonal(D)
-    transformed_samples = Diagonal(D⁻¹) * Q̃ * sample_mat
+    # Q̃ = Q - Diagonal(D)
+    transformed_samples = D⁻¹ .* (Q * sample_mat - D .* sample_mat)
     return D⁻¹ + reshape(var(transformed_samples, dims = 2), length(D))
 end
 
