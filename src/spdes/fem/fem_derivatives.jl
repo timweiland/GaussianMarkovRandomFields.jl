@@ -140,9 +140,11 @@ function derivative_matrices(
         field = first(f.dof_handler.field_names)
     end
     dof_idcs = dof_range(f.dof_handler, field)
-    mats = [spzeros(length(X), ndofs(f)) for _ in derivative_idcs]
     peh = PointEvalHandler(f.grid, X)
     cc = CellCache(f.dof_handler)
+    Is = [[] for _ in derivative_idcs]
+    Js = [[] for _ in derivative_idcs]
+    Vs = [[] for _ in derivative_idcs]
     for i in eachindex(peh.cells)
         reinit!(cc, peh.cells[i])
         dof_coords = getcoordinates(cc)
@@ -152,9 +154,12 @@ function derivative_matrices(
         get_grad = (b) -> shape_gradient_global(f, dof_coords, b, ξ; J⁻¹ = J⁻¹)
         derivatives = map(get_grad, 1:getnbasefunctions(f.interpolation))
         for (k, idx) in enumerate(derivative_idcs)
-            mats[k][i, [dofs...]] = map(x -> x[derivative_idcs[idx]], derivatives)
+            append!(Is[k], repeat([i], length(dofs)))
+            append!(Js[k], dofs)
+            append!(Vs[k], map(x -> x[derivative_idcs[idx]], derivatives))
         end
     end
+    mats = [sparse(Is[k], Js[k], Vs[k], length(X), ndofs(f)) for k in 1:length(derivative_idcs)]
     return mats
 end
 
@@ -192,9 +197,11 @@ function second_derivative_matrices(
         field = first(f.dof_handler.field_names)
     end
     dof_idcs = dof_range(f.dof_handler, field)
-    mats = [spzeros(length(X), ndofs(f)) for _ in derivative_idcs]
     peh = PointEvalHandler(f.grid, X)
     cc = CellCache(f.dof_handler)
+    Is = [[] for _ in derivative_idcs]
+    Js = [[] for _ in derivative_idcs]
+    Vs = [[] for _ in derivative_idcs]
     for i in eachindex(peh.cells)
         reinit!(cc, peh.cells[i])
         dof_coords = getcoordinates(cc)
@@ -213,8 +220,11 @@ function second_derivative_matrices(
             )
         hessians = map(get_hessian, 1:getnbasefunctions(f.interpolation))
         for (k, idx) in enumerate(derivative_idcs)
-            mats[k][i, [dofs...]] = map(x -> x[idx...], hessians)
+            append!(Is[k], repeat([i], length(dofs)))
+            append!(Js[k], dofs)
+            append!(Vs[k], map(x -> x[idx...], hessians))
         end
     end
+    mats = [sparse(Is[k], Js[k], Vs[k], length(X), ndofs(f)) for k in 1:length(derivative_idcs)]
     return mats
 end

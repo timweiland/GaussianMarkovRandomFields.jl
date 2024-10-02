@@ -102,15 +102,19 @@ function evaluation_matrix(f::FEMDiscretization, X; field = :default)
         field = first(f.dof_handler.field_names)
     end
     dof_idcs = dof_range(f.dof_handler, field)
-    A = spzeros(length(X), ndofs(f))
     peh = PointEvalHandler(f.grid, X)
     cc = CellCache(f.dof_handler)
+    Is = []
+    Js = []
+    Vs = []
     for i in eachindex(peh.cells)
         reinit!(cc, peh.cells[i])
         dofs = celldofs(cc)[dof_idcs]
-        A[i, [dofs...]] = Ferrite.value(f.interpolation, peh.local_coords[i])
+        append!(Is, repeat([i], length(dofs)))
+        append!(Js, dofs)
+        append!(Vs, Ferrite.value(f.interpolation, peh.local_coords[i]))
     end
-    return A
+    return sparse(Is, Js, Vs, length(X), ndofs(f))
 end
 
 """
@@ -124,21 +128,25 @@ function node_selection_matrix(f::FEMDiscretization, node_ids; field = :default)
         field = first(f.dof_handler.field_names)
     end
     dof_idcs = dof_range(f.dof_handler, field)
-    A = spzeros(length(node_ids), ndofs(f))
     node_coords = map(n -> f.grid.nodes[n].x, node_ids)
     peh = PointEvalHandler(f.grid, node_coords)
     cc = CellCache(f.dof_handler)
+    Is = []
+    Js = []
+    Vs = []
     for i in eachindex(peh.cells)
         reinit!(cc, peh.cells[i])
         dofs = celldofs(cc)[dof_idcs]
         coords = getcoordinates(cc)
         for j = 1:length(dofs)
             if coords[j] ≈ node_coords[i]
-                A[i, dofs[j]] = 1
+                push!(Is, i)
+                push!(Js, dofs[j])
+                push!(Vs, 1)
             end
         end
     end
-    return A
+    return sparse(Is, Js, Vs, length(node_ids), ndofs(f))
 end
 
 
