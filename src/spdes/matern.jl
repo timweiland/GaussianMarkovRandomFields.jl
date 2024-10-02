@@ -135,7 +135,8 @@ of the GMRF discretization.
 """
 function discretize(
     𝒟::MaternSPDE{D},
-    discretization::FEMDiscretization{D},
+    discretization::FEMDiscretization{D};
+    solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
 )::AbstractGMRF where {D}
     cellvalues =
         CellScalarValues(discretization.quadrature_rule, discretization.interpolation)
@@ -159,7 +160,7 @@ function discretize(
 
     Q = matern_precision(C̃⁻¹, K, Integer(α(𝒟)), ratio)
 
-    x = GMRF(spzeros(Base.size(Q, 1)), Q)
+    x = GMRF(spzeros(Base.size(Q, 1)), Q, solver_blueprint)
     if length(discretization.constraint_handler.prescribed_dofs) > 0
         return ConstrainedGMRF(x, discretization.constraint_handler)
     end
