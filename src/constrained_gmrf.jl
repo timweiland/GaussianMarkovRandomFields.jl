@@ -57,14 +57,19 @@ struct ConstrainedGMRF{G<:AbstractGMRF,T} <: AbstractGMRF
     )
         prescribed_dofs = constraint_handler.prescribed_dofs
         free_dofs = constraint_handler.free_dofs
-        free_to_prescribed_mat = spzeros(length(prescribed_dofs), length(inner_gmrf))
+        free_to_prescribed_Is = Int64[]
+        free_to_prescribed_Js = Int64[]
+        free_to_prescribed_Vs = Float64[]
+
         free_to_prescribed_offset = zeros(length(prescribed_dofs))
         for (i, p_dof) in enumerate(prescribed_dofs)
             constraint_idx = constraint_handler.dofmapping[p_dof]
             dofcoefficients = constraint_handler.dofcoefficients[constraint_idx]
             if dofcoefficients !== nothing
                 for (f_dof, val) in constraint_handler.dofcoefficients[constraint_idx]
-                    free_to_prescribed_mat[i, f_dof] = val
+                    push!(free_to_prescribed_Is, i)
+                    push!(free_to_prescribed_Js, f_dof)
+                    push!(free_to_prescribed_Vs, val)
                 end
             end
             affine_inhomogeneity = constraint_handler.affine_inhomogeneities[constraint_idx]
@@ -72,6 +77,7 @@ struct ConstrainedGMRF{G<:AbstractGMRF,T} <: AbstractGMRF
                 free_to_prescribed_offset[i] = affine_inhomogeneity
             end
         end
+        free_to_prescribed_mat = sparse(free_to_prescribed_Is, free_to_prescribed_Js, free_to_prescribed_Vs, length(prescribed_dofs), length(inner_gmrf))
         free_to_prescribed_map = LinearMap(free_to_prescribed_mat)
         ConstrainedGMRF(
             inner_gmrf,
@@ -109,6 +115,9 @@ full_std(d::AbstractGMRF) = sqrt.(full_var(d))
 
 function constrainify_linear_system(A::AbstractArray, y::AbstractVector, x::ConstrainedGMRF)
     free_to_prescribed_mat = to_matrix(x.free_to_prescribed_map)
+    if nnz(free_to_prescribed_mat) == 0
+        return A, y
+    end
     for (i, p_dof) in enumerate(x.prescribed_dofs)
         r = nzrange(A, p_dof)
         f_dofs, coeffs = findnz(free_to_prescribed_mat[i, :])
