@@ -110,14 +110,18 @@ full_std(d::AbstractGMRF) = sqrt.(full_var(d))
 function constrainify_linear_system(A::AbstractArray, y::AbstractVector, x::ConstrainedGMRF)
     free_to_prescribed_mat = to_matrix(x.free_to_prescribed_map)
     for (i, p_dof) in enumerate(x.prescribed_dofs)
-        col_i = A[:, p_dof]
+        r = nzrange(K, p_dof)
         f_dofs, coeffs = findnz(free_to_prescribed_mat[i, :])
         rhs = x.free_to_prescribed_offset[i]
-        y -= rhs * col_i
-        for (f_dof, coeff) in zip(f_dofs, coeffs)
-            A[:, f_dof] += coeff * col_i
+        if rhs != 0
+            for j in r
+                y[j] -= rhs * A.nzval[j]
+            end
         end
-        A[:, p_dof] .= 0
+        for (f_dof, coeff) in zip(f_dofs, coeffs)
+            A[r, f_dof] += coeff * A.nzval[r]
+        end
+        A.nzval[r] .= 0
     end
     return A, y
 end
