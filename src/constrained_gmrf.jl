@@ -110,7 +110,7 @@ full_std(d::AbstractGMRF) = sqrt.(full_var(d))
 function constrainify_linear_system(A::AbstractArray, y::AbstractVector, x::ConstrainedGMRF)
     free_to_prescribed_mat = to_matrix(x.free_to_prescribed_map)
     for (i, p_dof) in enumerate(x.prescribed_dofs)
-        r = nzrange(K, p_dof)
+        r = nzrange(A, p_dof)
         f_dofs, coeffs = findnz(free_to_prescribed_mat[i, :])
         rhs = x.free_to_prescribed_offset[i]
         if rhs != 0
