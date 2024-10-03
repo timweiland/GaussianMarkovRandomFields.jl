@@ -142,9 +142,9 @@ function derivative_matrices(
     dof_idcs = dof_range(f.dof_handler, field)
     peh = PointEvalHandler(f.grid, X)
     cc = CellCache(f.dof_handler)
-    Is = [[] for _ in derivative_idcs]
-    Js = [[] for _ in derivative_idcs]
-    Vs = [[] for _ in derivative_idcs]
+    Is = [Int64[] for _ in derivative_idcs]
+    Js = [Int64[] for _ in derivative_idcs]
+    Vs = [Float64[] for _ in derivative_idcs]
     for i in eachindex(peh.cells)
         reinit!(cc, peh.cells[i])
         dof_coords = getcoordinates(cc)
@@ -199,9 +199,9 @@ function second_derivative_matrices(
     dof_idcs = dof_range(f.dof_handler, field)
     peh = PointEvalHandler(f.grid, X)
     cc = CellCache(f.dof_handler)
-    Is = [[] for _ in derivative_idcs]
-    Js = [[] for _ in derivative_idcs]
-    Vs = [[] for _ in derivative_idcs]
+    Is = [Int64[] for _ in derivative_idcs]
+    Js = [Int64[] for _ in derivative_idcs]
+    Vs = [Float64[] for _ in derivative_idcs]
     for i in eachindex(peh.cells)
         reinit!(cc, peh.cells[i])
         dof_coords = getcoordinates(cc)

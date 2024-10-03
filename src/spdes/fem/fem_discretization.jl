@@ -104,9 +104,9 @@ function evaluation_matrix(f::FEMDiscretization, X; field = :default)
     dof_idcs = dof_range(f.dof_handler, field)
     peh = PointEvalHandler(f.grid, X)
     cc = CellCache(f.dof_handler)
-    Is = []
-    Js = []
-    Vs = []
+    Is = Int64[]
+    Js = Int64[]
+    Vs = Float64[]
     for i in eachindex(peh.cells)
         reinit!(cc, peh.cells[i])
         dofs = celldofs(cc)[dof_idcs]
@@ -131,9 +131,9 @@ function node_selection_matrix(f::FEMDiscretization, node_ids; field = :default)
     node_coords = map(n -> f.grid.nodes[n].x, node_ids)
     peh = PointEvalHandler(f.grid, node_coords)
     cc = CellCache(f.dof_handler)
-    Is = []
-    Js = []
-    Vs = []
+    Is = Int64[]
+    Js = Int64[]
+    Vs = Float64[]
     for i in eachindex(peh.cells)
         reinit!(cc, peh.cells[i])
         dofs = celldofs(cc)[dof_idcs]
