@@ -1,16 +1,17 @@
 export LinearMapWithSqrt
 import LinearMaps: _unsafe_mul!
 
-struct LinearMapWithSqrt{T} <: LinearMaps.LinearMap{T}
+mutable struct LinearMapWithSqrt{T} <: LinearMaps.LinearMap{T}
     A::LinearMaps.LinearMap{T}
     A_sqrt::LinearMaps.LinearMap{T}
+    A_mat_cache::Union{Nothing, AbstractMatrix{T}}
 
     function LinearMapWithSqrt(
         A::LinearMaps.LinearMap{T},
         A_sqrt::LinearMaps.LinearMap{T},
     ) where {T}
         Base.size(A, 1) == Base.size(A_sqrt, 1) || throw(ArgumentError("size mismatch"))
-        new{T}(A, A_sqrt)
+        new{T}(A, A_sqrt, nothing)
     end
 end
 
@@ -31,7 +32,10 @@ function LinearMaps.transpose(L::LinearMapWithSqrt)
 end
 
 function to_matrix(L::LinearMapWithSqrt)
-    return to_matrix(L.A)
+    if L.A_mat_cache === nothing
+        L.A_mat_cache = to_matrix(L.A)
+    end
+    return L.A_mat_cache
 end
 
 function linmap_sqrt(L::LinearMapWithSqrt)

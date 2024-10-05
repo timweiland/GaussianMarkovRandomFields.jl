@@ -78,7 +78,7 @@ function ConstrainedGMRF(
 
     prescribed_dofs_t₀ = x₀_constrained.prescribed_dofs
     free_dofs_t₀ = x₀_constrained.free_dofs
-    free_to_prescribed_mat_t₀ = to_matrix(x₀_constrained.free_to_prescribed_map)
+    free_to_prescribed_mat_t₀ = to_matrix(x₀_constrained.free_to_prescribed_mat)
     free_to_prescribed_offset_t₀ = x₀_constrained.free_to_prescribed_offset
     Nₜ = N_t(inner_gmrf)
     t_idcs = 0:(Nₜ-1)
@@ -87,13 +87,12 @@ function ConstrainedGMRF(
     free_dofs = vcat([t_idx * Nₛ .+ free_dofs_t₀ for t_idx in t_idcs]...)
     free_to_prescribed_mat = kron(sparse(I, (Nₜ, Nₜ)), free_to_prescribed_mat_t₀)
     free_to_prescribed_offset = repeat(free_to_prescribed_offset_t₀, Nₜ)
-    free_to_prescribed_map = LinearMap(free_to_prescribed_mat)
 
     return ConstrainedGMRF(
         inner_gmrf,
         prescribed_dofs,
         free_dofs,
-        free_to_prescribed_map,
+        free_to_prescribed_mat,
         free_to_prescribed_offset,
     )
 end

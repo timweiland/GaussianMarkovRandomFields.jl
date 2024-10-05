@@ -71,6 +71,7 @@ struct LinearConditionalCGSolver{V<:AbstractVarianceStrategy} <: AbstractCGSolve
     Pl::Union{Identity,AbstractPreconditioner}
     var_strategy::V
     Q_sqrt::LinearMaps.LinearMap
+    computed_posterior_mean::Union{Nothing, AbstractVector}
 
     function LinearConditionalCGSolver(
         gmrf::LinearConditionalGMRF,
@@ -94,14 +95,18 @@ struct LinearConditionalCGSolver{V<:AbstractVarianceStrategy} <: AbstractCGSolve
             Pl,
             var_strategy,
             Q_sqrt,
+            nothing,
         )
     end
 end
 
 function compute_mean(s::LinearConditionalCGSolver)
+    if s.computed_posterior_mean !== nothing
+        return s.computed_posterior_mean
+    end
     residual = s.y - (s.A * s.prior_mean + s.b)
     rhs = s.A' * (s.Q_ϵ * residual)
-    return s.prior_mean + cg(
+    s.computed_posterior_mean = s.prior_mean + cg(
         s.precision,
         Array(rhs);
         maxiter = s.maxiter,
@@ -110,6 +115,7 @@ function compute_mean(s::LinearConditionalCGSolver)
         verbose = true,
         Pl = s.Pl,
     )
+    return s.computed_posterior_mean
 end
 
 function default_preconditioner_strategy(::AbstractGMRF)

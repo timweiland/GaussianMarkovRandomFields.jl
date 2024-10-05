@@ -1,4 +1,4 @@
-using Memoize, LinearAlgebra, Preconditioners
+using LinearAlgebra, Preconditioners
 
 export GaussNewtonOptimizer,
     GNLinearSolverBlueprint, GNCGSolverBlueprint, GNCholeskySolverBlueprint
@@ -42,6 +42,8 @@ mutable struct GaussNewtonOptimizer
     obj_val_history::Vector{Real}
     Jₖ::AbstractMatrix
     solver_bp::GNLinearSolverBlueprint
+    Qx_prior::AbstractVector
+    Q_mat::AbstractMatrix
 
     function GaussNewtonOptimizer(
         μ_prior::AbstractVector,
@@ -71,12 +73,11 @@ mutable struct GaussNewtonOptimizer
             [obj_val],
             J₀,
             solver_bp,
+            Q_prior * μ_prior,
+            to_matrix(Q_prior),
         )
     end
 end
-
-@memoize Qx_prior(optim::GaussNewtonOptimizer) = optim.Q_prior * optim.μ_prior
-@memoize Q_mat(optim::GaussNewtonOptimizer) = to_matrix(optim.Q_prior)
 
 function step(optim::GaussNewtonOptimizer)
     _step(optim, optim.solver_bp)
@@ -93,8 +94,8 @@ function _update(optim::GaussNewtonOptimizer)
 end
 
 function _step(optim::GaussNewtonOptimizer, solver_bp::GNCholeskySolverBlueprint)
-    A = Symmetric(Q_mat(optim) + optim.noise * optim.Jₖ' * optim.Jₖ)
-    rhs = Qx_prior(optim) + optim.noise * optim.Jₖ' * Array(optim.Jₖ * optim.xₖ + optim.rₖ)
+    A = Symmetric(optim.Q_mat + optim.noise * optim.Jₖ' * optim.Jₖ)
+    rhs = optim.Qx_prior + optim.noise * optim.Jₖ' * Array(optim.Jₖ * optim.xₖ + optim.rₖ)
     A_chol = cholesky(A; perm = solver_bp.perm)
 
     optim.xₖ = A_chol \ rhs
@@ -102,9 +103,9 @@ function _step(optim::GaussNewtonOptimizer, solver_bp::GNCholeskySolverBlueprint
 end
 
 function _step(optim::GaussNewtonOptimizer, solver_bp::GNCGSolverBlueprint)
-    A = Symmetric(Q_mat(optim) + optim.noise * optim.Jₖ' * optim.Jₖ)
+    A = Symmetric(optim.Q_mat + optim.noise * optim.Jₖ' * optim.Jₖ)
 
-    rhs = Qx_prior(optim) + optim.noise * optim.Jₖ' * Array(optim.Jₖ * optim.xₖ + optim.rₖ)
+    rhs = optim.Qx_prior + optim.noise * optim.Jₖ' * Array(optim.Jₖ * optim.xₖ + optim.rₖ)
 
     Pl = solver_bp.preconditioner_fn(sparse(A))
     cg!(

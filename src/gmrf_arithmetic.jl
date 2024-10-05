@@ -79,7 +79,7 @@ function condition_on_observations(
         inner_gmrf,
         x.prescribed_dofs,
         x.free_dofs,
-        x.free_to_prescribed_map,
+        x.free_to_prescribed_mat,
         x.free_to_prescribed_offset,
     )
 end

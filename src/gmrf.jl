@@ -12,7 +12,6 @@ import Distributions:
     var,
     std
 using LinearAlgebra
-using Memoize
 using Random
 using SparseArrays, SparseInverseSubset
 using LinearMaps
@@ -41,7 +40,7 @@ abstract type AbstractGMRF <: AbstractMvNormal end
 
 length(::AbstractGMRF) = error("length not implemented for GMRF")
 solver_ref(x::AbstractGMRF) = x.solver_ref
-@memoize mean(s::AbstractGMRF) = compute_mean(solver_ref(s)[])
+mean(s::AbstractGMRF) = compute_mean(solver_ref(s)[])
 precision_map(::AbstractGMRF) = error("precision_mat not implemented for GMRF")
 
 ### Generic derived methods
@@ -50,7 +49,7 @@ cov(d::AbstractGMRF) =
     precision_chol(d) \ Matrix{eltype(precision_map(d))}(I, size(precision_map(d))...)
 
 # TODO: Throw this out at some point
-@memoize precision_chol(d::AbstractGMRF) = cholesky(invcov(d))
+precision_chol(d::AbstractGMRF) = cholesky(invcov(d))
 
 logdetprecision(d::AbstractGMRF) = logdet(precision_chol(d))
 logdetcov(d::AbstractGMRF) = -logdetprecision(d)
@@ -64,7 +63,7 @@ gradlogpdf(d::AbstractGMRF, x::AbstractVector) = -precision_map(d) * (x .- mean(
 _rand!(rng::AbstractRNG, d::AbstractGMRF, x::AbstractVector) =
     compute_rand!(solver_ref(d)[], rng, x)
 
-@memoize var(d::AbstractGMRF) = compute_variance(solver_ref(d)[])
+var(d::AbstractGMRF) = compute_variance(solver_ref(d)[])
 std(d::AbstractGMRF) = sqrt.(var(d))
 
 #####################

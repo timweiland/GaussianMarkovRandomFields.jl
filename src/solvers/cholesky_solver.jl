@@ -1,4 +1,4 @@
-using SparseArrays, LinearAlgebra, Distributions, LinearMaps, Memoize
+using SparseArrays, LinearAlgebra, Distributions, LinearMaps
 
 export AbstractCholeskySolver,
     CholeskySolver, LinearConditionalCholeskySolver, CholeskySolverBlueprint
@@ -40,7 +40,7 @@ struct CholeskySolver{V<:AbstractVarianceStrategy} <: AbstractCholeskySolver{V}
     end
 end
 
-struct LinearConditionalCholeskySolver{V<:AbstractVarianceStrategy} <:
+mutable struct LinearConditionalCholeskySolver{V<:AbstractVarianceStrategy} <:
        AbstractCholeskySolver{V}
     prior_mean::AbstractVector
     precision::LinearMap
@@ -51,6 +51,7 @@ struct LinearConditionalCholeskySolver{V<:AbstractVarianceStrategy} <:
     b::AbstractVector
     var_strategy::V
     perm::Union{Nothing,Vector{Int}}
+    computed_posterior_mean::Union{Nothing, AbstractVector}
 
     function LinearConditionalCholeskySolver(
         gmrf::LinearConditionalGMRF,
@@ -69,15 +70,20 @@ struct LinearConditionalCholeskySolver{V<:AbstractVarianceStrategy} <:
             gmrf.b,
             var_strategy,
             perm,
+            nothing,
         )
     end
 end
 
-@memoize function compute_mean(s::LinearConditionalCholeskySolver)
+function compute_mean(s::LinearConditionalCholeskySolver)
+    if s.computed_posterior_mean !== nothing
+        return s.computed_posterior_mean
+    end
     μ = _ensure_dense(s.prior_mean)
     residual = _ensure_dense(s.y - (s.A * μ + s.b))
     rhs = _ensure_dense(s.A' * (s.Q_ϵ * residual))
-    return μ + s.precision_chol \ rhs
+    s.computed_posterior_mean = μ + s.precision_chol \ rhs
+    return s.computed_posterior_mean
 end
 
 struct CholeskySolverBlueprint <: AbstractSolverBlueprint
