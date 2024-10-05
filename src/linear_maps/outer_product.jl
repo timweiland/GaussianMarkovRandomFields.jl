@@ -5,14 +5,15 @@ import Base: size
 
 export OuterProductMap, to_matrix
 
-struct OuterProductMap{T} <: LinearMaps.LinearMap{T}
+mutable struct OuterProductMap{T} <: LinearMaps.LinearMap{T}
     A::LinearMap{T}
     Q::LinearMap{T}
+    to_mat_cache::Union{Nothing, Matrix{T}}
 
     function OuterProductMap(A::LinearMap{T}, Q::LinearMap{T}) where {T}
         Base.size(Q, 1) == Base.size(Q, 2) || throw(ArgumentError("Q must be square"))
         Base.size(A, 1) == Base.size(Q, 1) || throw(ArgumentError("size mismatch"))
-        new{T}(A, Q)
+        new{T}(A, Q, nothing)
     end
 end
 
@@ -26,13 +27,18 @@ LinearAlgebra.adjoint(L::OuterProductMap) = L
 LinearAlgebra.transpose(L::OuterProductMap) = L
 
 function to_matrix(L::OuterProductMap)
+    if L.to_mat_cache !== nothing
+        return L.to_mat_cache
+    end
     A_mat = to_matrix(L.A)
 
     if L.Q isa LinearMaps.UniformScalingMap
-        return Symmetric(L.Q.λ * A_mat' * A_mat)
+        L.to_mat_cache = Symmetric(L.Q.λ * A_mat' * A_mat)
+        return L.to_mat_cache
     end
     Q_mat = to_matrix(L.Q)
-    return Symmetric(A_mat' * Q_mat * A_mat)
+    L.to_mat_cache = Symmetric(A_mat' * Q_mat * A_mat)
+    return L.to_mat_cache
 end
 
 function linmap_sqrt(OP::OuterProductMap)
