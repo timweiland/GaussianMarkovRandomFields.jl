@@ -10,7 +10,13 @@ _ensure_dense(x::SparseVector) = Array(x)
 abstract type AbstractCholeskySolver{V<:AbstractVarianceStrategy} <: AbstractSolver end
 
 compute_mean(s::AbstractCholeskySolver) = s.mean
-compute_variance(s::AbstractCholeskySolver) = compute_variance(s.var_strategy, s)
+function compute_variance(s::AbstractCholeskySolver)
+    if s.computed_var !== nothing
+        return s.computed_var
+    end
+    s.computed_var = compute_variance(s.var_strategy, s)
+    return s.computed_var
+end
 function compute_rand!(
     s::AbstractCholeskySolver,
     rng::Random.AbstractRNG,
@@ -22,12 +28,13 @@ function compute_rand!(
     return x
 end
 
-struct CholeskySolver{V<:AbstractVarianceStrategy} <: AbstractCholeskySolver{V}
+mutable struct CholeskySolver{V<:AbstractVarianceStrategy} <: AbstractCholeskySolver{V}
     mean::AbstractVector
     precision::LinearMap
     precision_chol::Union{Cholesky,SparseArrays.CHOLMOD.Factor}
     var_strategy::V
     perm::Union{Nothing,Vector{Int}}
+    computed_var::Union{Nothing, AbstractVector}
 
     function CholeskySolver(
         gmrf::AbstractGMRF,
@@ -36,7 +43,7 @@ struct CholeskySolver{V<:AbstractVarianceStrategy} <: AbstractCholeskySolver{V}
     ) where {V<:AbstractVarianceStrategy}
         mat = to_matrix(precision_map(gmrf))
         precision_chol = cholesky(mat; perm = perm)
-        new{V}(mean(gmrf), precision_map(gmrf), precision_chol, var_strategy, perm)
+        new{V}(mean(gmrf), precision_map(gmrf), precision_chol, var_strategy, perm, nothing)
     end
 end
 
@@ -52,6 +59,7 @@ mutable struct LinearConditionalCholeskySolver{V<:AbstractVarianceStrategy} <:
     var_strategy::V
     perm::Union{Nothing,Vector{Int}}
     computed_posterior_mean::Union{Nothing, AbstractVector}
+    computed_var::Union{Nothing, AbstractVector}
 
     function LinearConditionalCholeskySolver(
         gmrf::LinearConditionalGMRF,
@@ -70,6 +78,7 @@ mutable struct LinearConditionalCholeskySolver{V<:AbstractVarianceStrategy} <:
             gmrf.b,
             var_strategy,
             perm,
+            nothing,
             nothing,
         )
     end

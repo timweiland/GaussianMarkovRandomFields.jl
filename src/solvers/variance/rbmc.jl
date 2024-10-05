@@ -5,17 +5,13 @@ export RBMCStrategy, BlockRBMCStrategy, compute_variance
 struct RBMCStrategy <: AbstractVarianceStrategy
     n_samples::Int
     rng::Random.AbstractRNG
-    computed_variance::Union{Nothing, AbstractVector}
 
     function RBMCStrategy(n_samples::Int, rng::Random.AbstractRNG = Random.default_rng())
-        new(n_samples, rng, nothing)
+        new(n_samples, rng)
     end
 end
 
 function compute_variance(s::RBMCStrategy, solver::AbstractSolver)
-    if s.computed_variance !== nothing
-        return s.computed_variance
-    end
     Q = to_matrix(gmrf_precision(solver))
     D = Array(diag(Q))
     D⁻¹ = 1 ./ D
@@ -28,8 +24,7 @@ function compute_variance(s::RBMCStrategy, solver::AbstractSolver)
 
     # Q̃ = Q - Diagonal(D)
     transformed_samples = D⁻¹ .* (Q * sample_mat - D .* sample_mat)
-    s.computed_variance = D⁻¹ + reshape(var(transformed_samples, dims = 2), length(D))
-    return s.computed_variance
+    return D⁻¹ + reshape(var(transformed_samples, dims = 2), length(D))
 end
 
 all_neighbors(Q, i) = findnz(Q[i, :])[1]
@@ -64,21 +59,17 @@ struct BlockRBMCStrategy <: AbstractVarianceStrategy
     n_samples::Int
     rng::Random.AbstractRNG
     enclosure_size::Int
-    computed_variance::Union{Nothing, AbstractVector}
 
     function BlockRBMCStrategy(
         n_samples::Int,
         rng::Random.AbstractRNG = Random.default_rng(),
         enclosure_size::Int = 1,
     )
-        new(n_samples, rng, enclosure_size, nothing)
+        new(n_samples, rng, enclosure_size)
     end
 end
 
 function compute_variance(s::BlockRBMCStrategy, solver::AbstractSolver)
-    if s.computed_variance !== nothing
-        return s.computed_variance
-    end
     Q = to_matrix(gmrf_precision(solver))
 
     var_estimate = zeros(Base.size(Q, 1))
@@ -110,6 +101,5 @@ function compute_variance(s::BlockRBMCStrategy, solver::AbstractSolver)
         κs = block_chol \ (Q_block_row * sample_mat - Q_block * sample_mat[block_idcs, :])
         var_estimate[interior] .+= var(κs, dims = 2)[1:length(interior), 1]
     end
-    s.computed_variance = var_estimate
-    return s.computed_variance
+    return var_estimate
 end

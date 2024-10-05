@@ -8,7 +8,13 @@ import Base: step
 abstract type AbstractCGSolver{V<:AbstractVarianceStrategy} <: AbstractSolver end
 
 compute_mean(s::AbstractCGSolver) = s.mean
-compute_variance(s::AbstractCGSolver) = compute_variance(s.var_strategy, s)
+function compute_variance(s::AbstractCGSolver)
+    if s.computed_var !== nothing
+        return s.computed_var
+    end
+    s.computed_var = compute_variance(s.var_strategy, s)
+    return s.computed_var
+end
 function compute_rand!(s::AbstractCGSolver, rng::Random.AbstractRNG, x::AbstractVector)
     w = s.Q_sqrt * randn(rng, Base.size(s.Q_sqrt, 2))
     x .= zeros(Base.size(w))
@@ -26,7 +32,7 @@ function compute_rand!(s::AbstractCGSolver, rng::Random.AbstractRNG, x::Abstract
     return x
 end
 
-struct CGSolver{V<:AbstractVarianceStrategy} <: AbstractCGSolver{V}
+mutable struct CGSolver{V<:AbstractVarianceStrategy} <: AbstractCGSolver{V}
     mean::AbstractVector
     precision::LinearMap
     reltol::Real
@@ -35,6 +41,7 @@ struct CGSolver{V<:AbstractVarianceStrategy} <: AbstractCGSolver{V}
     Pl::Union{Identity,AbstractPreconditioner}
     Q_sqrt::LinearMaps.LinearMap
     var_strategy::V
+    computed_var::Union{Nothing, AbstractVector}
 
     function CGSolver(
         gmrf::AbstractGMRF,
@@ -54,11 +61,12 @@ struct CGSolver{V<:AbstractVarianceStrategy} <: AbstractCGSolver{V}
             Pl,
             Q_sqrt,
             var_strategy,
+            nothing,
         )
     end
 end
 
-struct LinearConditionalCGSolver{V<:AbstractVarianceStrategy} <: AbstractCGSolver{V}
+mutable struct LinearConditionalCGSolver{V<:AbstractVarianceStrategy} <: AbstractCGSolver{V}
     prior_mean::AbstractVector
     precision::LinearMap
     A::LinearMap
@@ -72,6 +80,7 @@ struct LinearConditionalCGSolver{V<:AbstractVarianceStrategy} <: AbstractCGSolve
     var_strategy::V
     Q_sqrt::LinearMaps.LinearMap
     computed_posterior_mean::Union{Nothing, AbstractVector}
+    computed_var::Union{Nothing, AbstractVector}
 
     function LinearConditionalCGSolver(
         gmrf::LinearConditionalGMRF,
@@ -95,6 +104,7 @@ struct LinearConditionalCGSolver{V<:AbstractVarianceStrategy} <: AbstractCGSolve
             Pl,
             var_strategy,
             Q_sqrt,
+            nothing,
             nothing,
         )
     end
