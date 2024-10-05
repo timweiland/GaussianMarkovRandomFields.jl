@@ -1,4 +1,5 @@
 using LinearMaps, SparseArrays
+import Base: show
 
 export LinearConditionalGMRF
 
@@ -35,3 +36,10 @@ end
 
 length(d::LinearConditionalGMRF) = Base.size(d.precision, 1)
 precision_map(d::LinearConditionalGMRF) = d.precision
+
+function Base.show(io::IO, x::LinearConditionalGMRF)
+    print(
+        io,
+        "LinearConditionalGMRF of size $(length(x)) and solver $(typeof(x.solver_ref[]))",
+    )
+end

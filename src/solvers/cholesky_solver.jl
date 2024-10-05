@@ -1,48 +1,83 @@
-using SparseArrays, LinearAlgebra, Distributions
+using SparseArrays, LinearAlgebra, Distributions, LinearMaps, Memoize
 
-export CholeskySolver, CholeskySolverBlueprint
+export AbstractCholeskySolver,
+    CholeskySolver, LinearConditionalCholeskySolver, CholeskySolverBlueprint
 
 _ensure_dense(x) = x
 _ensure_dense(x::SparseVector) = Array(x)
 
-struct CholeskySolver{G<:AbstractGMRF,V<:AbstractVarianceStrategy} <: AbstractSolver
-    gmrf::G
+
+abstract type AbstractCholeskySolver{V<:AbstractVarianceStrategy} <: AbstractSolver end
+
+compute_mean(s::AbstractCholeskySolver) = s.mean
+compute_variance(s::AbstractCholeskySolver) = compute_variance(s.var_strategy, s)
+function compute_rand!(
+    s::AbstractCholeskySolver,
+    rng::Random.AbstractRNG,
+    x::AbstractVector,
+)
+    randn!(rng, x)
+    x .= s.precision_chol.UP \ _ensure_dense(x)
+    x .+= _ensure_dense(compute_mean(s))
+    return x
+end
+
+struct CholeskySolver{V<:AbstractVarianceStrategy} <: AbstractCholeskySolver{V}
+    mean::AbstractVector
+    precision::LinearMap
+    precision_chol::Union{Cholesky,SparseArrays.CHOLMOD.Factor}
     var_strategy::V
     perm::Union{Nothing,Vector{Int}}
-    precision_chol::Union{Cholesky,SparseArrays.CHOLMOD.Factor}
 
     function CholeskySolver(
-        gmrf::G,
+        gmrf::AbstractGMRF,
         var_strategy::V,
         perm::Union{Nothing,Vector{Int}} = nothing,
-    ) where {G<:AbstractGMRF,V<:AbstractVarianceStrategy}
+    ) where {V<:AbstractVarianceStrategy}
         mat = to_matrix(precision_map(gmrf))
         precision_chol = cholesky(mat; perm = perm)
-        new{G,V}(gmrf, var_strategy, perm, precision_chol)
+        new{V}(mean(gmrf), precision_map(gmrf), precision_chol, var_strategy, perm)
     end
 end
 
-function compute_mean(s::CholeskySolver)
-    return s.gmrf.mean
+struct LinearConditionalCholeskySolver{V<:AbstractVarianceStrategy} <:
+       AbstractCholeskySolver{V}
+    prior_mean::AbstractVector
+    precision::LinearMap
+    precision_chol::Union{Cholesky,SparseArrays.CHOLMOD.Factor}
+    A::LinearMap
+    Q_ϵ::LinearMap
+    y::AbstractVector
+    b::AbstractVector
+    var_strategy::V
+    perm::Union{Nothing,Vector{Int}}
+
+    function LinearConditionalCholeskySolver(
+        gmrf::LinearConditionalGMRF,
+        var_strategy::V,
+        perm::Union{Nothing,Vector{Int}} = nothing,
+    ) where {V<:AbstractVarianceStrategy}
+        mat = to_matrix(precision_map(gmrf))
+        precision_chol = cholesky(mat; perm = perm)
+        new{V}(
+            mean(gmrf.prior),
+            precision_map(gmrf),
+            precision_chol,
+            gmrf.A,
+            gmrf.Q_ϵ,
+            gmrf.y,
+            gmrf.b,
+            var_strategy,
+            perm,
+        )
+    end
 end
 
-function compute_mean(s::CholeskySolver{<:LinearConditionalGMRF})
-    x = s.gmrf
-    μ = _ensure_dense(mean(x.prior))
-    residual = _ensure_dense(x.y - (x.A * μ + x.b))
-    rhs = _ensure_dense(x.A' * (x.Q_ϵ * residual))
+@memoize function compute_mean(s::LinearConditionalCholeskySolver)
+    μ = _ensure_dense(s.prior_mean)
+    residual = _ensure_dense(s.y - (s.A * μ + s.b))
+    rhs = _ensure_dense(s.A' * (s.Q_ϵ * residual))
     return μ + s.precision_chol \ rhs
-end
-
-function compute_variance(s::CholeskySolver)
-    return compute_variance(s.var_strategy, s)
-end
-
-function compute_rand!(s::CholeskySolver, rng::Random.AbstractRNG, x::AbstractVector)
-    randn!(rng, x)
-    x .= s.precision_chol.UP \ _ensure_dense(x)
-    x .+= _ensure_dense(mean(s.gmrf))
-    return x
 end
 
 struct CholeskySolverBlueprint <: AbstractSolverBlueprint
@@ -58,4 +93,8 @@ end
 
 function construct_solver(bp::CholeskySolverBlueprint, gmrf::AbstractGMRF)
     return CholeskySolver(gmrf, bp.var_strategy, bp.perm)
+end
+
+function construct_solver(bp::CholeskySolverBlueprint, gmrf::LinearConditionalGMRF)
+    return LinearConditionalCholeskySolver(gmrf, bp.var_strategy, bp.perm)
 end

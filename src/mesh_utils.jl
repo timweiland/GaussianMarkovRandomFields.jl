@@ -95,7 +95,8 @@ function create_inflated_rectangle(
     boundary_group = gmsh.model.addPhysicalGroup(1, [l_int_1, l_int_2, l_int_3, l_int_4])
     gmsh.model.setPhysicalName(1, boundary_group, "Interior boundary")
 
-    ext_boundary_group = gmsh.model.addPhysicalGroup(1, [l_ext_1, l_ext_2, l_ext_3, l_ext_4])
+    ext_boundary_group =
+        gmsh.model.addPhysicalGroup(1, [l_ext_1, l_ext_2, l_ext_3, l_ext_4])
     gmsh.model.setPhysicalName(1, ext_boundary_group, "Exterior boundary")
 
     gmsh.model.mesh.generate(2)
@@ -132,14 +133,7 @@ function create_inflated_rectangle(
     return Ferrite.Grid(elements, nodes, facesets = facesets, cellsets = cellsets)
 end
 
-function create_rectangle(
-    x0,
-    y0,
-    dx,
-    dy,
-    interior_mesh_size;
-    element_order = 1,
-)
+function create_rectangle(x0, y0, dx, dy, interior_mesh_size; element_order = 1)
     Gmsh.initialize()
 
     gmsh.model.add("t1")

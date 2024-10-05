@@ -12,7 +12,7 @@ struct RBMCStrategy <: AbstractVarianceStrategy
 end
 
 function compute_variance(s::RBMCStrategy, solver::AbstractSolver)
-    Q = to_matrix(precision_map(gmrf(solver)))
+    Q = to_matrix(gmrf_precision(solver))
     D = Array(diag(Q))
     D⁻¹ = 1 ./ D
 

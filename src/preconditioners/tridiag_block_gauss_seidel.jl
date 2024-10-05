@@ -1,5 +1,5 @@
 import LinearAlgebra: ldiv!
-import Base: \, size
+import Base: \, size, show
 
 export TridiagonalBlockGaussSeidelPreconditioner,
     TridiagSymmetricBlockGaussSeidelPreconditioner
@@ -24,6 +24,13 @@ struct TridiagonalBlockGaussSeidelPreconditioner <: AbstractPreconditioner
         length(L_blocks) == length(D⁻¹_blocks) - 1 || throw(ArgumentError("size mismatch"))
         new(L_blocks, D⁻¹_blocks)
     end
+end
+
+function show(io::IO, P::TridiagonalBlockGaussSeidelPreconditioner)
+    print(
+        io,
+        "TridiagonalBlockGaussSeidelPreconditioner with $(length(P.D⁻¹_blocks)) blocks",
+    )
 end
 
 function ldiv!(y, P::TridiagonalBlockGaussSeidelPreconditioner, x::AbstractVector)

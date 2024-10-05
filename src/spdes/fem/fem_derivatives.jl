@@ -159,7 +159,9 @@ function derivative_matrices(
             append!(Vs[k], map(x -> x[derivative_idcs[idx]], derivatives))
         end
     end
-    mats = [sparse(Is[k], Js[k], Vs[k], length(X), ndofs(f)) for k in 1:length(derivative_idcs)]
+    mats = [
+        sparse(Is[k], Js[k], Vs[k], length(X), ndofs(f)) for k = 1:length(derivative_idcs)
+    ]
     return mats
 end
 
@@ -225,6 +227,8 @@ function second_derivative_matrices(
             append!(Vs[k], map(x -> x[idx...], hessians))
         end
     end
-    mats = [sparse(Is[k], Js[k], Vs[k], length(X), ndofs(f)) for k in 1:length(derivative_idcs)]
+    mats = [
+        sparse(Is[k], Js[k], Vs[k], length(X), ndofs(f)) for k = 1:length(derivative_idcs)
+    ]
     return mats
 end
