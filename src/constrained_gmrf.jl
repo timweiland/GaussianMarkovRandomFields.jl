@@ -127,7 +127,7 @@ function constrainify_linear_system(A::AbstractArray, y::AbstractVector, x::Cons
             end
         end
         for (f_dof, coeff) in zip(f_dofs, coeffs)
-            A[r, f_dof] += coeff * A.nzval[r]
+            A[A.rowval[r], f_dof] += coeff * A.nzval[r]
         end
         A.nzval[r] .= 0
     end
