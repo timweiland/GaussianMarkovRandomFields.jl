@@ -186,7 +186,7 @@ function product_matern(
     Q_s = to_matrix(precision_map(x_s))
 
     x_spatiotemporal = kronecker_product_spatiotemporal_model(Q_t, Q_s, spatial_disc; solver_blueprint=solver_blueprint)
-    if length(disc.constraint_handler.prescribed_dofs) > 0
-        return ConstrainedGMRF(x_spatiotemporal, disc.constraint_handler)
+    if length(spatial_disc.constraint_handler.prescribed_dofs) > 0
+        return ConstrainedGMRF(x_spatiotemporal, spatial_disc.constraint_handler)
     end
 end
