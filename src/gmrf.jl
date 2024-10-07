@@ -38,10 +38,10 @@ is sparse. The zero entries in the precision correspond to conditional independe
 """
 abstract type AbstractGMRF <: AbstractMvNormal end
 
-length(::AbstractGMRF) = error("length not implemented for GMRF")
 solver_ref(x::AbstractGMRF) = x.solver_ref
 mean(s::AbstractGMRF) = compute_mean(solver_ref(s)[])
 precision_map(::AbstractGMRF) = error("precision_mat not implemented for GMRF")
+length(d::AbstractGMRF) = Base.size(precision_map(d), 1)
 
 ### Generic derived methods
 invcov(d::AbstractGMRF) = Hermitian(sparse(precision_map(d)))
