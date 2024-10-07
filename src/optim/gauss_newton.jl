@@ -5,8 +5,7 @@ export GaussNewtonOptimizer, optimize
 mutable struct GaussNewtonOptimizer
     μ_prior::AbstractVector
     Q_prior::LinearMap
-    f::Function
-    J_fn::Function
+    f_and_Jf::Function
     noise::Real
     y::AbstractVector
     xₖ::AbstractVector
@@ -27,8 +26,7 @@ mutable struct GaussNewtonOptimizer
     function GaussNewtonOptimizer(
         μ_prior::AbstractVector,
         Q_prior::LinearMap,
-        f::Function,
-        J_fn::Function,
+        f_and_Jf::Function,
         noise::Real,
         y::AbstractVector,
         x₀::AbstractVector = μ_prior;
@@ -39,8 +37,8 @@ mutable struct GaussNewtonOptimizer
             StepNumberCriterion(15),
         ]),
     )
-        J₀ = J_fn(x₀)
-        r_obs₀ = Array(f(x₀) - y)
+        f₀, J₀ = f_and_Jf(x₀)
+        r_obs₀ = Array(f₀ - y)
         r_prior₀ = Array(x₀ - μ_prior)
         ∇obj₀ = Q_prior * r_prior₀ + noise * J₀' * r_obs₀
 
@@ -48,8 +46,7 @@ mutable struct GaussNewtonOptimizer
         new(
             μ_prior,
             Q_prior,
-            f,
-            J_fn,
+            f_and_Jf,
             noise,
             y,
             x₀,
@@ -72,7 +69,8 @@ end
 
 function obj_fn(optim::GaussNewtonOptimizer, x::AbstractVector, r_prior::Union{Nothing,AbstractVector} = nothing, r_obs::Union{Nothing,AbstractVector} = nothing)
     if r_obs === nothing
-        r_obs = Array(optim.f(x) - optim.y)
+        f, _ = optim.f_and_Jf(x) # TODO: A bit wasteful to compute J here
+        r_obs = Array(f - optim.y)
     end
     if r_prior === nothing
         r_prior = Array(x - optim.μ_prior)
@@ -81,11 +79,9 @@ function obj_fn(optim::GaussNewtonOptimizer, x::AbstractVector, r_prior::Union{N
 end
 
 function ∇obj_fn(optim::GaussNewtonOptimizer, x::AbstractVector, J::Union{Nothing, AbstractMatrix}=nothing, r_prior::Union{Nothing,AbstractVector} = nothing, r_obs::Union{Nothing,AbstractVector} = nothing)
-    if J === nothing
-        J = optim.J_fn(x)
-    end
-    if r_obs === nothing
-        r_obs = Array(optim.f(x) - optim.y)
+    if J === nothing || r_obs === nothing
+        f, J = optim.f_and_Jf(x)
+        r_obs = Array(f - optim.y)
     end
     if r_prior === nothing
         r_prior = Array(x - optim.μ_prior)
@@ -102,8 +98,8 @@ function step(optim::GaussNewtonOptimizer)
 end
 
 function _update(optim::GaussNewtonOptimizer)
-    optim.Jₖ = optim.J_fn(optim.xₖ)
-    optim.r_obsₖ = Array(optim.f(optim.xₖ) - optim.y)
+    fₖ, optim.Jₖ = optim.f_and_Jf(optim.xₖ)
+    optim.r_obsₖ = Array(fₖ - optim.y)
     optim.r_priorₖ = Array(optim.xₖ - optim.μ_prior)
     optim.∇objₖ = ∇obj_fn(optim, optim.xₖ, optim.Jₖ, optim.r_priorₖ, optim.r_obsₖ)
     obj_val = obj_fn(optim, optim.xₖ, optim.r_priorₖ, optim.r_obsₖ)
