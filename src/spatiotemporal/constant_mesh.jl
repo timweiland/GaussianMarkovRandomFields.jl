@@ -1,6 +1,6 @@
 using LinearMaps, LinearAlgebra, SparseArrays
 
-export ConstantMeshSTGMRF
+export ConstantMeshSTGMRF, ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMeshSTGMRF
 
 ################################################################################
 #
@@ -14,14 +14,20 @@ export ConstantMeshSTGMRF
 
 A spatiotemporal GMRF with constant spatial discretization.
 """
-struct ConstantMeshSTGMRF{D,T} <: AbstractSpatiotemporalGMRF
+
+abstract type ConstantMeshSTGMRF{D,T} <: AbstractSpatiotemporalGMRF end
+
+precision_map(x::ConstantMeshSTGMRF) = x.precision
+mean(x::ConstantMeshSTGMRF) = x.mean
+
+struct ImplicitEulerConstantMeshSTGMRF{D, T} <: ConstantMeshSTGMRF{D,T}
     mean::AbstractVector{T}
     precision::LinearMap{T}
     discretization::FEMDiscretization{D}
     ssm::ImplicitEulerSSM
     solver_ref::Base.RefValue{AbstractSolver}
 
-    function ConstantMeshSTGMRF(
+    function ImplicitEulerConstantMeshSTGMRF(
         mean::AbstractVector{T},
         precision::LinearMap{T},
         discretization::FEMDiscretization{D},
@@ -29,12 +35,36 @@ struct ConstantMeshSTGMRF{D,T} <: AbstractSpatiotemporalGMRF
         solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
     ) where {D,T}
         n = length(mean)
-        n == size(precision, 1) == size(precision, 2) ||
+        n == Base.size(precision, 1) == Base.size(precision, 2) ||
             throw(ArgumentError("size mismatch"))
         (n % ndofs(discretization)) == 0 || throw(ArgumentError("size mismatch"))
 
         solver_ref = Base.RefValue{AbstractSolver}()
         self = new{D,T}(mean, precision, discretization, ssm, solver_ref)
+        solver_ref[] = construct_solver(solver_blueprint, self)
+        return self
+    end
+end
+
+struct ConcreteConstantMeshSTGMRF{D,T} <: ConstantMeshSTGMRF{D,T}
+    mean::AbstractVector{T}
+    precision::LinearMap{T}
+    discretization::FEMDiscretization{D}
+    solver_ref::Base.RefValue{AbstractSolver}
+
+    function ConcreteConstantMeshSTGMRF(
+        mean::AbstractVector{T},
+        precision::LinearMap{T},
+        discretization::FEMDiscretization{D},
+        solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
+    ) where {D,T}
+        n = length(mean)
+        n == Base.size(precision, 1) == Base.size(precision, 2) ||
+            throw(ArgumentError("size mismatch"))
+        (n % ndofs(discretization)) == 0 || throw(ArgumentError("size mismatch"))
+
+        solver_ref = Base.RefValue{AbstractSolver}()
+        self = new{D,T}(mean, precision, discretization, solver_ref)
         solver_ref[] = construct_solver(solver_blueprint, self)
         return self
     end
@@ -74,12 +104,10 @@ function ConstrainedGMRF(
     inner_gmrf::ConstantMeshSTGMRF,
     constraint_handler::Ferrite.ConstraintHandler,
 )
-    x₀_constrained = ConstrainedGMRF(inner_gmrf.ssm.x₀, constraint_handler)
-
-    prescribed_dofs_t₀ = x₀_constrained.prescribed_dofs
-    free_dofs_t₀ = x₀_constrained.free_dofs
-    free_to_prescribed_mat_t₀ = to_matrix(x₀_constrained.free_to_prescribed_mat)
-    free_to_prescribed_offset_t₀ = x₀_constrained.free_to_prescribed_offset
+    prescribed_dofs_t₀, free_dofs_t₀, free_to_prescribed_mat_t₀, free_to_prescribed_offset_t₀ = get_constraint_variables(
+        constraint_handler,
+        N_spatial(inner_gmrf),
+    )
     Nₜ = N_t(inner_gmrf)
     t_idcs = 0:(Nₜ-1)
     Nₛ = N_spatial(inner_gmrf)

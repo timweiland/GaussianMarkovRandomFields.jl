@@ -7,7 +7,8 @@ export ConstrainedGMRF,
     full_std,
     full_rand,
     transform_free_to_full,
-    constrainify_linear_system
+    constrainify_linear_system,
+    get_constraint_variables
 
 #####################
 #
@@ -49,33 +50,8 @@ struct ConstrainedGMRF{G<:AbstractGMRF,T} <: AbstractGMRF
         inner_gmrf::AbstractGMRF,
         constraint_handler::Ferrite.ConstraintHandler,
     )
-        prescribed_dofs = constraint_handler.prescribed_dofs
-        free_dofs = constraint_handler.free_dofs
-        free_to_prescribed_Is = Int64[]
-        free_to_prescribed_Js = Int64[]
-        free_to_prescribed_Vs = Float64[]
-
-        free_to_prescribed_offset = zeros(length(prescribed_dofs))
-        for (i, p_dof) in enumerate(prescribed_dofs)
-            constraint_idx = constraint_handler.dofmapping[p_dof]
-            dofcoefficients = constraint_handler.dofcoefficients[constraint_idx]
-            if dofcoefficients !== nothing
-                for (f_dof, val) in constraint_handler.dofcoefficients[constraint_idx]
-                    push!(free_to_prescribed_Is, i)
-                    push!(free_to_prescribed_Js, f_dof)
-                    push!(free_to_prescribed_Vs, val)
-                end
-            end
-            affine_inhomogeneity = constraint_handler.affine_inhomogeneities[constraint_idx]
-            if affine_inhomogeneity !== nothing
-                free_to_prescribed_offset[i] = affine_inhomogeneity
-            end
-        end
-        free_to_prescribed_mat = sparse(
-            free_to_prescribed_Is,
-            free_to_prescribed_Js,
-            free_to_prescribed_Vs,
-            length(prescribed_dofs),
+        prescribed_dofs, free_dofs, free_to_prescribed_mat, free_to_prescribed_offset = get_constraint_variables(
+            constraint_handler,
             length(inner_gmrf),
         )
         ConstrainedGMRF(
@@ -86,6 +62,39 @@ struct ConstrainedGMRF{G<:AbstractGMRF,T} <: AbstractGMRF
             free_to_prescribed_offset,
         )
     end
+end
+
+function get_constraint_variables(constraint_handler::Ferrite.ConstraintHandler, ndofs)
+    prescribed_dofs = constraint_handler.prescribed_dofs
+    free_dofs = constraint_handler.free_dofs
+    free_to_prescribed_Is = Int64[]
+    free_to_prescribed_Js = Int64[]
+    free_to_prescribed_Vs = Float64[]
+
+    free_to_prescribed_offset = zeros(length(prescribed_dofs))
+    for (i, p_dof) in enumerate(prescribed_dofs)
+        constraint_idx = constraint_handler.dofmapping[p_dof]
+        dofcoefficients = constraint_handler.dofcoefficients[constraint_idx]
+        if dofcoefficients !== nothing
+            for (f_dof, val) in constraint_handler.dofcoefficients[constraint_idx]
+                push!(free_to_prescribed_Is, i)
+                push!(free_to_prescribed_Js, f_dof)
+                push!(free_to_prescribed_Vs, val)
+            end
+        end
+        affine_inhomogeneity = constraint_handler.affine_inhomogeneities[constraint_idx]
+        if affine_inhomogeneity !== nothing
+            free_to_prescribed_offset[i] = affine_inhomogeneity
+        end
+    end
+    free_to_prescribed_mat = sparse(
+        free_to_prescribed_Is,
+        free_to_prescribed_Js,
+        free_to_prescribed_Vs,
+        length(prescribed_dofs),
+        ndofs,
+    )
+    return prescribed_dofs, free_dofs, free_to_prescribed_mat, free_to_prescribed_offset
 end
 
 length(d::ConstrainedGMRF) = length(d.inner_gmrf)

@@ -28,11 +28,6 @@ at a given time.
 """
 abstract type AbstractSpatiotemporalGMRF <: AbstractGMRF end
 
-length(x::AbstractSpatiotemporalGMRF) = length(x.mean)
-mean(x::AbstractSpatiotemporalGMRF) = x.mean
-precision_map(x::AbstractSpatiotemporalGMRF) = x.precision
-ssm(x::AbstractSpatiotemporalGMRF) = x.ssm
-
 N_t(::AbstractSpatiotemporalGMRF) = error("N_t not implemented")
 time_means(::AbstractSpatiotemporalGMRF) = error("time_means not implemented")
 time_vars(::AbstractSpatiotemporalGMRF) = error("time_vars not implemented")

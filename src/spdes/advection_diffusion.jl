@@ -199,7 +199,7 @@ function discretize(
         ts,
     )
     X = joint_ssm(ssm)
-    X = ConstantMeshSTGMRF(
+    X = ImplicitEulerConstantMeshSTGMRF(
         X.mean .+ mean_offset,
         X.precision,
         discretization,
