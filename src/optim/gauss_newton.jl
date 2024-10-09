@@ -118,23 +118,18 @@ function _compute_direction(optim::GaussNewtonOptimizer, solver_bp::GNCholeskySo
 end
 
 function _compute_direction(optim::GaussNewtonOptimizer, solver_bp::GNCGSolverBlueprint)
-    A = Symmetric(optim.Q_mat + optim.noise * optim.Jₖ' * optim.Jₖ)
+    H = Symmetric(optim.Q_mat + optim.noise * optim.Jₖ' * optim.Jₖ)
+    Pl = solver_bp.preconditioner_fn(sparse(H))
 
-    rhs = optim.Qx_prior + optim.noise * optim.Jₖ' * Array(optim.Jₖ * optim.xₖ + optim.rₖ)
-
-    Pl = solver_bp.preconditioner_fn(sparse(A))
-    x_new = copy(optim.xₖ)
-    cg!(
-        x_new,
-        A,
-        rhs;
+    return cg(
+        H,
+        optim.∇objₖ;
         maxiter = solver_bp.maxiter,
         reltol = solver_bp.reltol,
         abstol = solver_bp.abstol,
         verbose = true,
         Pl = Pl,
     )
-    return x_new - optim.xₖ
 end
 
 function optimize(optim::GaussNewtonOptimizer)
