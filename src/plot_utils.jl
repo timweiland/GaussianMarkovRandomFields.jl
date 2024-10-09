@@ -190,9 +190,15 @@ function plot_spde_gmrf(
     return fig
 end
 
+ST_GMRF_2D = Union{
+    ConstantMeshSTGMRF{2},
+    LinearConditionalGMRF{<:ConstantMeshSTGMRF{2}},
+    ConstrainedGMRF{<:ConstantMeshSTGMRF{2}},
+    ConstrainedGMRF{<:LinearConditionalGMRF{<:ConstantMeshSTGMRF{2}}},
+}
 
 function plot_spatiotemporal_gmrf(
-    x::Union{ConstantMeshSTGMRF{2},LinearConditionalGMRF{<:ConstantMeshSTGMRF{2}}};
+    x::ST_GMRF_2D;
     mean_pos = (1, 1),
     std_pos = (1, 2),
     sample_pos = [(2, 1), (2, 2)],
@@ -268,7 +274,7 @@ ST_GMRF_1D = Union{
     ConstantMeshSTGMRF{1},
     LinearConditionalGMRF{<:ConstantMeshSTGMRF{1}},
     ConstrainedGMRF{<:ConstantMeshSTGMRF{1}},
-    ConstrainedGMRF{<:LinearConditionalGMRF{<:ConstantMeshSTGMRF}},
+    ConstrainedGMRF{<:LinearConditionalGMRF{<:ConstantMeshSTGMRF{1}}},
 }
 
 ### 1D ###
