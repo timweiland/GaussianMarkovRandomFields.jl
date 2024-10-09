@@ -94,7 +94,7 @@ mutable struct LinearConditionalCGSolver{V<:AbstractVarianceStrategy} <: Abstrac
     ) where {V<:AbstractVarianceStrategy}
         Q_sqrt = linmap_sqrt(precision_map(gmrf))
         new{V}(
-            mean(gmrf),
+            mean(gmrf.prior),
             precision_map(gmrf),
             gmrf.A,
             gmrf.Q_ϵ,
