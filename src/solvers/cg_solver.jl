@@ -79,6 +79,7 @@ mutable struct LinearConditionalCGSolver{V<:AbstractVarianceStrategy} <: Abstrac
     Pl::Union{Identity,AbstractPreconditioner}
     var_strategy::V
     Q_sqrt::LinearMaps.LinearMap
+    mean_residual_guess::Union{Nothing, AbstractVector}
     computed_posterior_mean::Union{Nothing, AbstractVector}
     computed_var::Union{Nothing, AbstractVector}
 
@@ -89,6 +90,7 @@ mutable struct LinearConditionalCGSolver{V<:AbstractVarianceStrategy} <: Abstrac
         maxiter::Int,
         Pl::Union{Identity,AbstractPreconditioner},
         var_strategy::V,
+        mean_residual_guess::Union{Nothing, AbstractVector},
     ) where {V<:AbstractVarianceStrategy}
         Q_sqrt = linmap_sqrt(precision_map(gmrf))
         new{V}(
@@ -104,6 +106,7 @@ mutable struct LinearConditionalCGSolver{V<:AbstractVarianceStrategy} <: Abstrac
             Pl,
             var_strategy,
             Q_sqrt,
+            mean_residual_guess,
             nothing,
             nothing,
         )
@@ -116,7 +119,9 @@ function compute_mean(s::LinearConditionalCGSolver)
     end
     residual = s.y - (s.A * s.prior_mean + s.b)
     rhs = s.A' * (s.Q_ϵ * residual)
-    s.computed_posterior_mean = s.prior_mean + cg(
+    mean_residual = s.mean_residual_guess === nothing ? zeros(Base.size(rhs)) : copy(s.mean_residual_guess)
+    cg!(
+        mean_residual,
         s.precision,
         Array(rhs);
         maxiter = s.maxiter,
@@ -125,6 +130,7 @@ function compute_mean(s::LinearConditionalCGSolver)
         verbose = true,
         Pl = s.Pl,
     )
+    s.computed_posterior_mean = s.prior_mean + mean_residual
     return s.computed_posterior_mean
 end
 
@@ -146,15 +152,17 @@ struct CGSolverBlueprint <: AbstractSolverBlueprint
     maxiter::Int
     preconditioner_strategy::Function
     var_strategy::AbstractVarianceStrategy
+    mean_residual_guess::Union{Nothing, AbstractVector}
 
     function CGSolverBlueprint(
         reltol::Real = sqrt(eps(Float64)),
         abstol::Real = 0.0,
         maxiter::Int = 1000,
         preconditioner_strategy::Function = default_preconditioner_strategy,
-        var_strategy::AbstractVarianceStrategy = RBMCStrategy(100),
+        var_strategy::AbstractVarianceStrategy = RBMCStrategy(100);
+        mean_residual_guess::Union{Nothing, AbstractVector} = nothing,
     )
-        new(reltol, abstol, maxiter, preconditioner_strategy, var_strategy)
+        new(reltol, abstol, maxiter, preconditioner_strategy, var_strategy, mean_residual_guess)
     end
 end
 
@@ -172,5 +180,6 @@ function construct_solver(bp::CGSolverBlueprint, gmrf::LinearConditionalGMRF)
         bp.maxiter,
         Pl,
         bp.var_strategy,
+        bp.mean_residual_guess,
     )
 end
