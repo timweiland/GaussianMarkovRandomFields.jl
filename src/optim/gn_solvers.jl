@@ -22,6 +22,6 @@ struct GNCGSolverBlueprint <: GNLinearSolverBlueprint
         abstol::Real = 1e-6,
         preconditioner_fn::Function = A -> Preconditioners.Identity()
     )
-        new(maxiter, reltol, abstol, preconditioner_fn, line_search)
+        new(maxiter, reltol, abstol, preconditioner_fn)
     end
 end
