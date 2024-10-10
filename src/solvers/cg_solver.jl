@@ -16,6 +16,9 @@ function compute_variance(s::AbstractCGSolver)
     return s.computed_var
 end
 function compute_rand!(s::AbstractCGSolver, rng::Random.AbstractRNG, x::AbstractVector)
+    if s.Q_sqrt === nothing
+        s.Q_sqrt = linmap_sqrt(s.precision)
+    end
     w = s.Q_sqrt * randn(rng, Base.size(s.Q_sqrt, 2))
     x .= zeros(Base.size(w))
     cg!(
@@ -39,7 +42,7 @@ mutable struct CGSolver{V<:AbstractVarianceStrategy} <: AbstractCGSolver{V}
     abstol::Real
     maxiter::Int
     Pl::Union{Identity,AbstractPreconditioner}
-    Q_sqrt::LinearMaps.LinearMap
+    Q_sqrt::Union{Nothing, LinearMaps.LinearMap}
     var_strategy::V
     computed_var::Union{Nothing, AbstractVector}
 
@@ -51,7 +54,6 @@ mutable struct CGSolver{V<:AbstractVarianceStrategy} <: AbstractCGSolver{V}
         Pl::Union{Identity,AbstractPreconditioner},
         var_strategy::V,
     ) where {V<:AbstractVarianceStrategy}
-        Q_sqrt = linmap_sqrt(precision_map(gmrf))
         new{V}(
             mean(gmrf),
             precision_map(gmrf),
@@ -59,7 +61,7 @@ mutable struct CGSolver{V<:AbstractVarianceStrategy} <: AbstractCGSolver{V}
             abstol,
             maxiter,
             Pl,
-            Q_sqrt,
+            nothing,
             var_strategy,
             nothing,
         )
@@ -78,7 +80,7 @@ mutable struct LinearConditionalCGSolver{V<:AbstractVarianceStrategy} <: Abstrac
     maxiter::Int
     Pl::Union{Identity,AbstractPreconditioner}
     var_strategy::V
-    Q_sqrt::LinearMaps.LinearMap
+    Q_sqrt::Union{Nothing, LinearMaps.LinearMap}
     mean_residual_guess::Union{Nothing, AbstractVector}
     computed_posterior_mean::Union{Nothing, AbstractVector}
     computed_var::Union{Nothing, AbstractVector}
@@ -92,7 +94,6 @@ mutable struct LinearConditionalCGSolver{V<:AbstractVarianceStrategy} <: Abstrac
         var_strategy::V,
         mean_residual_guess::Union{Nothing, AbstractVector},
     ) where {V<:AbstractVarianceStrategy}
-        Q_sqrt = linmap_sqrt(precision_map(gmrf))
         new{V}(
             mean(gmrf.prior),
             precision_map(gmrf),
@@ -105,7 +106,7 @@ mutable struct LinearConditionalCGSolver{V<:AbstractVarianceStrategy} <: Abstrac
             maxiter,
             Pl,
             var_strategy,
-            Q_sqrt,
+            nothing,
             mean_residual_guess,
             nothing,
             nothing,
