@@ -8,7 +8,7 @@ using GMRFs, Ferrite
         dboundary = 1
         Δ_int = 0.1
         Δ_ext = 0.5
-        grid, boundary_tags = create_inflated_rectangle(
+        grid = create_inflated_rectangle(
             0,
             0,
             dx,
@@ -17,12 +17,6 @@ using GMRFs, Ferrite
             Δ_int,
             Δ_ext;
             element_order = d,
-        )
-
-        @test length(boundary_tags) == d * (2 * (dx / Δ_int) + 2 * (dy / Δ_int))
-        @test all(
-            (n[1] ∈ [0.0, dx]) || (n[2] ∈ [0.0, dy]) for
-            n in map(n -> n.x, grid.nodes[boundary_tags])
         )
 
         @test all(

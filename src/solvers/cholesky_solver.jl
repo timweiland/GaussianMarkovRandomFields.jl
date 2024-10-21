@@ -99,6 +99,7 @@ struct CholeskySolverBlueprint <: AbstractSolverBlueprint
     var_strategy::AbstractVarianceStrategy
     perm::Union{Nothing,Vector{Int}}
     function CholeskySolverBlueprint(
+        ;
         var_strategy::AbstractVarianceStrategy = RBMCStrategy(100),
         perm::Union{Nothing,Vector{Int}} = nothing,
     )

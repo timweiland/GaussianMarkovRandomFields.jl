@@ -156,11 +156,12 @@ struct CGSolverBlueprint <: AbstractSolverBlueprint
     mean_residual_guess::Union{Nothing, AbstractVector}
 
     function CGSolverBlueprint(
+        ;
         reltol::Real = sqrt(eps(Float64)),
         abstol::Real = 0.0,
         maxiter::Int = 1000,
         preconditioner_strategy::Function = default_preconditioner_strategy,
-        var_strategy::AbstractVarianceStrategy = RBMCStrategy(100);
+        var_strategy::AbstractVarianceStrategy = RBMCStrategy(100),
         mean_residual_guess::Union{Nothing, AbstractVector} = nothing,
     )
         new(reltol, abstol, maxiter, preconditioner_strategy, var_strategy, mean_residual_guess)
