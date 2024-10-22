@@ -33,7 +33,7 @@ end
 
 function assemble_mass_matrix(
     Ce::SparseMatrixCSC,
-    cellvalues::CellScalarValues,
+    cellvalues::CellValues,
     interpolation;
     lumping = true,
 )
@@ -63,7 +63,7 @@ end
 
 function assemble_diffusion_matrix(
     Ge::SparseMatrixCSC,
-    cellvalues::CellScalarValues;
+    cellvalues::CellValues;
     diffusion_factor = I,
 )
     n_basefuncs = getnbasefunctions(cellvalues)
@@ -89,7 +89,7 @@ end
 
 function assemble_advection_matrix(
     Be::SparseMatrixCSC,
-    cellvalues::CellScalarValues;
+    cellvalues::CellValues;
     advection_velocity = 1,
 )
     n_basefuncs = getnbasefunctions(cellvalues)
@@ -115,7 +115,7 @@ end
 
 function assemble_streamline_diffusion_matrix(
     Ge::SparseMatrixCSC,
-    cellvalues::CellScalarValues,
+    cellvalues::CellValues,
     advection_velocity,
     h,
 )

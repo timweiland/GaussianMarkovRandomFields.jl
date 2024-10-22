@@ -6,8 +6,8 @@ using GMRFs, Ferrite, SparseArrays, Tensors
     @testset "Order $d" for d ∈ [1, 2]
         element = (d == 1) ? Triangle : QuadraticTriangle
         grid = generate_grid(element, (N_xy, N_xy))
-        ip = Lagrange{2,RefTetrahedron,d}()
-        qr = QuadratureRule{2,RefTetrahedron}(3)
+        ip = Lagrange{RefTriangle,d}()
+        qr = QuadratureRule{RefTriangle}(3)
         f = FEMDiscretization(grid, ip, qr)
 
         X = [Tensors.Vec(0.5, 0.45), Tensors.Vec(0.67, 0.55)]

@@ -46,13 +46,13 @@ end
 ndim(::MaternSPDE{D}) where {D} = D
 
 function assemble_C_G_matrices(
-    cellvalues::CellScalarValues,
+    cellvalues::CellValues,
     dh::DofHandler,
     ch::ConstraintHandler,
     interpolation,
     diffusion_factor,
 )
-    C, G = create_sparsity_pattern(dh, ch), create_sparsity_pattern(dh, ch)
+    C, G = allocate_matrix(dh, ch), allocate_matrix(dh, ch)
 
     n_basefuncs = getnbasefunctions(cellvalues)
     Ce = spzeros(n_basefuncs, n_basefuncs)
@@ -138,8 +138,11 @@ function discretize(
     discretization::FEMDiscretization{D};
     solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
 )::AbstractGMRF where {D}
-    cellvalues =
-        CellScalarValues(discretization.quadrature_rule, discretization.interpolation)
+    cellvalues = CellValues(
+        discretization.quadrature_rule,
+        discretization.interpolation,
+        discretization.geom_interpolation,
+    )
     C̃, G = assemble_C_G_matrices(
         cellvalues,
         discretization.dof_handler,
@@ -172,12 +175,12 @@ function product_matern(
     N_t::Int,
     matern_spatial::MaternSPDE,
     spatial_disc::FEMDiscretization;
-    solver_blueprint=DefaultSolverBlueprint(),
+    solver_blueprint = DefaultSolverBlueprint(),
 )
     offset = N_t ÷ 10
-    temporal_grid = generate_grid(Line, (N_t + 2*offset - 1,))
-    temporal_ip = Lagrange{1, RefCube, 1}()
-    temporal_qr = QuadratureRule{1, RefCube}(2)
+    temporal_grid = generate_grid(Line, (N_t + 2 * offset - 1,))
+    temporal_ip = Lagrange{1,RefCube,1}()
+    temporal_qr = QuadratureRule{1,RefCube}(2)
     temporal_disc = FEMDiscretization(temporal_grid, temporal_ip, temporal_qr)
     x_t = discretize(matern_temporal, temporal_disc)
 
@@ -185,7 +188,12 @@ function product_matern(
     x_s = discretize(matern_spatial, spatial_disc)
     Q_s = to_matrix(precision_map(x_s))
 
-    x_spatiotemporal = kronecker_product_spatiotemporal_model(Q_t, Q_s, spatial_disc; solver_blueprint=solver_blueprint)
+    x_spatiotemporal = kronecker_product_spatiotemporal_model(
+        Q_t,
+        Q_s,
+        spatial_disc;
+        solver_blueprint = solver_blueprint,
+    )
     if length(spatial_disc.constraint_handler.prescribed_dofs) > 0
         return ConstrainedGMRF(x_spatiotemporal, spatial_disc.constraint_handler)
     end

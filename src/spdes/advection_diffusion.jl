@@ -49,7 +49,7 @@ struct AdvectionDiffusionSPDE{D} <: SPDE
 end
 
 function assemble_M_G_B_matrices(
-    cellvalues::CellScalarValues,
+    cellvalues::CellValues,
     dh::DofHandler,
     ch,
     interpolation,
@@ -58,10 +58,10 @@ function assemble_M_G_B_matrices(
     streamline_diffusion = false,
     h = 0.1,
 )
-    M, G, B, S = create_sparsity_pattern(dh, ch),
-    create_sparsity_pattern(dh, ch),
-    create_sparsity_pattern(dh, ch),
-    create_sparsity_pattern(dh, ch)
+    M, G, B, S = allocate_matrix(dh, ch),
+    allocate_matrix(dh, ch),
+    allocate_matrix(dh, ch),
+    allocate_matrix(dh, ch)
 
     n_basefuncs = getnbasefunctions(cellvalues)
     Me = spzeros(n_basefuncs, n_basefuncs)
@@ -118,8 +118,11 @@ function discretize(
     prescribed_noise = 1e-4,
     solver_bp::AbstractSolverBlueprint = DefaultSolverBlueprint(),
 ) where {D}
-    cellvalues =
-        CellScalarValues(discretization.quadrature_rule, discretization.interpolation)
+    cellvalues = CellValues(
+        discretization.quadrature_rule,
+        discretization.interpolation,
+        discretization.geom_interpolation,
+    )
     ch = discretization.constraint_handler
     if streamline_diffusion
         M, G, B, S = assemble_M_G_B_matrices(
