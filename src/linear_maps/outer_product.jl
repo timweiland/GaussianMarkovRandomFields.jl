@@ -8,7 +8,7 @@ export OuterProductMap, to_matrix
 mutable struct OuterProductMap{T} <: LinearMaps.LinearMap{T}
     A::LinearMap{T}
     Q::LinearMap{T}
-    to_mat_cache::Union{Nothing, AbstractMatrix{T}}
+    to_mat_cache::Union{Nothing,AbstractMatrix{T}}
 
     function OuterProductMap(A::LinearMap{T}, Q::LinearMap{T}) where {T}
         Base.size(Q, 1) == Base.size(Q, 2) || throw(ArgumentError("Q must be square"))

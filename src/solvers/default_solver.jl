@@ -1,7 +1,7 @@
 export DefaultSolverBlueprint, construct_solver
 
-MC_THRESHOLD=10000 # Threshold for switching to Monte Carlo variance estimation
-CG_THRESHOLD=100000 # Threshold for switching to CG-based solver
+MC_THRESHOLD = 10000 # Threshold for switching to Monte Carlo variance estimation
+CG_THRESHOLD = 100000 # Threshold for switching to CG-based solver
 
 """
     DefaultSolverBlueprint()
@@ -28,8 +28,8 @@ function construct_solver(::DefaultSolverBlueprint, gmrf::AbstractGMRF)
     N = length(gmrf)
     var_strategy = default_var_strategy(gmrf)
     if N <= CG_THRESHOLD
-        return construct_solver(CholeskySolverBlueprint(var_strategy=var_strategy), gmrf)
+        return construct_solver(CholeskySolverBlueprint(var_strategy = var_strategy), gmrf)
     else
-        return construct_solver(CGSolverBlueprint(var_strategy=var_strategy), gmrf)
+        return construct_solver(CGSolverBlueprint(var_strategy = var_strategy), gmrf)
     end
 end

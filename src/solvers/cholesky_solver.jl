@@ -34,7 +34,7 @@ mutable struct CholeskySolver{V<:AbstractVarianceStrategy} <: AbstractCholeskySo
     precision_chol::Union{Cholesky,SparseArrays.CHOLMOD.Factor}
     var_strategy::V
     perm::Union{Nothing,Vector{Int}}
-    computed_var::Union{Nothing, AbstractVector}
+    computed_var::Union{Nothing,AbstractVector}
 
     function CholeskySolver(
         gmrf::AbstractGMRF,
@@ -48,7 +48,7 @@ mutable struct CholeskySolver{V<:AbstractVarianceStrategy} <: AbstractCholeskySo
 end
 
 mutable struct LinearConditionalCholeskySolver{V<:AbstractVarianceStrategy} <:
-       AbstractCholeskySolver{V}
+               AbstractCholeskySolver{V}
     prior_mean::AbstractVector
     precision::LinearMap
     precision_chol::Union{Cholesky,SparseArrays.CHOLMOD.Factor}
@@ -58,8 +58,8 @@ mutable struct LinearConditionalCholeskySolver{V<:AbstractVarianceStrategy} <:
     b::AbstractVector
     var_strategy::V
     perm::Union{Nothing,Vector{Int}}
-    computed_posterior_mean::Union{Nothing, AbstractVector}
-    computed_var::Union{Nothing, AbstractVector}
+    computed_posterior_mean::Union{Nothing,AbstractVector}
+    computed_var::Union{Nothing,AbstractVector}
 
     function LinearConditionalCholeskySolver(
         gmrf::LinearConditionalGMRF,
@@ -98,8 +98,7 @@ end
 struct CholeskySolverBlueprint <: AbstractSolverBlueprint
     var_strategy::AbstractVarianceStrategy
     perm::Union{Nothing,Vector{Int}}
-    function CholeskySolverBlueprint(
-        ;
+    function CholeskySolverBlueprint(;
         var_strategy::AbstractVarianceStrategy = RBMCStrategy(100),
         perm::Union{Nothing,Vector{Int}} = nothing,
     )

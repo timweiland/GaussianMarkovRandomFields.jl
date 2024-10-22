@@ -83,4 +83,3 @@ function condition_on_observations(
         x.free_to_prescribed_offset,
     )
 end
-

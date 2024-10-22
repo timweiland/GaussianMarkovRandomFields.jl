@@ -67,7 +67,12 @@ mutable struct GaussNewtonOptimizer
     end
 end
 
-function obj_fn(optim::GaussNewtonOptimizer, x::AbstractVector, r_prior::Union{Nothing,AbstractVector} = nothing, r_obs::Union{Nothing,AbstractVector} = nothing)
+function obj_fn(
+    optim::GaussNewtonOptimizer,
+    x::AbstractVector,
+    r_prior::Union{Nothing,AbstractVector} = nothing,
+    r_obs::Union{Nothing,AbstractVector} = nothing,
+)
     if r_obs === nothing
         f, _ = optim.f_and_Jf(x) # TODO: A bit wasteful to compute J here
         r_obs = Array(f - optim.y)
@@ -78,7 +83,13 @@ function obj_fn(optim::GaussNewtonOptimizer, x::AbstractVector, r_prior::Union{N
     return 0.5 * (dot(r_prior, optim.Q_prior * r_prior) + dot(r_obs, optim.noise * r_obs))
 end
 
-function ∇obj_fn(optim::GaussNewtonOptimizer, x::AbstractVector, J::Union{Nothing, AbstractMatrix}=nothing, r_prior::Union{Nothing,AbstractVector} = nothing, r_obs::Union{Nothing,AbstractVector} = nothing)
+function ∇obj_fn(
+    optim::GaussNewtonOptimizer,
+    x::AbstractVector,
+    J::Union{Nothing,AbstractMatrix} = nothing,
+    r_prior::Union{Nothing,AbstractVector} = nothing,
+    r_obs::Union{Nothing,AbstractVector} = nothing,
+)
     if J === nothing || r_obs === nothing
         f, J = optim.f_and_Jf(x)
         r_obs = Array(f - optim.y)
@@ -93,7 +104,8 @@ end
 function step(optim::GaussNewtonOptimizer)
     p = _compute_direction(optim, optim.solver_bp)
     optim.newton_decrement = -dot(optim.∇objₖ, p)
-    optim.xₖ = line_search(x -> obj_fn(optim, x), optim.∇objₖ, optim.xₖ, p, optim.line_search)
+    optim.xₖ =
+        line_search(x -> obj_fn(optim, x), optim.∇objₖ, optim.xₖ, p, optim.line_search)
     _update(optim)
 end
 
@@ -108,7 +120,10 @@ function _update(optim::GaussNewtonOptimizer)
     push!(optim.obj_val_history, obj_val)
 end
 
-function _compute_direction(optim::GaussNewtonOptimizer, solver_bp::GNCholeskySolverBlueprint)
+function _compute_direction(
+    optim::GaussNewtonOptimizer,
+    solver_bp::GNCholeskySolverBlueprint,
+)
     H = Symmetric(optim.Q_mat + optim.noise * optim.Jₖ' * optim.Jₖ)
     H_chol = cholesky(H; perm = solver_bp.perm)
 
@@ -138,30 +153,18 @@ function optimize(optim::GaussNewtonOptimizer)
     end
 end
 
-function _should_stop(
-    optim::GaussNewtonOptimizer,
-    criterion::AbstractStoppingCriterion,
-)
+function _should_stop(optim::GaussNewtonOptimizer, criterion::AbstractStoppingCriterion)
     return optim.newton_decrement < criterion.threshold
 end
 
-function _should_stop(
-    optim::GaussNewtonOptimizer,
-    criterion::NewtonDecrementCriterion,
-)
+function _should_stop(optim::GaussNewtonOptimizer, criterion::NewtonDecrementCriterion)
     return optim.newton_decrement < criterion.threshold
 end
 
-function _should_stop(
-    optim::GaussNewtonOptimizer,
-    criterion::StepNumberCriterion,
-)
+function _should_stop(optim::GaussNewtonOptimizer, criterion::StepNumberCriterion)
     return length(optim.obj_val_history) >= criterion.max_steps
 end
 
-function _should_stop(
-    optim::GaussNewtonOptimizer,
-    criterion::OrCriterion,
-)
+function _should_stop(optim::GaussNewtonOptimizer, criterion::OrCriterion)
     return any(map(c -> _should_stop(optim, c), criterion.criteria))
 end

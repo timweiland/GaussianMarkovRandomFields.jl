@@ -4,7 +4,7 @@ import LinearMaps: _unsafe_mul!
 mutable struct LinearMapWithSqrt{T} <: LinearMaps.LinearMap{T}
     A::LinearMaps.LinearMap{T}
     A_sqrt::LinearMaps.LinearMap{T}
-    A_mat_cache::Union{Nothing, AbstractMatrix{T}}
+    A_mat_cache::Union{Nothing,AbstractMatrix{T}}
 
     function LinearMapWithSqrt(
         A::LinearMaps.LinearMap{T},
