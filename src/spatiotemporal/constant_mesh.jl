@@ -20,7 +20,7 @@ abstract type ConstantMeshSTGMRF{D,T} <: AbstractSpatiotemporalGMRF end
 precision_map(x::ConstantMeshSTGMRF) = x.precision
 mean(x::ConstantMeshSTGMRF) = x.mean
 
-struct ImplicitEulerConstantMeshSTGMRF{D, T} <: ConstantMeshSTGMRF{D,T}
+struct ImplicitEulerConstantMeshSTGMRF{D,T} <: ConstantMeshSTGMRF{D,T}
     mean::AbstractVector{T}
     precision::LinearMap{T}
     discretization::FEMDiscretization{D}
@@ -104,10 +104,11 @@ function ConstrainedGMRF(
     inner_gmrf::ConstantMeshSTGMRF,
     constraint_handler::Ferrite.ConstraintHandler,
 )
-    prescribed_dofs_t₀, free_dofs_t₀, free_to_prescribed_mat_t₀, free_to_prescribed_offset_t₀ = get_constraint_variables(
-        constraint_handler,
-        N_spatial(inner_gmrf),
-    )
+    prescribed_dofs_t₀,
+    free_dofs_t₀,
+    free_to_prescribed_mat_t₀,
+    free_to_prescribed_offset_t₀ =
+        get_constraint_variables(constraint_handler, N_spatial(inner_gmrf))
     Nₜ = N_t(inner_gmrf)
     t_idcs = 0:(Nₜ-1)
     Nₛ = N_spatial(inner_gmrf)

@@ -3,8 +3,8 @@ using GMRFs, Ferrite, SparseArrays
 @testset "FEMDiscretization" begin
     N_xy = 20
     grid = generate_grid(Triangle, (N_xy, N_xy))
-    ip = Lagrange{2,RefTetrahedron,1}()
-    qr = QuadratureRule{2,RefTetrahedron}(2)
+    ip = Lagrange{RefTriangle,1}()
+    qr = QuadratureRule{RefTriangle}(2)
 
     f = FEMDiscretization(grid, ip, qr)
 

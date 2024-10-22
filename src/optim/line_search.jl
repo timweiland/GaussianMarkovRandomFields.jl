@@ -17,12 +17,12 @@ function line_search(
     ∇f::AbstractVector,
     x::AbstractVector,
     p::AbstractVector,
-    ls::BacktrackingLineSearch
+    ls::BacktrackingLineSearch,
 )
     α = ls.α₀
     fx = f(x)
     t = -ls.c * dot(∇f, p)
-    
+
     while fx - f(x + α * p) < α * t
         α *= ls.τ
         if α < 1e-8
@@ -39,8 +39,7 @@ function line_search(
     ::AbstractVector,
     x::AbstractVector,
     p::AbstractVector,
-    ::NoLineSearch
+    ::NoLineSearch,
 )
     return x + p
 end
-

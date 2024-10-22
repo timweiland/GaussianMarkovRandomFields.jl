@@ -20,7 +20,7 @@ struct GNCGSolverBlueprint <: GNLinearSolverBlueprint
         maxiter::Int = 100,
         reltol::Real = 1e-6,
         abstol::Real = 1e-6,
-        preconditioner_fn::Function = A -> Preconditioners.Identity()
+        preconditioner_fn::Function = A -> Preconditioners.Identity(),
     )
         new(maxiter, reltol, abstol, preconditioner_fn)
     end

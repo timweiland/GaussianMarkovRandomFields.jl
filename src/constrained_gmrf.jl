@@ -50,10 +50,8 @@ struct ConstrainedGMRF{G<:AbstractGMRF,T} <: AbstractGMRF
         inner_gmrf::AbstractGMRF,
         constraint_handler::Ferrite.ConstraintHandler,
     )
-        prescribed_dofs, free_dofs, free_to_prescribed_mat, free_to_prescribed_offset = get_constraint_variables(
-            constraint_handler,
-            length(inner_gmrf),
-        )
+        prescribed_dofs, free_dofs, free_to_prescribed_mat, free_to_prescribed_offset =
+            get_constraint_variables(constraint_handler, length(inner_gmrf))
         ConstrainedGMRF(
             inner_gmrf,
             prescribed_dofs,

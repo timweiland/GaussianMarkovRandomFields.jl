@@ -16,7 +16,10 @@ Gradient of the shape function with index `shape_idx` with respect to the local
 coordinates `ξ`.
 """
 function shape_gradient_local(f::FEMDiscretization, shape_idx::Int, ξ)
-    return Tensors.gradient(ξ -> Ferrite.value(f.interpolation, shape_idx, ξ), ξ)
+    return Tensors.gradient(
+        ξ -> Ferrite.reference_shape_value(f.interpolation, ξ, shape_idx),
+        ξ,
+    )
 end
 
 """
@@ -26,7 +29,10 @@ Hessian of the shape function with index `shape_idx` with respect to the local
 coordinates `ξ`.
 """
 function shape_hessian_local(f::FEMDiscretization, shape_idx::Int, ξ)
-    return Tensors.hessian(ξ -> Ferrite.value(f.interpolation, shape_idx, ξ), ξ)
+    return Tensors.hessian(
+        ξ -> Ferrite.reference_shape_value(f.interpolation, ξ, shape_idx),
+        ξ,
+    )
 end
 
 """
@@ -38,7 +44,11 @@ By "geometry mapping", we mean the mapping from the reference element to the
 physical element.
 """
 function geom_jacobian(f::FEMDiscretization, dof_coords, ξ)
-    derivs = Ferrite.derivative(f.geom_interpolation, ξ)
+    derivs = [
+        Ferrite.reference_shape_gradient(f.geom_interpolation, ξ, i) for
+        i = 1:getnbasefunctions(f.geom_interpolation)
+    ]
+    # derivs = Ferrite.derivative(f.geom_interpolation, ξ)
     return sum([n ⊗ d for (n, d) ∈ zip(dof_coords, derivs)])
 end
 
@@ -52,8 +62,7 @@ physical element.
 """
 function geom_hessian(f::FEMDiscretization, dof_coords, ξ)
     hessians = [
-        Ferrite.hessian(ξ -> Ferrite.value(f.geom_interpolation, b, ξ), ξ) for
-        b = 1:getnbasefunctions(f.geom_interpolation)
+        Ferrite.hessian(ξ -> Ferrite.reference_shape_value(f.geom_interpolation, ξ, b), ξ) for b = 1:getnbasefunctions(f.geom_interpolation)
     ]
     return sum([n ⊗ h for (n, h) ∈ zip(dof_coords, hessians)])
 end
@@ -159,9 +168,8 @@ function derivative_matrices(
             append!(Vs[k], map(x -> x[derivative_idcs[idx]], derivatives))
         end
     end
-    mats = [
-        sparse(Is[k], Js[k], Vs[k], length(X), ndofs(f)) for k = 1:length(derivative_idcs)
-    ]
+    mats =
+        [sparse(Is[k], Js[k], Vs[k], length(X), ndofs(f)) for k = 1:length(derivative_idcs)]
     return mats
 end
 
@@ -227,8 +235,7 @@ function second_derivative_matrices(
             append!(Vs[k], map(x -> x[idx...], hessians))
         end
     end
-    mats = [
-        sparse(Is[k], Js[k], Vs[k], length(X), ndofs(f)) for k = 1:length(derivative_idcs)
-    ]
+    mats =
+        [sparse(Is[k], Js[k], Vs[k], length(X), ndofs(f)) for k = 1:length(derivative_idcs)]
     return mats
 end

@@ -3,8 +3,8 @@ using GMRFs, Ferrite, Random, LinearAlgebra, SparseArrays
 @testset "GMRF arithmetic" begin
     spde = MaternSPDE{2}(1.0, 1)
     grid = generate_grid(Triangle, (20, 20))
-    ip = Lagrange{2,RefTetrahedron,1}()
-    qr = QuadratureRule{2,RefTetrahedron}(2)
+    ip = Lagrange{RefTriangle,1}()
+    qr = QuadratureRule{RefTriangle}(2)
     disc = FEMDiscretization(grid, ip, qr)
 
     x = discretize(spde, disc)

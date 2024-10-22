@@ -11,10 +11,11 @@ a (S)PDE using the Finite Element Method.
 """
 struct FEMDiscretization{
     D,
+    S,
     G<:Grid{D},
-    I<:Interpolation{D},
-    Q<:QuadratureRule{D},
-    GI<:Interpolation{D},
+    I<:Interpolation{S},
+    Q<:QuadratureRule{S},
+    GI<:Interpolation{S},
     H<:DofHandler{D,G},
     CH<:Union{ConstraintHandler{H},Nothing},
 }
@@ -29,13 +30,16 @@ struct FEMDiscretization{
         grid::G,
         interpolation::I,
         quadrature_rule::Q,
-        fields = ((:u, 1),),
+        fields = ((:u, nothing),),
         boundary_conditions = (),
-    ) where {D,G<:Grid{D},I<:Interpolation{D},Q<:QuadratureRule{D}}
-        geom_interpolation = interpolation
+    ) where {D,S,G<:Grid{D},I<:Interpolation{S},Q<:QuadratureRule{S}}
+        default_geom_interpolation = interpolation
         dh = DofHandler(grid)
-        for (field, n) in fields
-            add!(dh, field, n)
+        for (field, geom_interpolation) in fields
+            if geom_interpolation === nothing
+                geom_interpolation = default_geom_interpolation
+            end
+            add!(dh, field, geom_interpolation)
         end
         close!(dh)
 
@@ -46,11 +50,11 @@ struct FEMDiscretization{
             end
         end
         close!(ch)
-        new{D,G,I,Q,I,DofHandler{D,G},typeof(ch)}(
+        new{D,S,G,I,Q,I,DofHandler{D,G},typeof(ch)}(
             grid,
             interpolation,
             quadrature_rule,
-            geom_interpolation,
+            default_geom_interpolation,
             dh,
             ch,
         )
@@ -61,11 +65,11 @@ struct FEMDiscretization{
         interpolation::I,
         quadrature_rule::Q,
         geom_interpolation::GI,
-    ) where {D,G<:Grid{D},I<:Interpolation{D},Q<:QuadratureRule{D},GI<:Interpolation{D}}
+    ) where {D,S,G<:Grid{D},I<:Interpolation{S},Q<:QuadratureRule{S},GI<:Interpolation{S}}
         dh = DofHandler(grid)
-        add!(dh, :u, 1)
+        add!(dh, :u, geom_interpolation)
         close!(dh)
-        new{D,G,I,Q,GI,DofHandler{D,G},Nothing}(
+        new{D,S,G,I,Q,GI,DofHandler{D,G},Nothing}(
             grid,
             interpolation,
             quadrature_rule,
@@ -89,7 +93,7 @@ ndim(::FEMDiscretization{D}) where {D} = D
 
 Return the number of degrees of freedom in the discretization.
 """
-ndofs(f::FEMDiscretization) = f.dof_handler.ndofs.x
+ndofs(f::FEMDiscretization) = f.dof_handler.ndofs
 
 """
     evaluation_matrix(f::FEMDiscretization, X)
@@ -112,7 +116,11 @@ function evaluation_matrix(f::FEMDiscretization, X; field = :default)
         dofs = celldofs(cc)[dof_idcs]
         append!(Is, repeat([i], length(dofs)))
         append!(Js, dofs)
-        append!(Vs, Ferrite.value(f.interpolation, peh.local_coords[i]))
+        vals = [
+            Ferrite.reference_shape_value(f.interpolation, peh.local_coords[i], j) for
+            j = 1:getnbasefunctions(f.interpolation)
+        ]
+        append!(Vs, vals)
     end
     return sparse(Is, Js, Vs, length(X), ndofs(f))
 end

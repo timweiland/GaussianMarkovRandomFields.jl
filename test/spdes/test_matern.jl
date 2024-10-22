@@ -14,11 +14,11 @@ using LinearAlgebra
         if d == 1
             νs = [1 // 2, 3 // 2, 5 // 2]
             grid_shape = order == 1 ? Line : QuadraticLine
-            ref_shape = RefCube
+            ref_shape = RefLine
         elseif d == 2
             νs = [0, 1, 2]
             grid_shape = order == 1 ? Triangle : QuadraticTriangle
-            ref_shape = RefTetrahedron
+            ref_shape = RefTriangle
         else
             νs = [1 // 2, 3 // 2, 5 // 2]
             grid_shape = order == 1 ? Tetrahedron : QuadraticTetrahedron
@@ -27,8 +27,8 @@ using LinearAlgebra
         grid = generate_grid(grid_shape, Tuple(fill(N, d)))
         precisions = []
         for ν ∈ νs
-            ip = Lagrange{d,ref_shape,order}()
-            qr = QuadratureRule{d,ref_shape}(order + 1)
+            ip = Lagrange{ref_shape,order}()
+            qr = QuadratureRule{ref_shape}(order + 1)
             disc = FEMDiscretization(grid, ip, qr)
 
             κ = rand(rng) / 2 + 0.5
