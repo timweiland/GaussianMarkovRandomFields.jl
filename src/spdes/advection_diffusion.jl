@@ -25,26 +25,26 @@ struct AdvectionDiffusionSPDE{D} <: SPDE
     γ::AbstractVector
     c::Real
     τ::Real
-    νₛ::Real
-    κₛ::Real
+    spatial_spde::SPDE
+    initial_spde::SPDE
 
     function AdvectionDiffusionSPDE{D}(
-        κ::Real,
-        α::Rational,
-        H::AbstractMatrix,
+        ;
+        κ::Real=1.0,
+        α::Rational=1 // 1,
+        H::AbstractMatrix=sparse(I, (D, D)),
         γ::AbstractVector,
-        c::Real,
-        τ::Real,
-        νₛ::Real,
-        κₛ::Real = κ,
+        c::Real=1.0,
+        τ::Real=1.0,
+        spatial_spde=MaternSPDE{D}(κ=κ, smoothness=1, diffusion_factor=H),
+        initial_spde=MaternSPDE{D}(κ=κ, smoothness=2, diffusion_factor=H),
     ) where {D}
         κ >= 0 || throw(ArgumentError("κ must be non-negative"))
-        κₛ > 0 || throw(ArgumentError("κ must be positive"))
         α >= 0 || throw(ArgumentError("α must be non-negative"))
         τ > 0 || throw(ArgumentError("τ must be positive"))
-        νₛ > 0 || throw(ArgumentError("νₛ must be positive"))
+        # νₛ > 0 || throw(ArgumentError("νₛ must be positive"))
         (D >= 1 && isinteger(D)) || throw(ArgumentError("D must be a positive integer"))
-        new{D}(κ, α, H, γ, c, τ, νₛ, κₛ)
+        new{D}(κ, α, H, γ, c, τ, spatial_spde, initial_spde)
     end
 end
 
@@ -55,8 +55,7 @@ function assemble_M_G_B_matrices(
     interpolation,
     H,
     γ;
-    streamline_diffusion = false,
-    h = 0.1,
+    streamline_diffusion=false,
 )
     M, G, B, S = allocate_matrix(dh, ch),
     allocate_matrix(dh, ch),
@@ -80,11 +79,16 @@ function assemble_M_G_B_matrices(
 
     for cell in CellIterator(dh)
         reinit!(cellvalues, cell)
-        Me = assemble_mass_matrix(Me, cellvalues, interpolation; lumping = true)
-        Ge = assemble_diffusion_matrix(Ge, cellvalues; diffusion_factor = H)
-        Be = assemble_advection_matrix(Be, cellvalues; advection_velocity = γ)
+        Me = assemble_mass_matrix(Me, cellvalues, interpolation; lumping=true)
+        Ge = assemble_diffusion_matrix(Ge, cellvalues; diffusion_factor=H)
+        Be = assemble_advection_matrix(Be, cellvalues; advection_velocity=γ)
         if streamline_diffusion
-            Se = assemble_streamline_diffusion_matrix(Se, cellvalues, γ, h)
+            cell_volume = 0.0
+            for qp in 1:getnquadpoints(cellvalues)
+                dΩ = getdetJdV(cellvalues, qp)
+                cell_volume += dΩ
+            end
+            Se = assemble_streamline_diffusion_matrix(Se, cellvalues, γ, cell_volume)
             assemble!(S_assembler, celldofs(cell), Se)
         end
         assemble!(M_assembler, celldofs(cell), Me)
@@ -112,12 +116,16 @@ function discretize(
     spde::AdvectionDiffusionSPDE{D},
     discretization::FEMDiscretization{D},
     ts::AbstractVector{Float64};
-    streamline_diffusion = false,
-    h = 0.1,
-    mean_offset = 0.0,
-    prescribed_noise = 1e-4,
-    solver_bp::AbstractSolverBlueprint = DefaultSolverBlueprint(),
+    streamline_diffusion=false,
+    mean_offset=0.0,
+    prescribed_noise=1e-4,
+    solver_bp::AbstractSolverBlueprint=DefaultSolverBlueprint(),
 ) where {D}
+    if norm(spde.γ) ≈ 0.0
+        # SD changes nothing for zero advection
+        streamline_diffusion = false
+    end
+
     cellvalues = CellValues(
         discretization.quadrature_rule,
         discretization.interpolation,
@@ -132,13 +140,8 @@ function discretize(
             discretization.interpolation,
             spde.H,
             spde.γ;
-            streamline_diffusion = true,
-            h = h,
+            streamline_diffusion=true,
         )
-        τ =
-            spde.τ *
-            norm(spde.H + h * (1 / norm(spde.γ)) * (spde.γ .* spde.γ'))^(1 / 4) *
-            norm(spde.H)^(1 / 4)
     else
         M, G, B = assemble_M_G_B_matrices(
             cellvalues,
@@ -148,18 +151,14 @@ function discretize(
             spde.H,
             spde.γ,
         )
-        τ = spde.τ
     end
+    τ = spde.τ
     apply!(M, zeros(Base.size(M, 2)), ch)
     apply!(G, zeros(Base.size(M, 2)), ch)
     K = (spde.κ^2 * M + G)^spde.α
 
-    matern_spde_spatial = MaternSPDE{D}(spde.κₛ, spde.νₛ, 1.0, spde.H)
-    xₛ = discretize(matern_spde_spatial, discretization)
-
-    matern_spde_t₀ =
-        MaternSPDE{D}(spde.κₛ, spde.α + α(matern_spde_spatial) - D // 2, 1.0, spde.H)
-    x₀ = discretize(matern_spde_t₀, discretization)
+    xₛ = discretize(spde.spatial_spde, discretization)
+    x₀ = discretize(spde.initial_spde, discretization)
 
     apply!(B, zeros(Base.size(B, 2)), ch)
     propagation_mat = K + B
