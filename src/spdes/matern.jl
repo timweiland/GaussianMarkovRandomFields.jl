@@ -3,7 +3,7 @@ using LinearAlgebra
 using SparseArrays
 using SpecialFunctions
 
-export MaternSPDE, α, ndim, discretize, assemble_C_G_matrices, product_matern
+export MaternSPDE, α, ndim, discretize, assemble_C_G_matrices, product_matern, range_to_κ, smoothness_to_ν
 
 ################################################################################
 #    Whittle-Matérn
@@ -29,11 +29,22 @@ struct MaternSPDE{D} <: SPDE
     diffusion_factor::Union{AbstractMatrix,UniformScaling}
 
     function MaternSPDE{D}(
-        κ::Real,
-        ν::Union{Integer,Rational},
+        ;
+        κ::Union{Real,Nothing}=nothing,
+        ν::Union{Integer,Rational,Nothing}=nothing,
+        range::Union{Real,Nothing}=nothing,
+        smoothness::Union{Integer,Nothing}=nothing,
         σ² = 1.0,
         diffusion_factor = I,
     ) where {D}
+        ((κ === nothing) ⊻ (range === nothing)) || throw(ArgumentError("Either κ or range must be specified"))
+        ((ν === nothing) ⊻ (smoothness === nothing)) || throw(ArgumentError("Either ν or smoothness must be specified"))
+        if ν === nothing
+            ν = smoothness_to_ν(smoothness, D)
+        end
+        if κ === nothing
+            κ = range_to_κ(range, ν)
+        end
         κ > 0 || throw(ArgumentError("κ must be positive"))
         ν >= 0 || throw(ArgumentError("ν must be non-negative"))
         (D >= 1 && isinteger(D)) || throw(ArgumentError("D must be a positive integer"))
@@ -168,6 +179,15 @@ function discretize(
         return ConstrainedGMRF(x, discretization.constraint_handler)
     end
     return x
+end
+
+function range_to_κ(range::Real, ν)
+    return √(8ν) / range
+end
+
+function smoothness_to_ν(smoothness::Int, D::Int)
+    (smoothness >= 0) || throw(ArgumentError("smoothness must be non-negative"))
+    return iseven(D) ? smoothness + 1 : (smoothness//1 + 1//2)
 end
 
 function product_matern(
