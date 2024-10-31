@@ -6,6 +6,7 @@ using Aqua
 
 include("test_gmrf.jl")
 include("linear_maps/test_ad_jacobian.jl")
+include("linear_maps/test_zero.jl")
 include("preconditioners/test_full_cholesky.jl")
 include("preconditioners/test_block_jacobi.jl")
 include("spdes/fem/test_fem_discretization.jl")
@@ -16,7 +17,7 @@ include("test_mesh_utils.jl")
 include("spatiotemporal/test_advection_diffusion.jl")
 
 @testset "Code quality (Aqua.jl)" begin
-    Aqua.test_all(GMRFs; ambiguities = false)
+    Aqua.test_all(GMRFs; ambiguities=false)
     @test length(Test.detect_ambiguities(GMRFs)) == 0
 end
 
