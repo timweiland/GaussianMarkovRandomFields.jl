@@ -1,10 +1,15 @@
 using LinearAlgebra, LinearMaps
-import SparseArrays: sparse
+import LinearAlgebra: issymmetric
 
 import Base: size
 
 export OuterProductMap, to_matrix
 
+"""
+    OuterProductMap{T}(A, Q)
+
+Represents the outer product A' Q A, without actually forming it in memory.
+"""
 mutable struct OuterProductMap{T} <: LinearMaps.LinearMap{T}
     A::LinearMap{T}
     Q::LinearMap{T}
@@ -23,8 +28,9 @@ function LinearMaps._unsafe_mul!(y, L::OuterProductMap, x::AbstractVector)
     y .= L.A' * (L.Q * (L.A * x))
 end
 
-LinearAlgebra.adjoint(L::OuterProductMap) = L
-LinearAlgebra.transpose(L::OuterProductMap) = L
+LinearAlgebra.adjoint(L::OuterProductMap) = OuterProductMap(L.A, L.Q')
+LinearAlgebra.transpose(L::OuterProductMap) = OuterProductMap(L.A, L.Q')
+LinearAlgebra.issymmetric(L::OuterProductMap) = LinearAlgebra.issymmetric(L.Q)
 
 function to_matrix(L::OuterProductMap)
     if L.to_mat_cache !== nothing
@@ -37,11 +43,18 @@ function to_matrix(L::OuterProductMap)
         return L.to_mat_cache
     end
     Q_mat = to_matrix(L.Q)
-    L.to_mat_cache = Symmetric(A_mat' * Q_mat * A_mat)
+    L.to_mat_cache = A_mat' * Q_mat * A_mat
+    if issymmetric(Q_mat)
+        L.to_mat_cache = Symmetric(L.to_mat_cache)
+    end
     return L.to_mat_cache
 end
 
 function linmap_sqrt(OP::OuterProductMap)
+    if !issymmetric(OP)
+        throw(ArgumentError("Map is not symmetric"))
+    end
+
     if OP.Q isa LinearMaps.UniformScalingMap
         return sqrt(OP.Q.λ) * OP.A'
     end

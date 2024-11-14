@@ -1,5 +1,6 @@
 export LinearMapWithSqrt
 import LinearMaps: _unsafe_mul!
+import LinearAlgebra: issymmetric
 
 mutable struct LinearMapWithSqrt{T} <: LinearMaps.LinearMap{T}
     A::LinearMaps.LinearMap{T}
@@ -30,6 +31,8 @@ end
 function LinearMaps.transpose(L::LinearMapWithSqrt)
     return L
 end
+
+LinearAlgebra.issymmetric(::LinearMapWithSqrt) = true
 
 function to_matrix(L::LinearMapWithSqrt)
     if L.A_mat_cache === nothing
