@@ -1,5 +1,6 @@
 using LinearAlgebra, LinearMaps
 import SparseArrays: sparse
+import LinearAlgebra: issymmetric
 
 import Base: size
 
@@ -13,13 +14,13 @@ with diagonal blocks `diagonal_blocks` and lower off-diagonal blocks
 `off_diagonal_blocks`.
 """
 struct SymmetricBlockTridiagonalMap{T} <: LinearMap{T}
-    diagonal_blocks::Vector{<:LinearMap{T}}
-    off_diagonal_blocks::Vector{<:LinearMap{T}}
+    diagonal_blocks::Tuple{Vararg{AbstractArray{T}}}
+    off_diagonal_blocks::Tuple{Vararg{AbstractArray{T}}}
     size::Dims{2}
 
     function SymmetricBlockTridiagonalMap(
-        diagonal_blocks::Vector{<:LinearMap{T}},
-        off_diagonal_blocks::Vector{<:LinearMap{T}},
+        diagonal_blocks::Tuple{Vararg{AbstractArray{T}}},
+        off_diagonal_blocks::Tuple{Vararg{AbstractArray{T}}},
     ) where {T}
         N = sum(map(x -> Base.size(x, 1), diagonal_blocks))
         sz = Dims((N, N))
@@ -38,6 +39,7 @@ struct SymmetricBlockTridiagonalMap{T} <: LinearMap{T}
 end
 
 size(d::SymmetricBlockTridiagonalMap) = d.size
+LinearAlgebra.issymmetric(::SymmetricBlockTridiagonalMap) = true
 
 function LinearMaps._unsafe_mul!(y, A::SymmetricBlockTridiagonalMap, x::AbstractVector)
     y .= 0
@@ -70,7 +72,7 @@ function sparse(A::SymmetricBlockTridiagonalMap)
     stop = 0
     for (i, block) in enumerate(A.diagonal_blocks)
         stop += Base.size(block, 1)
-        diag_I, diag_J, diag_V = findnz(to_matrix(block))
+        diag_I, diag_J, diag_V = findnz(sparse(to_matrix(block)))
         diag_I .+= start - 1
         diag_J .+= start - 1
         push!(Is, diag_I)
@@ -79,7 +81,7 @@ function sparse(A::SymmetricBlockTridiagonalMap)
         if i > 1
             off_block = to_matrix(A.off_diagonal_blocks[i-1])
             off_block_size = Base.size(off_block, 2)
-            off_diag_I, off_diag_J, off_diag_V = findnz(off_block)
+            off_diag_I, off_diag_J, off_diag_V = findnz(sparse(off_block))
             off_diag_I .+= start - 1
             off_diag_J .+= start - off_block_size - 1
             push!(Is, off_diag_I)
