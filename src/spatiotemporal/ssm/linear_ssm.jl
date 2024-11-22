@@ -52,7 +52,8 @@ function joint_ssm(x₀::GMRF, ssm_mats_fn::Function, ts::AbstractVector)
         t_prev = t
     end
 
-    precision = SymmetricBlockTridiagonalMap(diagonal_blocks, off_diagonal_blocks)
+    precision =
+        SymmetricBlockTridiagonalMap(Tuple(diagonal_blocks), Tuple(off_diagonal_blocks))
     return GMRF(vcat(means...), precision)
 end
 
@@ -73,8 +74,8 @@ function joint_ssm(x₀::GMRF, ssm_mats::JointSSMMatrices, ts::AbstractRange)
     M = F⁻¹ + AᵀF⁻¹A
     diagonal_blocks = [[sparse(precision_map(x₀)) + AᵀF⁻¹A]; repeat([M], Nₜ - 2); [F⁻¹]]
     off_diagonal_blocks = repeat([-F⁻¹A], Nₜ - 1)
-    diagonal_blocks = [LinearMap(block) for block in diagonal_blocks]
-    off_diagonal_blocks = [LinearMap(block) for block in off_diagonal_blocks]
+    diagonal_blocks = Tuple(LinearMap(block) for block in diagonal_blocks)
+    off_diagonal_blocks = Tuple(LinearMap(block) for block in off_diagonal_blocks)
     means = repeat([spzeros(size(x₀))], Nₜ)
     means[1] = mean(x₀)
 

@@ -32,8 +32,8 @@ using LinearAlgebra
             disc = FEMDiscretization(grid, ip, qr)
 
             κ = rand(rng) / 2 + 0.5
-            spde = MaternSPDE{d}(κ=κ, ν=ν)
-            spde_smoothness = MaternSPDE{d}(κ=κ, smoothness=smoothness_idx - 1)
+            spde = MaternSPDE{d}(κ = κ, ν = ν)
+            spde_smoothness = MaternSPDE{d}(κ = κ, smoothness = smoothness_idx - 1)
             @test spde_smoothness.ν ≈ spde.ν
 
             x = discretize(spde, disc)
@@ -43,8 +43,8 @@ using LinearAlgebra
             push!(precisions, Q)
 
             # Test range parameter
-            spde_high_range = MaternSPDE{d}(range=1.0, smoothness=smoothness_idx - 1)
-            spde_low_range = MaternSPDE{d}(range=0.1, smoothness=smoothness_idx - 1)
+            spde_high_range = MaternSPDE{d}(range = 1.0, smoothness = smoothness_idx - 1)
+            spde_low_range = MaternSPDE{d}(range = 0.1, smoothness = smoothness_idx - 1)
 
             x_high_range = discretize(spde_high_range, disc)
             x_low_range = discretize(spde_low_range, disc)

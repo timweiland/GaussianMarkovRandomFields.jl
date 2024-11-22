@@ -27,43 +27,43 @@ using SparseArrays
 
 
     spde_fast_right = AdvectionDiffusionSPDE{1}(
-        κ=κ_fast,
-        H=H_fast,
-        γ=γ_right,
-        τ=τ,
-        initial_spde=MaternSPDE{1}(κ=κₛ, smoothness=2, diffusion_factor=H_fast),
-        spatial_spde=MaternSPDE{1}(κ=κₛ, smoothness=1, diffusion_factor=H_fast),
+        κ = κ_fast,
+        H = H_fast,
+        γ = γ_right,
+        τ = τ,
+        initial_spde = MaternSPDE{1}(κ = κₛ, smoothness = 2, diffusion_factor = H_fast),
+        spatial_spde = MaternSPDE{1}(κ = κₛ, smoothness = 1, diffusion_factor = H_fast),
     )
     spde_fast_left = AdvectionDiffusionSPDE{1}(
-        κ=κ_fast,
-        H=H_fast,
-        γ=γ_left,
-        τ=τ,
-        initial_spde=MaternSPDE{1}(κ=κₛ, smoothness=2, diffusion_factor=H_fast),
-        spatial_spde=MaternSPDE{1}(κ=κₛ, smoothness=1, diffusion_factor=H_fast),
+        κ = κ_fast,
+        H = H_fast,
+        γ = γ_left,
+        τ = τ,
+        initial_spde = MaternSPDE{1}(κ = κₛ, smoothness = 2, diffusion_factor = H_fast),
+        spatial_spde = MaternSPDE{1}(κ = κₛ, smoothness = 1, diffusion_factor = H_fast),
     )
     spde_fast_static = AdvectionDiffusionSPDE{1}(
-        κ=κ_fast,
-        H=H_fast,
-        γ=γ_static,
-        τ=τ,
-        initial_spde=MaternSPDE{1}(κ=κₛ, smoothness=2, diffusion_factor=H_fast),
-        spatial_spde=MaternSPDE{1}(κ=κₛ, smoothness=1, diffusion_factor=H_fast),
+        κ = κ_fast,
+        H = H_fast,
+        γ = γ_static,
+        τ = τ,
+        initial_spde = MaternSPDE{1}(κ = κₛ, smoothness = 2, diffusion_factor = H_fast),
+        spatial_spde = MaternSPDE{1}(κ = κₛ, smoothness = 1, diffusion_factor = H_fast),
     )
     spde_slow_static = AdvectionDiffusionSPDE{1}(
-        κ=κ_slow,
-        H=H_slow,
-        γ=γ_static,
-        τ=τ,
-        initial_spde=MaternSPDE{1}(κ=κₛ, smoothness=2, diffusion_factor=H_slow),
-        spatial_spde=MaternSPDE{1}(κ=κₛ, smoothness=1, diffusion_factor=H_slow),
+        κ = κ_slow,
+        H = H_slow,
+        γ = γ_static,
+        τ = τ,
+        initial_spde = MaternSPDE{1}(κ = κₛ, smoothness = 2, diffusion_factor = H_slow),
+        spatial_spde = MaternSPDE{1}(κ = κₛ, smoothness = 1, diffusion_factor = H_slow),
     )
-    x_prior_fast_right = discretize(spde_fast_right, disc, ts; streamline_diffusion=sd)
-    x_prior_fast_left = discretize(spde_fast_left, disc, ts; streamline_diffusion=sd)
-    x_prior_fast_static = discretize(spde_fast_static, disc, ts; streamline_diffusion=sd)
-    x_prior_slow_static = discretize(spde_slow_static, disc, ts; streamline_diffusion=sd)
+    x_prior_fast_right = discretize(spde_fast_right, disc, ts; streamline_diffusion = sd)
+    x_prior_fast_left = discretize(spde_fast_left, disc, ts; streamline_diffusion = sd)
+    x_prior_fast_static = discretize(spde_fast_static, disc, ts; streamline_diffusion = sd)
+    x_prior_slow_static = discretize(spde_slow_static, disc, ts; streamline_diffusion = sd)
 
-    xs = range(-1.0, 1.0, length=100)
+    xs = range(-1.0, 1.0, length = 100)
     spread = 0.2
     ic_fn = x -> exp(-x^2 / (2 * spread^2))
     ys = ic_fn.(xs)
