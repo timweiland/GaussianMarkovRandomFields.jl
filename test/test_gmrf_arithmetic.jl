@@ -1,7 +1,7 @@
 using GMRFs, Ferrite, Random, LinearAlgebra, SparseArrays
 
 @testset "GMRF arithmetic" begin
-    spde = MaternSPDE{2}(κ=1.0, ν=1)
+    spde = MaternSPDE{2}(κ = 1.0, ν = 1)
     grid = generate_grid(Triangle, (20, 20))
     ip = Lagrange{RefTriangle,1}()
     qr = QuadratureRule{RefTriangle}(2)

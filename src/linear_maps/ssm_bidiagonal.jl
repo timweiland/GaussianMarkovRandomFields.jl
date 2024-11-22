@@ -47,7 +47,7 @@ end
 
 function LinearMaps._unsafe_mul!(y, L::SSMBidiagonalMap, x::AbstractVector)
     y .= 0
-    y[1:(end - Base.size(L.B, 1))] += L.main_diag * x
+    y[1:(end-Base.size(L.B, 1))] += L.main_diag * x
     y[(Base.size(L.A, 1)+1):end] .+= L.off_diag * x
     return y
 end
@@ -62,8 +62,7 @@ function LinearMaps._unsafe_mul!(
     x::AbstractVector,
 )
     y .= 0
-    y += L.lmap.main_diag' * x[1:(end - Base.size(L.lmap.B, 1))]
-    y .+=
-        L.lmap.off_diag' * x[(Base.size(L.lmap.A, 1)+1):end]
+    y += L.lmap.main_diag' * x[1:(end-Base.size(L.lmap.B, 1))]
+    y .+= L.lmap.off_diag' * x[(Base.size(L.lmap.A, 1)+1):end]
     return y
 end

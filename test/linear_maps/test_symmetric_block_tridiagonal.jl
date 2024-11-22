@@ -15,7 +15,7 @@ using LinearAlgebra, LinearMaps, Random, SparseArrays
         @test parent(L_tomat) isa SparseMatrixCSC
         @test L_tomat ≈ L_mat
 
-        for i in 1:5
+        for i = 1:5
             x = rand(rng, N)
             @test L * x ≈ L_mat * x
         end
@@ -30,19 +30,24 @@ using LinearAlgebra, LinearMaps, Random, SparseArrays
         diag_maps = [LinearMap(b) for b in diags]
         off_diag_maps = [LinearMap(b) for b in off_diags]
 
-        L_mat = sparse([
-            diags[1] off_diags[1]' zeros(N₁, N₃);
-            off_diags[1] diags[2] off_diags[2]';
-            zeros(N₃, N₁) off_diags[2] diags[3]
-        ])
-        L = SymmetricBlockTridiagonalMap(Tuple(LinearMap(b) for b in diags), Tuple(LinearMap(b) for b in off_diags))
+        L_mat = sparse(
+            [
+                diags[1] off_diags[1]' zeros(N₁, N₃)
+                off_diags[1] diags[2] off_diags[2]'
+                zeros(N₃, N₁) off_diags[2] diags[3]
+            ],
+        )
+        L = SymmetricBlockTridiagonalMap(
+            Tuple(LinearMap(b) for b in diags),
+            Tuple(LinearMap(b) for b in off_diags),
+        )
         @test size(L) == (N_total, N_total)
         @test issymmetric(L)
         L_tomat = to_matrix(L)
         @test parent(L_tomat) isa SparseMatrixCSC
         @test L_tomat ≈ L_mat
 
-        for i in 1:5
+        for i = 1:5
             x = rand(rng, N_total)
             @test L * x ≈ L_mat * x
         end

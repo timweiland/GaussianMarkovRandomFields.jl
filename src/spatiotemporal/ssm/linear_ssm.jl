@@ -52,7 +52,8 @@ function joint_ssm(x₀::GMRF, ssm_mats_fn::Function, ts::AbstractVector)
         t_prev = t
     end
 
-    precision = SymmetricBlockTridiagonalMap(Tuple(diagonal_blocks), Tuple(off_diagonal_blocks))
+    precision =
+        SymmetricBlockTridiagonalMap(Tuple(diagonal_blocks), Tuple(off_diagonal_blocks))
     return GMRF(vcat(means...), precision)
 end
 

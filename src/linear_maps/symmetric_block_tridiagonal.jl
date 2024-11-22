@@ -19,9 +19,9 @@ struct SymmetricBlockTridiagonalMap{T} <: LinearMap{T}
     size::Dims{2}
 
     function SymmetricBlockTridiagonalMap(
-        diagonal_blocks::Tuple{LinearMap{T}, Vararg{LinearMap{T}, ND}},
-        off_diagonal_blocks::Tuple{LinearMap{T}, Vararg{LinearMap{T}, NOD}},
-    ) where {T, ND, NOD}
+        diagonal_blocks::Tuple{LinearMap{T},Vararg{LinearMap{T},ND}},
+        off_diagonal_blocks::Tuple{LinearMap{T},Vararg{LinearMap{T},NOD}},
+    ) where {T,ND,NOD}
         N = sum(map(x -> Base.size(x, 1), diagonal_blocks))
         sz = Dims((N, N))
         if NOD != ND - 1

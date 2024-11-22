@@ -22,7 +22,7 @@ include("test_mesh_utils.jl")
 include("spatiotemporal/test_advection_diffusion.jl")
 
 @testset "Code quality (Aqua.jl)" begin
-    Aqua.test_all(GMRFs; ambiguities=false)
+    Aqua.test_all(GMRFs; ambiguities = false)
     @test length(Test.detect_ambiguities(GMRFs)) == 0
 end
 
