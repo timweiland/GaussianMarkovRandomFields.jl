@@ -14,17 +14,17 @@ with diagonal blocks `diagonal_blocks` and lower off-diagonal blocks
 `off_diagonal_blocks`.
 """
 struct SymmetricBlockTridiagonalMap{T} <: LinearMap{T}
-    diagonal_blocks::Tuple{Vararg{AbstractArray{T}}}
-    off_diagonal_blocks::Tuple{Vararg{AbstractArray{T}}}
+    diagonal_blocks::Tuple{Vararg{LinearMap{T}}}
+    off_diagonal_blocks::Tuple{Vararg{LinearMap{T}}}
     size::Dims{2}
 
     function SymmetricBlockTridiagonalMap(
-        diagonal_blocks::Tuple{Vararg{AbstractArray{T}}},
-        off_diagonal_blocks::Tuple{Vararg{AbstractArray{T}}},
-    ) where {T}
+        diagonal_blocks::Tuple{LinearMap{T}, Vararg{LinearMap{T}, ND}},
+        off_diagonal_blocks::Tuple{LinearMap{T}, Vararg{LinearMap{T}, NOD}},
+    ) where {T, ND, NOD}
         N = sum(map(x -> Base.size(x, 1), diagonal_blocks))
         sz = Dims((N, N))
-        if length(off_diagonal_blocks) != length(diagonal_blocks) - 1
+        if NOD != ND - 1
             throw(ArgumentError("size mismatch"))
         end
         # Size checks
@@ -34,6 +34,14 @@ struct SymmetricBlockTridiagonalMap{T} <: LinearMap{T}
                     throw(ArgumentError("size mismatch"))
             end
         end
+        new{T}(diagonal_blocks, off_diagonal_blocks, sz)
+    end
+
+    function SymmetricBlockTridiagonalMap(
+        diagonal_blocks::Tuple{LinearMap{T}},
+        off_diagonal_blocks::Tuple{},
+    ) where {T}
+        sz = Dims(Base.size(diagonal_blocks[1]))
         new{T}(diagonal_blocks, off_diagonal_blocks, sz)
     end
 end

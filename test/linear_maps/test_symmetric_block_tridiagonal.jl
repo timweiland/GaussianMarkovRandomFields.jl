@@ -7,7 +7,7 @@ using LinearAlgebra, LinearMaps, Random, SparseArrays
         N = 5
         A = rand(rng, N, N)
         A = Symmetric(A * A')
-        L = SymmetricBlockTridiagonalMap((A,), ())
+        L = SymmetricBlockTridiagonalMap((LinearMap(A),), ())
         @test size(L) == size(A)
         @test issymmetric(L)
         L_tomat = to_matrix(L)
@@ -30,12 +30,12 @@ using LinearAlgebra, LinearMaps, Random, SparseArrays
         diag_maps = [LinearMap(b) for b in diags]
         off_diag_maps = [LinearMap(b) for b in off_diags]
 
-        L = SymmetricBlockTridiagonalMap(Tuple(diags), Tuple(off_diags))
         L_mat = sparse([
             diags[1] off_diags[1]' zeros(N₁, N₃);
             off_diags[1] diags[2] off_diags[2]';
             zeros(N₃, N₁) off_diags[2] diags[3]
         ])
+        L = SymmetricBlockTridiagonalMap(Tuple(LinearMap(b) for b in diags), Tuple(LinearMap(b) for b in off_diags))
         @test size(L) == (N_total, N_total)
         @test issymmetric(L)
         L_tomat = to_matrix(L)
