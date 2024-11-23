@@ -4,7 +4,7 @@ export temporal_block_gauss_seidel
 
 function temporal_block_gauss_seidel(A::SparseMatrixCSC, block_size)
     diag_blocks, off_diag_blocks = _extract_blocks(A, block_size)
-    return TridiagonalBlockGaussSeidelPreconditioner(off_diag_blocks, diag_blocks)
+    return TridiagonalBlockGaussSeidelPreconditioner(diag_blocks, off_diag_blocks)
 end
 
 function _extract_blocks(A::SparseMatrixCSC, block_size)
