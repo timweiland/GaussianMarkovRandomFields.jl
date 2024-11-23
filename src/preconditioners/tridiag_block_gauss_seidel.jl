@@ -37,9 +37,9 @@ struct TridiagonalBlockGaussSeidelPreconditioner{T} <: AbstractPreconditioner{T}
     L_blocks::Tuple{Vararg{AbstractMatrix{T}}}
 
     function TridiagonalBlockGaussSeidelPreconditioner(
-        D_blocks::Tuple{AbstractMatrix{T}, Vararg{AbstractMatrix{T}, ND}},
-        L_blocks::Tuple{AbstractMatrix{T}, Vararg{AbstractMatrix{T}, NOD}},
-    ) where {T, ND, NOD}
+        D_blocks::Tuple{AbstractMatrix{T},Vararg{AbstractMatrix{T},ND}},
+        L_blocks::Tuple{AbstractMatrix{T},Vararg{AbstractMatrix{T},NOD}},
+    ) where {T,ND,NOD}
         NOD == ND - 1 || throw(ArgumentError("size mismatch"))
         D⁻¹_blocks = FullCholeskyPreconditioner.(D_blocks)
         new{T}(D⁻¹_blocks, L_blocks)
@@ -53,9 +53,9 @@ struct TridiagonalBlockGaussSeidelPreconditioner{T} <: AbstractPreconditioner{T}
     end
 
     function TridiagonalBlockGaussSeidelPreconditioner(
-        D⁻¹_blocks::Tuple{AbstractPreconditioner{T}, Vararg{AbstractPreconditioner{T}, ND}},
-        L_blocks::Tuple{AbstractMatrix{T}, Vararg{AbstractMatrix{T}, NOD}},
-    ) where {T, ND, NOD}
+        D⁻¹_blocks::Tuple{AbstractPreconditioner{T},Vararg{AbstractPreconditioner{T},ND}},
+        L_blocks::Tuple{AbstractMatrix{T},Vararg{AbstractMatrix{T},NOD}},
+    ) where {T,ND,NOD}
         NOD == ND - 1 || throw(ArgumentError("size mismatch"))
         new{T}(D⁻¹_blocks, L_blocks)
     end
@@ -116,9 +116,9 @@ struct TridiagSymmetricBlockGaussSeidelPreconditioner{T} <: AbstractPrecondition
     L_blocks::Tuple{Vararg{AbstractMatrix{T}}}
 
     function TridiagSymmetricBlockGaussSeidelPreconditioner(
-        D_blocks::Tuple{AbstractMatrix{T}, Vararg{AbstractMatrix{T}, ND}},
-        L_blocks::Tuple{AbstractMatrix{T}, Vararg{AbstractMatrix{T}, NOD}},
-    ) where {T, ND, NOD}
+        D_blocks::Tuple{AbstractMatrix{T},Vararg{AbstractMatrix{T},ND}},
+        L_blocks::Tuple{AbstractMatrix{T},Vararg{AbstractMatrix{T},NOD}},
+    ) where {T,ND,NOD}
         NOD == ND - 1 || throw(ArgumentError("size mismatch"))
         D⁻¹_blocks = FullCholeskyPreconditioner.(D_blocks)
         new{T}(D⁻¹_blocks, L_blocks)
@@ -132,9 +132,9 @@ struct TridiagSymmetricBlockGaussSeidelPreconditioner{T} <: AbstractPrecondition
     end
 
     function TridiagSymmetricBlockGaussSeidelPreconditioner(
-        D⁻¹_blocks::Tuple{AbstractPreconditioner{T}, Vararg{AbstractPreconditioner{T}, ND}},
-        L_blocks::Tuple{AbstractMatrix{T}, Vararg{AbstractMatrix{T}, NOD}},
-    ) where {T, ND, NOD}
+        D⁻¹_blocks::Tuple{AbstractPreconditioner{T},Vararg{AbstractPreconditioner{T},ND}},
+        L_blocks::Tuple{AbstractMatrix{T},Vararg{AbstractMatrix{T},NOD}},
+    ) where {T,ND,NOD}
         NOD == ND - 1 || throw(ArgumentError("size mismatch"))
         new{T}(D⁻¹_blocks, L_blocks)
     end

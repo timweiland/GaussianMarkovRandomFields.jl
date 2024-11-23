@@ -1,7 +1,7 @@
 using LinearAlgebra, LinearMaps, Random, SparseArrays
 
 @testset "Tridiagonal block Gauss-Seidel preconditioners" begin
-	rng = MersenneTwister(281329)
+    rng = MersenneTwister(281329)
 
     D1, D2, D3 = sprand(3, 3, 0.4), sprand(4, 4, 0.4), sprand(3, 3, 0.5)
     D1, D2, D3 = (Symmetric(D * D' + I) for D in (D1, D2, D3))
@@ -20,17 +20,16 @@ using LinearAlgebra, LinearMaps, Random, SparseArrays
     ]
 
     @testset "Vanilla" begin
-        P_from_mat = TridiagonalBlockGaussSeidelPreconditioner(
-            (D1, D2, D3), (L1, L2)
-        )
+        P_from_mat = TridiagonalBlockGaussSeidelPreconditioner((D1, D2, D3), (L1, L2))
         P_from_precs = TridiagonalBlockGaussSeidelPreconditioner(
-            FullCholeskyPreconditioner.((D1, D2, D3)), (L1, L2)
+            FullCholeskyPreconditioner.((D1, D2, D3)),
+            (L1, L2),
         )
         @test size(P_from_mat) == size(P_vanilla_mat)
         @test size(P_from_precs) == size(P_vanilla_mat)
 
         P_mat_inv = inv(Array(P_vanilla_mat))
-        for i in 1:5
+        for i = 1:5
             x = rand(rng, size(P_vanilla_mat, 2))
             gt = P_mat_inv * x
             @test P_from_mat \ x ≈ gt
@@ -47,17 +46,16 @@ using LinearAlgebra, LinearMaps, Random, SparseArrays
     @testset "Symmetric" begin
         P_mat = P_vanilla_mat * inv(Array(D_mat)) * P_vanilla_mat'
 
-        P_from_mat = TridiagSymmetricBlockGaussSeidelPreconditioner(
-            (D1, D2, D3), (L1, L2)
-        )
+        P_from_mat = TridiagSymmetricBlockGaussSeidelPreconditioner((D1, D2, D3), (L1, L2))
         P_from_precs = TridiagSymmetricBlockGaussSeidelPreconditioner(
-            FullCholeskyPreconditioner.((D1, D2, D3)), (L1, L2)
+            FullCholeskyPreconditioner.((D1, D2, D3)),
+            (L1, L2),
         )
         @test size(P_from_mat) == size(P_mat)
         @test size(P_from_precs) == size(P_mat)
 
         P_mat_inv = inv(Array(P_mat))
-        for i in 1:5
+        for i = 1:5
             x = rand(rng, size(P_mat, 2))
             gt = P_mat_inv * x
             @test P_from_mat \ x ≈ gt

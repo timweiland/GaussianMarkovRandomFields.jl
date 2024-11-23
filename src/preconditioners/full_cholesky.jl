@@ -20,7 +20,9 @@ struct FullCholeskyPreconditioner{T} <: AbstractPreconditioner{T}
         new{T}(cho)
     end
 
-    function FullCholeskyPreconditioner(cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}}) where {T}
+    function FullCholeskyPreconditioner(
+        cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}},
+    ) where {T}
         new{T}(cho)
     end
 end
