@@ -9,8 +9,8 @@ export BlockJacobiPreconditioner
 A preconditioner that uses a block Jacobi preconditioner, i.e. P = diag(A₁, A₂, ...),
 where each Aᵢ is a preconditioner for a block of the matrix.
 """
-struct BlockJacobiPreconditioner <: AbstractPreconditioner
-    blocks::Vector{<:AbstractPreconditioner}
+struct BlockJacobiPreconditioner{T} <: AbstractPreconditioner{T}
+    blocks::Vector{<:AbstractPreconditioner{T}}
 end
 
 function ldiv!(y, P::BlockJacobiPreconditioner, x::AbstractVector)

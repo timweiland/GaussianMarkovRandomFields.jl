@@ -3,7 +3,7 @@ import Base: \, size
 
 export AbstractPreconditioner
 
-abstract type AbstractPreconditioner end;
+abstract type AbstractPreconditioner{T} end;
 
 ldiv!(y, ::AbstractPreconditioner, x::AbstractVector) =
     error("ldiv! not defined for this preconditioner type")

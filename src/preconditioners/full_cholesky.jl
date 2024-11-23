@@ -12,16 +12,18 @@ i.e. P = A, so P⁻¹ = A⁻¹.
 Does not make sense to use on its own, but can be used as a building block
 for more complex preconditioners.
 """
-struct FullCholeskyPreconditioner <: AbstractPreconditioner
-    cho::Union{Cholesky,SparseArrays.CHOLMOD.Factor}
+struct FullCholeskyPreconditioner{T} <: AbstractPreconditioner{T}
+    cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}}
 
-    function FullCholeskyPreconditioner(A::AbstractMatrix)
+    function FullCholeskyPreconditioner(A::AbstractMatrix{T}) where {T}
         cho = cholesky(Symmetric(A))
-        new(cho)
+        new{T}(cho)
     end
 
-    function FullCholeskyPreconditioner(cho::Union{Cholesky,SparseArrays.CHOLMOD.Factor})
-        new(cho)
+    function FullCholeskyPreconditioner(
+        cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}},
+    ) where {T}
+        new{T}(cho)
     end
 end
 
