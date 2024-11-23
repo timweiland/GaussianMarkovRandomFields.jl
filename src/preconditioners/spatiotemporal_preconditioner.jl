@@ -2,6 +2,12 @@ using SparseArrays
 
 export temporal_block_gauss_seidel
 
+"""
+    temporal_block_gauss_seidel(A, block_size)
+
+Construct a temporal block Gauss-Seidel preconditioner for a spatiotemporal
+matrix with constant spatial mesh size (and thus constant spatial block size).
+"""
 function temporal_block_gauss_seidel(A::SparseMatrixCSC, block_size)
     diag_blocks, off_diag_blocks = _extract_blocks(A, block_size)
     return TridiagonalBlockGaussSeidelPreconditioner(diag_blocks, off_diag_blocks)
@@ -74,13 +80,13 @@ function _extract_blocks(I::Vector{Int}, J::Vector{Int}, V::Vector, block_size)
         push!(off_diag_blocks, (I_off_diag_block, J_off_diag_block, V_off_diag_block))
     end
 
-    diag_blocks = [
+    diag_blocks = Tuple(
         sparse(I_block, J_block, V_block, block_size, block_size) for
         (I_block, J_block, V_block) in diag_blocks
-    ]
-    off_diag_blocks = [
+    )
+    off_diag_blocks = Tuple(
         sparse(I_block, J_block, V_block, block_size, block_size) for
         (I_block, J_block, V_block) in off_diag_blocks
-    ]
+    )
     return diag_blocks, off_diag_blocks
 end
