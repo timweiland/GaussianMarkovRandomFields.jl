@@ -2,11 +2,24 @@ using Random, AMD
 
 export RBMCStrategy, BlockRBMCStrategy, compute_variance
 
+"""
+    RBMCStrategy(n_samples; rng)
+
+Rao-Blackwellized Monte Carlo estimator of a GMRF's marginal variances
+based on [1].
+Particularly useful in large-scale regimes where Takahashi recursions may be
+too expensive.
+
+References:
+[1]  Sidén, Per, et al. "Efficient covariance approximations for large sparse
+precision matrices." Journal of Computational and Graphical Statistics 27.4
+(2018): 898-909.
+"""
 struct RBMCStrategy <: AbstractVarianceStrategy
     n_samples::Int
     rng::Random.AbstractRNG
 
-    function RBMCStrategy(n_samples::Int, rng::Random.AbstractRNG = Random.default_rng())
+    function RBMCStrategy(n_samples::Int; rng::Random.AbstractRNG = Random.default_rng())
         new(n_samples, rng)
     end
 end
@@ -27,14 +40,14 @@ function compute_variance(s::RBMCStrategy, solver::AbstractSolver)
     return D⁻¹ + reshape(var(transformed_samples, dims = 2), length(D))
 end
 
-all_neighbors(Q, i) = findnz(Q[i, :])[1]
-enclosure(Q, idcs) = vcat([all_neighbors(Q, i) for i in idcs]...)
-function build_enclosure_idcs(Q, interior, enclosure_size = 1)
+_all_neighbors(Q, i) = findnz(Q[i, :])[1]
+_enclosure(Q, idcs) = vcat([_all_neighbors(Q, i) for i in idcs]...)
+function _build_enclosure_idcs(Q, interior, enclosure_size = 1)
     enclosure_idcs = Int64[]
     new_idcs = copy(interior)
     explored = Set(interior)
     for _ = 1:enclosure_size
-        new_idcs = Set(enclosure(Q, new_idcs))
+        new_idcs = Set(_enclosure(Q, new_idcs))
         new_idcs = setdiff(new_idcs, explored)
         append!(enclosure_idcs, collect(new_idcs))
         explored = explored ∪ new_idcs
@@ -42,7 +55,7 @@ function build_enclosure_idcs(Q, interior, enclosure_size = 1)
     return enclosure_idcs
 end
 
-function build_disjoint_subsets(Q)
+function _build_disjoint_subsets(Q)
     visited = zeros(Bool, Base.size(Q, 1))
     subsets = []
     for i = 1:Base.size(Q, 1)
@@ -55,13 +68,32 @@ function build_disjoint_subsets(Q)
     return subsets
 end
 
+"""
+    BlockRBMCStrategy(n_samples; rng, enclosure_size)
+
+Block Rao-Blackwellized Monte Carlo estimator of a GMRF's marginal variances
+based on [1].
+Achieves faster convergence than plain RBMC by considering blocks of nodes
+rather than individual nodes, thus integrating more information about the
+precision matrix.
+`enclosure_size` specifies the size of these blocks. Larger values lead to
+faster convergence (in terms of the number of samples) at the cost of
+increased compute.
+Thus, one should aim for a sweet spot between sampling costs and block operation
+costs.
+
+References:
+[1]  Sidén, Per, et al. "Efficient covariance approximations for large sparse
+precision matrices." Journal of Computational and Graphical Statistics 27.4
+(2018): 898-909.
+"""
 struct BlockRBMCStrategy <: AbstractVarianceStrategy
     n_samples::Int
     rng::Random.AbstractRNG
     enclosure_size::Int
 
     function BlockRBMCStrategy(
-        n_samples::Int,
+        n_samples::Int;
         rng::Random.AbstractRNG = Random.default_rng(),
         enclosure_size::Int = 1,
     )
@@ -80,10 +112,10 @@ function compute_variance(s::BlockRBMCStrategy, solver::AbstractSolver)
     end
     sample_mat = hcat(samples...)
 
-    subsets = build_disjoint_subsets(Q)
+    subsets = _build_disjoint_subsets(Q)
 
     for subset in subsets
-        enclosure_idcs = build_enclosure_idcs(Q, subset, s.enclosure_size)
+        enclosure_idcs = _build_enclosure_idcs(Q, subset, s.enclosure_size)
         enclosure_p = symamd(Q[enclosure_idcs, enclosure_idcs])
         enclosure_idcs = enclosure_idcs[enclosure_p]
 
