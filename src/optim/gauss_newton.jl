@@ -136,7 +136,7 @@ function _compute_direction(optim::GaussNewtonOptimizer, solver_bp::GNCGSolverBl
     H = Symmetric(optim.Q_mat + optim.noise * optim.Jₖ' * optim.Jₖ)
     Pl = solver_bp.preconditioner_fn(sparse(H))
 
-    return cg(
+    return -cg(
         H,
         optim.∇objₖ;
         maxiter = solver_bp.maxiter,
