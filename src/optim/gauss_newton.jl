@@ -142,7 +142,7 @@ function _compute_direction(optim::GaussNewtonOptimizer, solver_bp::GNCGSolverBl
         maxiter = solver_bp.maxiter,
         reltol = solver_bp.reltol,
         abstol = solver_bp.abstol,
-        verbose = true,
+        verbose = solver_bp.verbose,
         Pl = Pl,
     )
 end
@@ -153,8 +153,8 @@ function optimize(optim::GaussNewtonOptimizer)
     end
 end
 
-function _should_stop(optim::GaussNewtonOptimizer, criterion::AbstractStoppingCriterion)
-    return optim.newton_decrement < criterion.threshold
+function _should_stop(::GaussNewtonOptimizer, criterion::AbstractStoppingCriterion)
+    throw("Unimplemented stopping criterion: $criterion")
 end
 
 function _should_stop(optim::GaussNewtonOptimizer, criterion::NewtonDecrementCriterion)

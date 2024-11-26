@@ -1,3 +1,5 @@
+using IterativeSolvers
+
 export GNLinearSolverBlueprint, GNCGSolverBlueprint, GNCholeskySolverBlueprint
 
 abstract type GNLinearSolverBlueprint end
@@ -15,13 +17,16 @@ struct GNCGSolverBlueprint <: GNLinearSolverBlueprint
     reltol::Real
     abstol::Real
     preconditioner_fn::Function
+    verbose::Bool
 
     function GNCGSolverBlueprint(
+        ;
         maxiter::Int = 100,
         reltol::Real = 1e-6,
         abstol::Real = 1e-6,
-        preconditioner_fn::Function = A -> Preconditioners.Identity(),
+        preconditioner_fn::Function = A -> IterativeSolvers.Identity(),
+        verbose = false,
     )
-        new(maxiter, reltol, abstol, preconditioner_fn)
+        new(maxiter, reltol, abstol, preconditioner_fn, verbose)
     end
 end
