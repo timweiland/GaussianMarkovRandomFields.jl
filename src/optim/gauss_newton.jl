@@ -2,6 +2,13 @@ using LinearAlgebra, Preconditioners
 
 export GaussNewtonOptimizer, optimize
 
+"""
+    GaussNewtonOptimizer
+
+Tunable Gauss-Newton optimization routine to find the maximum a posteriori (MAP)
+estimate under nonlinear observations and a GMRF prior.
+TODO: Explain parameters.
+"""
 mutable struct GaussNewtonOptimizer
     μ_prior::AbstractVector
     Q_prior::LinearMap
@@ -136,25 +143,30 @@ function _compute_direction(optim::GaussNewtonOptimizer, solver_bp::GNCGSolverBl
     H = Symmetric(optim.Q_mat + optim.noise * optim.Jₖ' * optim.Jₖ)
     Pl = solver_bp.preconditioner_fn(sparse(H))
 
-    return cg(
+    return -cg(
         H,
         optim.∇objₖ;
         maxiter = solver_bp.maxiter,
         reltol = solver_bp.reltol,
         abstol = solver_bp.abstol,
-        verbose = true,
+        verbose = solver_bp.verbose,
         Pl = Pl,
     )
 end
 
+"""
+    optimize(optim)
+
+Iterate until the stopping criterion is fulfilled.
+"""
 function optimize(optim::GaussNewtonOptimizer)
     while !_should_stop(optim, optim.stopping_criterion)
         step(optim)
     end
 end
 
-function _should_stop(optim::GaussNewtonOptimizer, criterion::AbstractStoppingCriterion)
-    return optim.newton_decrement < criterion.threshold
+function _should_stop(::GaussNewtonOptimizer, criterion::AbstractStoppingCriterion)
+    throw("Unimplemented stopping criterion: $criterion")
 end
 
 function _should_stop(optim::GaussNewtonOptimizer, criterion::NewtonDecrementCriterion)
