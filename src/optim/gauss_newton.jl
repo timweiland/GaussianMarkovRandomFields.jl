@@ -2,6 +2,13 @@ using LinearAlgebra, Preconditioners
 
 export GaussNewtonOptimizer, optimize
 
+"""
+    GaussNewtonOptimizer
+
+Tunable Gauss-Newton optimization routine to find the maximum a posteriori (MAP)
+estimate under nonlinear observations and a GMRF prior.
+TODO: Explain parameters.
+"""
 mutable struct GaussNewtonOptimizer
     μ_prior::AbstractVector
     Q_prior::LinearMap
@@ -147,6 +154,11 @@ function _compute_direction(optim::GaussNewtonOptimizer, solver_bp::GNCGSolverBl
     )
 end
 
+"""
+    optimize(optim)
+
+Iterate until the stopping criterion is fulfilled.
+"""
 function optimize(optim::GaussNewtonOptimizer)
     while !_should_stop(optim, optim.stopping_criterion)
         step(optim)

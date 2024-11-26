@@ -2,8 +2,24 @@ using IterativeSolvers
 
 export GNLinearSolverBlueprint, GNCGSolverBlueprint, GNCholeskySolverBlueprint
 
+"""
+    GNLinearSolverBlueprint
+
+Abstract type for the specification of a solver for the linear systems arising
+in Gauss-Newton optimization.
+"""
 abstract type GNLinearSolverBlueprint end
 
+"""
+    GNCholeskySolverBlueprint(perm)
+
+Specification of a linear solver for Gauss-Newton systems based on the Cholesky
+decomposition.
+`perm` is a node reordering (*perm*utation) to minimize fill-in. If such a
+reordering is available from previous computations, it can be reused here to
+avoid unnecessary computational overhead. If `perm` is not passed, it will be
+computed during the Cholesky decomposition.
+"""
 struct GNCholeskySolverBlueprint <: GNLinearSolverBlueprint
     perm::Union{Nothing,Vector{Int}}
 
@@ -12,6 +28,12 @@ struct GNCholeskySolverBlueprint <: GNLinearSolverBlueprint
     end
 end
 
+"""
+    GNCGSolverBlueprint(; maxiter, reltol, abstol, preconditioner_fn, verbose)
+
+Specification of a linear solver for Gauss-Newton systems based on the conjugate
+gradient (CG) method.
+"""
 struct GNCGSolverBlueprint <: GNLinearSolverBlueprint
     maxiter::Int
     reltol::Real

@@ -1,7 +1,18 @@
 export AbstractLineSearch, BacktrackingLineSearch, NoLineSearch
 
+"""
+    AbstractLineSearch
+
+Abstract type for the specification of a line search scheme for optimization.
+"""
 abstract type AbstractLineSearch end
 
+"""
+    BacktrackingLineSearch
+
+Specification of a line search based on backtracking via the Armijo condition.
+TODO: Description of parameters
+"""
 struct BacktrackingLineSearch <: AbstractLineSearch
     α₀::Real
     τ::Real
@@ -32,6 +43,12 @@ function line_search(
     return x + α * p
 end
 
+"""
+    NoLineSearch
+
+A type that communicates that no line search will be used, i.e. the initial step
+proposed by the optimization algorithm is the step that will be taken.
+"""
 struct NoLineSearch <: AbstractLineSearch end
 
 function line_search(
