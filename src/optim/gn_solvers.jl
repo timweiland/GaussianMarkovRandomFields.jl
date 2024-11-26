@@ -41,8 +41,7 @@ struct GNCGSolverBlueprint <: GNLinearSolverBlueprint
     preconditioner_fn::Function
     verbose::Bool
 
-    function GNCGSolverBlueprint(
-        ;
+    function GNCGSolverBlueprint(;
         maxiter::Int = 100,
         reltol::Real = 1e-6,
         abstol::Real = 1e-6,

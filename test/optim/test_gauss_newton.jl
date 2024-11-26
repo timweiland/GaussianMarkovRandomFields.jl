@@ -6,18 +6,18 @@ struct NonlinearOptimProblem
 end
 
 example_problem = NonlinearOptimProblem(
-    (x, A, u) -> ((A * u).^3 + x.^2 .- 1, Diagonal(3 * (A * u).^2) * A),
-    x -> (1 .- x.^2).^(1 / 3)
+    (x, A, u) -> ((A * u) .^ 3 + x .^ 2 .- 1, Diagonal(3 * (A * u) .^ 2) * A),
+    x -> (1 .- x .^ 2) .^ (1 / 3),
 )
 
 @testset "Gauss-Newton Optimizer" begin
     rng = MersenneTwister(6692340)
 
     grid = generate_grid(Line, (200,))
-    ip = Lagrange{RefLine, 1}()
+    ip = Lagrange{RefLine,1}()
     qr = QuadratureRule{RefLine}(2)
     disc = FEMDiscretization(grid, ip, qr)
-    spde = MaternSPDE{1}(range=0.3, smoothness=1)
+    spde = MaternSPDE{1}(range = 0.3, smoothness = 1)
     x_prior = discretize(spde, disc)
 
     xs = -0.99:0.025:0.99
@@ -34,20 +34,17 @@ example_problem = NonlinearOptimProblem(
         GNCholeskySolverBlueprint(),
         GNCGSolverBlueprint(),
         GNCGSolverBlueprint(
-            preconditioner_fn = A -> Preconditioners.CholeskyPreconditioner(A)
+            preconditioner_fn = A -> Preconditioners.CholeskyPreconditioner(A),
         ),
     ]
-    line_searches = [
-        NoLineSearch(),
-        BacktrackingLineSearch(),
-    ]
+    line_searches = [NoLineSearch(), BacktrackingLineSearch()]
     gt = example_problem.solution(xs)
     for solver_bp in solvers
         for line_search in line_searches
             gno = GaussNewtonOptimizer(
                 common_params...,
-                solver_bp=solver_bp,
-                line_search=line_search,
+                solver_bp = solver_bp,
+                line_search = line_search,
             )
             optimize(gno)
             x_final = gno.xₖ
