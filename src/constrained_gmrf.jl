@@ -80,9 +80,9 @@ function get_constraint_variables(constraint_handler::Ferrite.ConstraintHandler,
                 push!(free_to_prescribed_Vs, val)
             end
         end
-        affine_inhomogeneity = constraint_handler.affine_inhomogeneities[constraint_idx]
-        if affine_inhomogeneity !== nothing
-            free_to_prescribed_offset[i] = affine_inhomogeneity
+        inhomogeneity = constraint_handler.inhomogeneities[constraint_idx]
+        if inhomogeneity !== nothing
+            free_to_prescribed_offset[i] = inhomogeneity
         end
     end
     free_to_prescribed_mat = sparse(
