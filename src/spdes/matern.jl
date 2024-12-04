@@ -165,6 +165,27 @@ function discretize(
     )
     K = 𝒟.κ^2 * C̃ + G
     C̃⁻¹ = spdiagm(0 => 1 ./ diag(C̃))
+    f = spzeros(ndofs(discretization))
+    apply!(K, f, discretization.constraint_handler)
+    μ = spzeros(ndofs(discretization))
+    if length(discretization.constraint_handler.prescribed_dofs) > 0
+        μ = K \ f
+    end
+
+    #ch = discretization.constraint_handler
+    #if length(ch.prescribed_dofs) > 0
+        #K[ch.prescribed_dofs, :]
+        #for dof in ch.prescribed_dofs
+            #diag_val = K[dof, dof]
+            #K[dof, :] .= 0.
+            #K[dof, dof] = diag_val
+            #constraint_idx = ch.dofmapping[dof]
+            #inhomogeneity = ch.inhomogeneities[constraint_idx]
+            #f[dof] += diag_val * inhomogeneity
+        #end
+        #μ = K \ f
+        ##return ConstrainedGMRF(x, discretization.constraint_handler)
+    #end
 
     # Ratio to get user-specified variance
     ratio = 1.0
@@ -176,10 +197,10 @@ function discretize(
 
     Q = matern_precision(C̃⁻¹, K, Integer(α(𝒟)), ratio)
 
-    x = GMRF(spzeros(Base.size(Q, 1)), Q, solver_blueprint)
-    if length(discretization.constraint_handler.prescribed_dofs) > 0
-        return ConstrainedGMRF(x, discretization.constraint_handler)
-    end
+    x = GMRF(μ, Q, solver_blueprint)
+    #if length(discretization.constraint_handler.prescribed_dofs) > 0
+        #return ConstrainedGMRF(x, discretization.constraint_handler)
+    #end
     return x
 end
 
