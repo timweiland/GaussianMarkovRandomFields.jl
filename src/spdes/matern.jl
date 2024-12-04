@@ -169,7 +169,7 @@ function discretize(
     apply!(K, f, discretization.constraint_handler)
     μ = spzeros(ndofs(discretization))
     if length(discretization.constraint_handler.prescribed_dofs) > 0
-        μ = K \ f
+        μ = K \ Array(f)
     end
 
     #ch = discretization.constraint_handler
