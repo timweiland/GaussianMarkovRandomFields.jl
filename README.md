@@ -1,7 +1,7 @@
 <p align="center">
     <picture align="center">
-        <source media="(prefers-color-scheme: dark)" srcset="https://github.com/timweiland/GMRFs.jl/blob/main/docs/src/assets/logo_dark_mode.png">
-        <img alt="Shows the logo for the GMRFs.jl library." src="https://github.com/timweiland/GMRFs.jl/blob/main/docs/src/assets/logo_light_mode.png">
+        <source media="(prefers-color-scheme: dark)" srcset="https://github.com/timweiland/GMRFs.jl/blob/main/docs/src/assets/logo-dark.png">
+        <img alt="Shows the logo for the GMRFs.jl library." src="https://github.com/timweiland/GMRFs.jl/blob/main/docs/src/assets/logo.png">
     </picture>
 </p>
 
