@@ -23,7 +23,11 @@ function compute_rand!(
     x::AbstractVector,
 )
     randn!(rng, x)
-    x .= s.precision_chol.UP \ _ensure_dense(x)
+    if s.precision_chol isa Cholesky
+        x .= s.precision_chol.U \ _ensure_dense(x)
+    else
+        x .= s.precision_chol.UP \ _ensure_dense(x)
+    end
     x .+= _ensure_dense(compute_mean(s))
     return x
 end
@@ -42,7 +46,8 @@ mutable struct CholeskySolver{V<:AbstractVarianceStrategy} <: AbstractCholeskySo
         perm::Union{Nothing,Vector{Int}} = nothing,
     ) where {V<:AbstractVarianceStrategy}
         mat = to_matrix(precision_map(gmrf))
-        precision_chol = cholesky(mat; perm = perm)
+
+        precision_chol = (perm !== nothing) ? cholesky(mat; perm = perm) : cholesky(mat)
         new{V}(mean(gmrf), precision_map(gmrf), precision_chol, var_strategy, perm, nothing)
     end
 end
