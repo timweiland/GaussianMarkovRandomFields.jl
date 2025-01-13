@@ -24,6 +24,7 @@ include("optim/test_gauss_newton.jl")
 include("test_gmrf_arithmetic.jl")
 include("test_mesh_utils.jl")
 include("spatiotemporal/test_advection_diffusion.jl")
+include("autoregressive/test_car.jl")
 
 @testset "Code quality (Aqua.jl)" begin
     Aqua.test_all(GMRFs; ambiguities = false)
