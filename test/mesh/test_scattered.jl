@@ -1,8 +1,11 @@
 using GMRFs, Ferrite
 using LinearAlgebra
 using SparseArrays
+using Random
 
 @testset "Scattered mesh" begin
+    rng = MersenneTwister(1249806901)
+
     # Sample 1000 points within a circle
     n = 1000
     r = 1.0
@@ -15,17 +18,17 @@ using SparseArrays
     X_test = []
     y_test = Float64[]
     while length(X_train) < n
-        x = 2 * r * (rand() - 0.5)
-        y = 2 * r * (rand() - 0.5)
+        x = 2 * r * (rand(rng) - 0.5)
+        y = 2 * r * (rand(rng) - 0.5)
         l² = x^2 + y^2
         if l² > r^2
             continue
         elseif (l² < r_cut_start^2 || l² > r_cut_stop^2)
             push!(X_train, [x, y])
-            push!(y_train, l² + 0.1 * randn())
+            push!(y_train, l² + 0.1 * randn(rng))
         else
             push!(X_test, [x, y])
-            push!(y_test, l² + 0.1 * randn())
+            push!(y_test, l² + 0.1 * randn(rng))
         end
     end
 
@@ -40,7 +43,7 @@ using SparseArrays
     qr = QuadratureRule{RefTriangle}(2)
     disc = FEMDiscretization(grid, ip, qr)
 
-    spde = MaternSPDE{2}(range=0.9, smoothness=2)
+    spde = MaternSPDE{2}(range=0.7, smoothness=2)
     u_matern = discretize(spde, disc)
 
     Λ_obs = 10.
