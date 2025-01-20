@@ -41,5 +41,6 @@ include("optim/line_search.jl")
 include("optim/gauss_newton.jl")
 include("plot_utils.jl")
 include("mesh_utils.jl")
+include("mesh/scattered.jl")
 
 end

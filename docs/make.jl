@@ -9,7 +9,9 @@ makedocs(
         "Tutorials" => [
             "Overview" => "tutorials/index.md",
             "tutorials/autoregressive_models.md",
+            "tutorials/spatial_modelling_spdes.md"
         ],
-        "Autoregressive Models" => "topics/autoregressive.md"
+        "Autoregressive Models" => "topics/autoregressive.md",
+        "Spatial Models" => "topics/spatial.md"
     ],
 )
