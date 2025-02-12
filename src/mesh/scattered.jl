@@ -47,10 +47,14 @@ A `Ferrite.Grid` object
 3. Create a mesh for the buffered polygon using Gmsh
 4. Transfer the Gmsh information to Ferrite
 """
-function generate_mesh(mp::GeometryBasics.MultiPoint, buffer_width::Real,
-                       interior_mesh_size::Real;
-                       exterior_mesh_size::Real = 2 * interior_mesh_size,
-                       element_order::Int=1, save_path=nothing,)
+function generate_mesh(
+    mp::GeometryBasics.MultiPoint,
+    buffer_width::Real,
+    interior_mesh_size::Real;
+    exterior_mesh_size::Real = 2 * interior_mesh_size,
+    element_order::Int = 1,
+    save_path = nothing,
+)
     ch = LibGEOS.convexhull(mp)
     ch_gb = GeoInterface.convert(GeometryBasics, ch)
     outer_boundary = buffer(ch, buffer_width)
@@ -70,7 +74,15 @@ function generate_mesh(mp::GeometryBasics.MultiPoint, buffer_width::Real,
     ps_inner = []
     for (i, inner_point) in enumerate(mp.points)
         if i ∉ ch_points_inds
-            push!(ps_inner, gmsh.model.geo.addPoint(inner_point[1], inner_point[2], 0, interior_mesh_size))
+            push!(
+                ps_inner,
+                gmsh.model.geo.addPoint(
+                    inner_point[1],
+                    inner_point[2],
+                    0,
+                    interior_mesh_size,
+                ),
+            )
         end
     end
 
@@ -86,7 +98,7 @@ function generate_mesh(mp::GeometryBasics.MultiPoint, buffer_width::Real,
     #gmsh.model.setPhysicalName(1, boundary_group, "Interior boundary")
 
     #ext_boundary_group =
-        #gmsh.model.addPhysicalGroup(1, [l_ext_1, l_ext_2, l_ext_3, l_ext_4])
+    #gmsh.model.addPhysicalGroup(1, [l_ext_1, l_ext_2, l_ext_3, l_ext_4])
     #gmsh.model.setPhysicalName(1, ext_boundary_group, "Exterior boundary")
 
     gmsh.model.mesh.field.add("Constant", 1)
@@ -150,13 +162,23 @@ Generate a mesh from a list of points using Gmsh.
 
 A Ferrite.Grid object
 """
-function generate_mesh(points, buffer_width::Real, interior_mesh_size::Real;
-                       exterior_mesh_size::Real = 2 * interior_mesh_size,
-                       element_order::Int=1, save_path=nothing,)
+function generate_mesh(
+    points,
+    buffer_width::Real,
+    interior_mesh_size::Real;
+    exterior_mesh_size::Real = 2 * interior_mesh_size,
+    element_order::Int = 1,
+    save_path = nothing,
+)
     mp = GeometryBasics.MultiPoint([
         GeometryBasics.Point(cur_x, cur_y) for (cur_x, cur_y) in points
     ])
-    return generate_mesh(mp, buffer_width, interior_mesh_size;
-                         exterior_mesh_size=exterior_mesh_size,
-                         element_order=element_order, save_path=save_path)
+    return generate_mesh(
+        mp,
+        buffer_width,
+        interior_mesh_size;
+        exterior_mesh_size = exterior_mesh_size,
+        element_order = element_order,
+        save_path = save_path,
+    )
 end

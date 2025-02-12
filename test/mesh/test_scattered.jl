@@ -39,18 +39,18 @@ using Random
     grid_smaller_cells = generate_mesh(X_all, 0.3, 0.02)
     @test length(grid_smaller_cells.cells) > length(grid.cells)
 
-    ip = Lagrange{RefTriangle, 1}()
+    ip = Lagrange{RefTriangle,1}()
     qr = QuadratureRule{RefTriangle}(2)
     disc = FEMDiscretization(grid, ip, qr)
 
-    spde = MaternSPDE{2}(range=0.7, smoothness=2)
+    spde = MaternSPDE{2}(range = 0.7, smoothness = 2)
     u_matern = discretize(spde, disc)
 
-    Λ_obs = 10.
+    Λ_obs = 10.0
     A_train = evaluation_matrix(disc, [Tensors.Vec(x...) for x in X_train])
     A_test = evaluation_matrix(disc, [Tensors.Vec(x...) for x in X_test])
     u_cond = condition_on_observations(u_matern, A_train, Λ_obs, y_train)
 
-    rmse = (a, b) -> sqrt(mean((a .- b).^2))
+    rmse = (a, b) -> sqrt(mean((a .- b) .^ 2))
     @test rmse(A_test * mean(u_cond), y_test) < 0.25
 end

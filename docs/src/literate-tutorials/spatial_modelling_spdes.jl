@@ -20,14 +20,14 @@ using Plots
 x = convert(Vector{Float64}, df[:, :x])
 y = convert(Vector{Float64}, df[:, :y])
 zinc = df[:, :zinc]
-scatter(x, y, zcolor=zinc)
+scatter(x, y, zcolor = zinc)
 
 # Finally, in classic machine learning fashion, we split the data into a training
 # and a test set. We use about 85% of the data for training and the remaining 15%
 # for testing.
 using Random
-train_idcs = randsubseq(1:size(df,1), 0.85)
-test_idcs = [i for i in 1:size(df,1) if isempty(searchsorted(train_idcs, i))]
+train_idcs = randsubseq(1:size(df, 1), 0.85)
+test_idcs = [i for i = 1:size(df, 1) if isempty(searchsorted(train_idcs, i))]
 X = [x y]
 X_train = X[train_idcs, :]
 X_test = X[test_idcs, :]
@@ -65,12 +65,12 @@ size(X_train, 1), size(X_test, 1)
 # e.g. to visualize it via Gmsh.
 using GMRFs
 points = zip(x, y)
-grid = generate_mesh(points, 600., 100., save_path="meuse.msh")
+grid = generate_mesh(points, 600.0, 100.0, save_path = "meuse.msh")
 
 # We can now create a FEM discretization, which consists of the grid, a choice
 # of basis functions, and a quadrature rule.
 using Ferrite
-ip = Lagrange{RefTriangle, 1}()
+ip = Lagrange{RefTriangle,1}()
 qr = QuadratureRule{RefTriangle}(2)
 disc = FEMDiscretization(grid, ip, qr)
 
@@ -78,18 +78,19 @@ disc = FEMDiscretization(grid, ip, qr)
 # While we could specify the Matern SPDE in terms of its direct parameters κ
 # and ν, we here choose to specify it through the more easily interpretable
 # parameters `range` and `smoothness`.
-spde = MaternSPDE{2}(range=400., smoothness=1)
+spde = MaternSPDE{2}(range = 400.0, smoothness = 1)
 u_matern = discretize(spde, disc)
 
 # We can then condition the resulting Matern GMRF on the training data, where we
 # assume an inverse noise variance of 10 (i.e. a variance of 0.1).
-Λ_obs = 10.
-A_train = evaluation_matrix(disc, [Tensors.Vec(X_train[i, :]...) for i in 1:size(X_train, 1)])
-A_test = evaluation_matrix(disc, [Tensors.Vec(X_test[i, :]...) for i in 1:size(X_test, 1)])
+Λ_obs = 10.0
+A_train =
+    evaluation_matrix(disc, [Tensors.Vec(X_train[i, :]...) for i = 1:size(X_train, 1)])
+A_test = evaluation_matrix(disc, [Tensors.Vec(X_test[i, :]...) for i = 1:size(X_test, 1)])
 u_cond = condition_on_observations(u_matern, A_train, Λ_obs, y_train)
 
 # We can evaluate the RMSE of the posterior mean on the test data:
-rmse = (a, b) -> sqrt(mean((a .- b).^2))
+rmse = (a, b) -> sqrt(mean((a .- b) .^ 2))
 rmse(A_train * mean(u_cond), y_train), rmse(A_test * mean(u_cond), y_test)
 
 # We can also visualize the posterior mean and standard deviation. To this end,
