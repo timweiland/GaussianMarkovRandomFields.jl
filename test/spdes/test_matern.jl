@@ -4,6 +4,31 @@ using Ferrite
 using SparseArrays
 using LinearAlgebra
 
+function _get_periodic_constraint(grid)
+    cellidx_left, dofidx_left = collect(grid.facetsets["left"])[1]
+    cellidx_right, dofidx_right = collect(grid.facetsets["right"])[1]
+
+    temp_dh = DofHandler(grid)
+    add!(temp_dh, :u, Lagrange{RefLine,1}())
+    close!(temp_dh)
+    cc = CellCache(temp_dh)
+    get_dof(cell_idx, dof_idx) = (reinit!(cc, cell_idx); celldofs(cc)[dof_idx])
+    dof_left = get_dof(cellidx_left, dofidx_left)
+    dof_right = get_dof(cellidx_right, dofidx_right)
+
+    return AffineConstraint(dof_left, [dof_right => 1.0], 0.0)
+end
+
+function _get_dirichlet_constraint(grid::Ferrite.Grid{1}, left_val, right_val)
+    boundary = getfacetset(grid, "left") ∪ getfacetset(grid, "right")
+
+    return Ferrite.Dirichlet(
+        :u,
+        boundary,
+        x -> (x[1] ≈ -1.0) ? left_val : (x[1] ≈ 1.0) ? right_val : 0.0,
+    )
+end
+
 @testset "MaternSPDE" begin
     rng = MersenneTwister(5930238)
     N = 20
@@ -60,5 +85,45 @@ using LinearAlgebra
         end
         nnzs = [nnz(sparse(Q)) for Q in precisions]
         @test all(diff(nnzs) .> 0) # Increasing smoothness decreases sparsity
+    end
+
+    @testset "Boundary conditions" begin
+        grid = generate_grid(Line, (50,))
+        ip = Lagrange{RefLine,1}()
+        qr = QuadratureRule{RefLine}(2)
+        pbc = _get_periodic_constraint(grid)
+        left_val, right_val = 2.0, -1.5
+        dbc = _get_dirichlet_constraint(grid, left_val, right_val)
+        disc_pbc = FEMDiscretization(grid, ip, qr, ((:u, nothing),), [(pbc, 1e-4)])
+        disc_dbc = FEMDiscretization(grid, ip, qr, ((:u, nothing),), [(dbc, 1e-4)])
+
+        println("Testan this now")
+        for smoothness ∈ [1, 3]
+            spde = MaternSPDE{1}(range = 0.3, smoothness = smoothness, σ² = 0.3)
+            x = discretize(spde, disc_pbc)
+
+            @test (mean(x)[1] ≈ 0.0) && (mean(x)[end] ≈ 0.0)
+
+            for i = 1:3
+                samp = rand(rng, x)
+                @test samp[1] ≈ samp[end] atol = 1e-3
+            end
+        end
+
+        for smoothness ∈ [0, 1, 2]
+            spde = MaternSPDE{1}(range = 0.3, smoothness = smoothness, σ² = 0.3)
+            x = discretize(spde, disc_dbc)
+
+            @test (mean(x)[1] ≈ left_val) && (mean(x)[end] ≈ right_val)
+
+            for i = 1:3
+                samp = rand(rng, x)
+                @test samp[1] ≈ left_val atol = 1e-3
+                @test samp[end] ≈ right_val atol = 1e-3
+            end
+
+            @test std(x)[1] ≈ 1e-4
+            @test std(x)[end] ≈ 1e-4
+        end
     end
 end

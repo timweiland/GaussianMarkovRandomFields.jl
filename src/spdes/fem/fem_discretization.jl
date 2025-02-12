@@ -25,6 +25,7 @@ struct FEMDiscretization{
     geom_interpolation::GI
     dof_handler::H
     constraint_handler::CH
+    constraint_noise::AbstractVector{Float64} # Noise std
 
     function FEMDiscretization(
         grid::G,
@@ -43,11 +44,26 @@ struct FEMDiscretization{
         end
         close!(dh)
 
+        constraint_noise = Float64[]
         ch = ConstraintHandler(dh)
-        if length(boundary_conditions) > 0
-            for bc in boundary_conditions
-                add!(ch, bc)
+        for (bc, noise) in boundary_conditions
+            # Hack to get exactly the DOFs prescribed by this BC
+            ch_tmp = ConstraintHandler(dh)
+            add!(ch_tmp, bc)
+            close!(ch_tmp)
+            constrained_dofs = ch_tmp.prescribed_dofs
+
+            # Save noise for each constrained dof
+            for dof in constrained_dofs
+                i = get(ch.dofmapping, dof, 0)
+                if i != 0
+                    # Already prescribed previously, update noise
+                    constraint_noise[i] = noise
+                else
+                    push!(constraint_noise, noise)
+                end
             end
+            add!(ch, bc)
         end
         close!(ch)
         new{D,S,G,I,Q,I,DofHandler{D,G},typeof(ch)}(
@@ -57,6 +73,7 @@ struct FEMDiscretization{
             default_geom_interpolation,
             dh,
             ch,
+            constraint_noise,
         )
     end
 
@@ -76,6 +93,7 @@ struct FEMDiscretization{
             geom_interpolation,
             dh,
             nothing,
+            Float64[],
         )
     end
 end
@@ -162,5 +180,10 @@ function Base.show(io::IO, discretization::FEMDiscretization)
     println(io, "FEMDiscretization")
     println(io, "  grid: ", repr(MIME("text/plain"), discretization.grid))
     println(io, "  interpolation: ", discretization.interpolation)
-    println(io, "  quadrature_rule: ", discretization.quadrature_rule)
+    println(io, "  quadrature_rule: ", typeof(discretization.quadrature_rule))
+    println(
+        io,
+        "  # constraints: ",
+        length(discretization.constraint_handler.prescribed_dofs),
+    )
 end

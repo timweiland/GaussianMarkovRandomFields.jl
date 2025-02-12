@@ -61,11 +61,10 @@ ndim(::MaternSPDE{D}) where {D} = D
 function assemble_C_G_matrices(
     cellvalues::CellValues,
     dh::DofHandler,
-    ch::ConstraintHandler,
     interpolation,
     diffusion_factor,
 )
-    C, G = allocate_matrix(dh, ch), allocate_matrix(dh, ch)
+    C, G = allocate_matrix(dh), allocate_matrix(dh)
 
     n_basefuncs = getnbasefunctions(cellvalues)
     Ce = spzeros(n_basefuncs, n_basefuncs)
@@ -81,15 +80,8 @@ function assemble_C_G_matrices(
         assemble!(C_assembler, celldofs(cell), Ce)
         assemble!(G_assembler, celldofs(cell), Ge)
     end
-    N = size(C, 1)
-    apply!(C, zeros(N), ch)
-    apply!(G, zeros(N), ch)
     C = lump_matrix(C, interpolation)
 
-    for dof in ch.prescribed_dofs
-        G[dof, dof] = 1.0
-        C[dof, dof] = 1e-10 # TODO
-    end
     return C, G
 end
 
@@ -109,34 +101,78 @@ equation approach. Journal of the Royal Statistical Society: Series B
 - `K::AbstractMatrix`: The stiffness matrix.
 - `α::Integer`: The parameter α = ν + d/2 of the Matérn SPDE.
 """
-function matern_precision(
-    C_inv::AbstractMatrix,
+function matern_mean_precision(
+    C::AbstractMatrix,
     K::AbstractMatrix,
     α::Integer,
+    ch,
+    constraint_noise,
     scaling_factor = 1.0,
 )
     if α < 1
         throw(ArgumentError("α must be positive and non-zero"))
     end
-    scaling_factor_sqrt = sqrt(scaling_factor)
+    C_inv = spdiagm(0 => 1 ./ diag(C))
+    scale_mat = scaling_factor * sparse(I, size(K)...)
+    scale_mat_sqrt = sqrt(scaling_factor) * sparse(I, size(K)...)
+    for dof in ch.prescribed_dofs
+        scale_mat[dof, dof] = 1.0
+        scale_mat_sqrt[dof, dof] = 1.0
+    end
+
     if α == 1
-        K_sym = Symmetric(K * scaling_factor)
-        K_sqrt = CholeskySqrt(cholesky(K_sym))
-        return LinearMapWithSqrt(LinearMap(K_sym), K_sqrt)
+        f_rhs = zeros(size(C, 1))
+
+        for dof in ch.prescribed_dofs
+            constraint_idx = ch.dofmapping[dof]
+            if ch.dofcoefficients[constraint_idx] !== nothing
+                # Not supported, throw error
+                throw(ArgumentError("Non-Dirichlet BCs not supported for odd α"))
+            end
+            inhomogeneity = ch.inhomogeneities[constraint_idx]
+            if inhomogeneity !== nothing
+                f_rhs[dof] = inhomogeneity
+            end
+            K[dof, :] .= 0.0
+            K[:, dof] .= 0.0
+            K[dof, dof] = 1.0
+        end
+        μ = K \ f_rhs
+
+        for dof in ch.prescribed_dofs
+            constraint_idx = ch.dofmapping[dof]
+            K[dof, dof] = constraint_noise[constraint_idx]^(-2)
+        end
+
+        Q_sym = Symmetric(scale_mat * K)
+        Q_sqrt = CholeskySqrt(cholesky(Q_sym))
+        Q = LinearMapWithSqrt(LinearMap(Q_sym), Q_sqrt)
+        return μ, Q
     elseif α == 2
         C_inv_sqrt = spdiagm(0 => sqrt.(diag(C_inv)))
-        Q = LinearMap(Symmetric(scaling_factor * K * C_inv * K))
-        Q_sqrt = LinearMap(scaling_factor_sqrt * K * C_inv_sqrt)
-        return LinearMapWithSqrt(Q, Q_sqrt)
+        f_rhs = zeros(size(C, 1))
+        Q_rhs = C_inv
+        Q_rhs_sqrt = C_inv_sqrt
     else
-        Q_inner = matern_precision(C_inv, K, α - 2)
-        Q_outer = LinearMap(
-            Symmetric(scaling_factor * K * C_inv * to_matrix(Q_inner.A) * C_inv * K),
-        )
-        Q_outer_sqrt =
-            LinearMap(scaling_factor_sqrt * K * C_inv * to_matrix(Q_inner.A_sqrt))
-        return LinearMapWithSqrt(Q_outer, Q_outer_sqrt)
+        f_inner, Q_inner =
+            matern_mean_precision(copy(C), copy(K), α - 2, ch, constraint_noise)
+        f_rhs = C * f_inner
+        Q_rhs = C_inv * to_matrix(Q_inner.A) * C_inv
+        Q_rhs_sqrt = C_inv * to_matrix(Q_inner.A_sqrt)
     end
+
+    apply_soft_constraints!(
+        K,
+        f_rhs,
+        ch,
+        constraint_noise,
+        Q_rhs = Q_rhs,
+        Q_rhs_sqrt = Q_rhs_sqrt,
+    )
+    μ = K \ f_rhs
+    Q = LinearMap(Symmetric(K' * (scale_mat * Q_rhs) * K))
+    Q_sqrt = LinearMap(K' * (scale_mat_sqrt * Q_rhs_sqrt))
+    return μ, LinearMapWithSqrt(Q, Q_sqrt)
 end
 
 """
@@ -159,33 +195,10 @@ function discretize(
     C̃, G = assemble_C_G_matrices(
         cellvalues,
         discretization.dof_handler,
-        discretization.constraint_handler,
         discretization.interpolation,
         𝒟.diffusion_factor,
     )
     K = 𝒟.κ^2 * C̃ + G
-    C̃⁻¹ = spdiagm(0 => 1 ./ diag(C̃))
-    f = spzeros(ndofs(discretization))
-    apply!(K, f, discretization.constraint_handler)
-    μ = spzeros(ndofs(discretization))
-    if length(discretization.constraint_handler.prescribed_dofs) > 0
-        μ = K \ Array(f)
-    end
-
-    #ch = discretization.constraint_handler
-    #if length(ch.prescribed_dofs) > 0
-        #K[ch.prescribed_dofs, :]
-        #for dof in ch.prescribed_dofs
-            #diag_val = K[dof, dof]
-            #K[dof, :] .= 0.
-            #K[dof, dof] = diag_val
-            #constraint_idx = ch.dofmapping[dof]
-            #inhomogeneity = ch.inhomogeneities[constraint_idx]
-            #f[dof] += diag_val * inhomogeneity
-        #end
-        #μ = K \ f
-        ##return ConstrainedGMRF(x, discretization.constraint_handler)
-    #end
 
     # Ratio to get user-specified variance
     ratio = 1.0
@@ -195,12 +208,16 @@ function discretize(
         ratio = σ²_natural / σ²_goal
     end
 
-    Q = matern_precision(C̃⁻¹, K, Integer(α(𝒟)), ratio)
+    μ, Q = matern_mean_precision(
+        C̃,
+        K,
+        Integer(α(𝒟)),
+        discretization.constraint_handler,
+        discretization.constraint_noise,
+        ratio,
+    )
 
     x = GMRF(μ, Q, solver_blueprint)
-    #if length(discretization.constraint_handler.prescribed_dofs) > 0
-        #return ConstrainedGMRF(x, discretization.constraint_handler)
-    #end
     return x
 end
 
@@ -231,13 +248,10 @@ function product_matern(
     x_s = discretize(matern_spatial, spatial_disc)
     Q_s = to_matrix(precision_map(x_s))
 
-    x_spatiotemporal = kronecker_product_spatiotemporal_model(
+    return kronecker_product_spatiotemporal_model(
         Q_t,
         Q_s,
         spatial_disc;
         solver_blueprint = solver_blueprint,
     )
-    if length(spatial_disc.constraint_handler.prescribed_dofs) > 0
-        return ConstrainedGMRF(x_spatiotemporal, spatial_disc.constraint_handler)
-    end
 end
