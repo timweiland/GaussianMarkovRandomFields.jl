@@ -11,7 +11,7 @@ differential equation.
 The state-space model is given by
 
 ```
-G(Δt) xₖ = M(Δt) xₖ + M(Δt) β(Δt) zₛ
+G(Δt) xₖ₊₁ = M(Δt) xₖ + M(Δt) β(Δt) zₛ
 ```
 
 where `zₛ` is (possibly colored) spatial noise. 
@@ -25,39 +25,36 @@ struct ImplicitEulerSSM
     β⁻¹::Function
     spatial_noise::AbstractGMRF
     ts::AbstractVector
+    constraint_handler::ConstraintHandler
+    constraint_noise::AbstractVector
 
-    function ImplicitEulerSSM(x₀, G, M, M⁻¹, β, β⁻¹, spatial_noise, ts::AbstractVector)
-        new(x₀, G, M, M⁻¹, β, β⁻¹, spatial_noise, ts::AbstractVector)
+    function ImplicitEulerSSM(x₀, G, M, M⁻¹, β, β⁻¹, spatial_noise, ts::AbstractVector, constraint_handler, constraint_noise)
+        new(x₀, G, M, M⁻¹, β, β⁻¹, spatial_noise, ts::AbstractVector, constraint_handler, constraint_noise)
     end
 end
 
 struct ImplicitEulerJointSSMMatrices <: JointSSMMatrices
     Δt::Real
-    AᵀF⁻¹A::AbstractMatrix
-    F⁻¹::AbstractMatrix
-    F⁻¹A::AbstractMatrix
-    AᵀF⁻¹_sqrt::AbstractMatrix
-    F⁻¹_sqrt::AbstractMatrix
+    G::AbstractMatrix
+    M::AbstractMatrix
+    Σ⁻¹::AbstractMatrix
+    Σ⁻¹_sqrt::AbstractMatrix
+    constraint_handler::ConstraintHandler
+    constraint_noise::AbstractVector
 
     function ImplicitEulerJointSSMMatrices(ssm::ImplicitEulerSSM, Δt::Real)
         G = sparse(ssm.G(Δt))
         M⁻¹ = sparse(ssm.M⁻¹(Δt))
+        M = sparse(ssm.M(Δt))
         β⁻¹ = ssm.β⁻¹(Δt)
-        # β⁻² = β⁻¹^2
         Q_s = precision_map(ssm.spatial_noise)
         Q_s_sqrt = to_matrix(linmap_sqrt(Q_s))
         Q_s = to_matrix(Q_s)
 
-        AᵀF⁻¹A = sparse(β⁻¹') * (Q_s * β⁻¹)
-        M⁻¹G = M⁻¹ * G
-        F⁻¹A = sparse(M⁻¹G') * AᵀF⁻¹A
-        F⁻¹ = F⁻¹A * M⁻¹G
+        Σ⁻¹ = M⁻¹' * β⁻¹' * Q_s * β⁻¹ * M⁻¹
+        Σ⁻¹_sqrt = M⁻¹' * β⁻¹' * Q_s_sqrt
 
-        #F⁻¹ = G' * β⁻¹M⁻¹' * Q_s * β⁻¹M⁻¹ * G
-        AᵀF⁻¹_sqrt = sparse(β⁻¹') * Q_s_sqrt
-        F⁻¹_sqrt = sparse((M⁻¹G)') * AᵀF⁻¹_sqrt
-
-        return new(Δt, AᵀF⁻¹A, F⁻¹, F⁻¹A, AᵀF⁻¹_sqrt, F⁻¹_sqrt)
+        return new(Δt, G, M, Σ⁻¹, Σ⁻¹_sqrt, ssm.constraint_handler, ssm.constraint_noise)
     end
 end
 

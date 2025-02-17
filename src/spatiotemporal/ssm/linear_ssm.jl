@@ -6,20 +6,21 @@ export joint_ssm, JointSSMMatrices
 abstract type JointSSMMatrices end;
 
 step(x::JointSSMMatrices) = x.Δt
-get_AᵀF⁻¹A(x::JointSSMMatrices) = x.AᵀF⁻¹A
-get_F⁻¹(x::JointSSMMatrices) = x.F⁻¹
-get_F⁻¹A(x::JointSSMMatrices) = x.F⁻¹A
-get_F⁻¹_sqrt(x::JointSSMMatrices) = x.F⁻¹_sqrt
-get_AᵀF⁻¹_sqrt(x::JointSSMMatrices) = x.AᵀF⁻¹_sqrt
+get_G(x::JointSSMMatrices) = x.G
+get_M(x::JointSSMMatrices) = x.M
+get_Σ⁻¹(x::JointSSMMatrices) = x.Σ⁻¹
+get_Σ⁻¹_sqrt(x::JointSSMMatrices) = x.Σ⁻¹_sqrt
+get_constraint_handler(x::JointSSMMatrices) = x.constraint_handler
+get_constraint_noise(x::JointSSMMatrices) = x.constraint_noise
 
 
 @doc raw"""
-    joint_ssm(x₀::GMRF, A, AᵀF⁻¹A_fn, F⁻¹_fn, F⁻¹A_fn, ts)
+    joint_ssm(x₀::GMRF, ssm_matrices::Function, ts::AbstractVector)
 
 Form the joint GMRF for the linear state-space model given by
 
 ```math
-x_{k+1} ∣ xₖ ∼ 𝒩(A(Δtₖ) xₖ, F)
+G(Δtₖ) x_{k+1} ∣ xₖ ∼ 𝒩(M(Δtₖ) xₖ, Σ)
 ```
 
 at time points given by `ts` (from which the Δtₖ are computed).
@@ -27,6 +28,7 @@ at time points given by `ts` (from which the Δtₖ are computed).
 joint_ssm(x₀::GMRF, ssm_matrices::Union{Function,JointSSMMatrices}, ts::AbstractVector) =
     error("joint_ssm not implemented for these argument types")
 
+"""
 function joint_ssm(x₀::GMRF, ssm_mats_fn::Function, ts::AbstractVector)
     Nₛ = size(x₀.precision, 1)
     diagonal_blocks = Array{LinearMap{Float64}}(undef, length(ts))
@@ -56,6 +58,7 @@ function joint_ssm(x₀::GMRF, ssm_mats_fn::Function, ts::AbstractVector)
         SymmetricBlockTridiagonalMap(Tuple(diagonal_blocks), Tuple(off_diagonal_blocks))
     return GMRF(vcat(means...), precision)
 end
+"""
 
 function joint_ssm(x₀::GMRF, ssm_mats_fn::Function, ts::AbstractRange)
     Δt = Float64(Base.step(ts))
@@ -64,11 +67,30 @@ function joint_ssm(x₀::GMRF, ssm_mats_fn::Function, ts::AbstractRange)
 end
 
 function joint_ssm(x₀::GMRF, ssm_mats::JointSSMMatrices, ts::AbstractRange)
-    AᵀF⁻¹A = get_AᵀF⁻¹A(ssm_mats)
-    F⁻¹ = get_F⁻¹(ssm_mats)
-    F⁻¹A = get_F⁻¹A(ssm_mats)
-    F⁻¹_sqrt = get_F⁻¹_sqrt(ssm_mats)
-    AᵀF⁻¹_sqrt = get_AᵀF⁻¹_sqrt(ssm_mats)
+    # A = G⁻¹M
+    G = get_G(ssm_mats)
+    G_cpy = copy(G)
+    M = get_M(ssm_mats)
+    Σ⁻¹ = get_Σ⁻¹(ssm_mats)
+    Σ⁻¹_sqrt = get_Σ⁻¹_sqrt(ssm_mats)
+    ch = get_constraint_handler(ssm_mats)
+    constraint_noise = get_constraint_noise(ssm_mats)
+
+    apply_soft_constraints!(ch, constraint_noise; K=G, Q_rhs=Σ⁻¹, Q_rhs_sqrt=Σ⁻¹_sqrt)
+
+    means = [mean(x₀)]
+    for i in 2:length(ts)
+        cur_mean = M * means[i-1]
+        apply_soft_constraints!(ch, constraint_noise; K=G_cpy, f_rhs=cur_mean, change_K=false)
+        push!(means, G \ cur_mean)
+    end
+
+    GᵀΣ⁻¹ = G' * Σ⁻¹
+    F⁻¹ = GᵀΣ⁻¹ * G
+    F⁻¹_sqrt = G' * Σ⁻¹_sqrt
+    AᵀF⁻¹A = M' * Σ⁻¹ * M
+    AᵀF⁻¹_sqrt = M' * Σ⁻¹_sqrt
+    F⁻¹A = GᵀΣ⁻¹ * M
 
     Nₜ = length(ts)
     M = F⁻¹ + AᵀF⁻¹A
@@ -76,8 +98,6 @@ function joint_ssm(x₀::GMRF, ssm_mats::JointSSMMatrices, ts::AbstractRange)
     off_diagonal_blocks = repeat([-F⁻¹A], Nₜ - 1)
     diagonal_blocks = Tuple(LinearMap(block) for block in diagonal_blocks)
     off_diagonal_blocks = Tuple(LinearMap(block) for block in off_diagonal_blocks)
-    means = repeat([spzeros(size(x₀))], Nₜ)
-    means[1] = mean(x₀)
 
     precision = SymmetricBlockTridiagonalMap(diagonal_blocks, off_diagonal_blocks)
     Q_s_sqrt = linmap_sqrt(precision_map(x₀))

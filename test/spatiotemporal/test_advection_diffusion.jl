@@ -5,12 +5,44 @@ using GMRFs
 using LinearAlgebra
 using SparseArrays
 
+function _get_periodic_constraint(grid)
+    cellidx_left, dofidx_left = collect(grid.facetsets["left"])[1]
+    cellidx_right, dofidx_right = collect(grid.facetsets["right"])[1]
+
+    temp_dh = DofHandler(grid)
+    add!(temp_dh, :u, Lagrange{RefLine,1}())
+    close!(temp_dh)
+    cc = CellCache(temp_dh)
+    get_dof(cell_idx, dof_idx) = (reinit!(cc, cell_idx); celldofs(cc)[dof_idx])
+    dof_left = get_dof(cellidx_left, dofidx_left)
+    dof_right = get_dof(cellidx_right, dofidx_right)
+
+    return AffineConstraint(dof_left, [dof_right => 1.0], 0.0)
+end
+
+function _get_dirichlet_constraint(grid::Ferrite.Grid{1}, left_val, right_val)
+    boundary = getfacetset(grid, "left") ∪ getfacetset(grid, "right")
+
+    return Ferrite.Dirichlet(
+        :u,
+        boundary,
+        x -> (x[1] ≈ -1.0) ? left_val : (x[1] ≈ 1.0) ? right_val : 0.0,
+    )
+end
+
 @testset "Advection-Diffusion Prior (streamline diffusion: $sd)" for sd ∈ [false, true]
     rng = MersenneTwister(364802394)
     grid = generate_grid(Line, (50,))
     ip = Lagrange{RefLine,1}()
     qr = QuadratureRule{RefLine}(2)
     disc = FEMDiscretization(grid, ip, qr)
+    disc_periodic = FEMDiscretization(
+        grid, ip, qr, [(:u, nothing)], [(_get_periodic_constraint(grid), 1e-4)]
+    )
+    disc_dirichlet = FEMDiscretization(
+        grid, ip, qr, [(:u, nothing)], [(_get_dirichlet_constraint(grid, 0.0, 0.0), 1e-4)]
+    )
+
 
     ts = 0:0.05:1
 
@@ -26,12 +58,13 @@ using SparseArrays
     γ_static = [0.0]
 
 
+
     spde_fast_right = AdvectionDiffusionSPDE{1}(
         κ = κ_fast,
         H = H_fast,
         γ = γ_right,
         τ = τ,
-        initial_spde = MaternSPDE{1}(κ = κₛ, smoothness = 2, diffusion_factor = H_fast),
+        initial_spde = MaternSPDE{1}(κ = κₛ, smoothness = 1, diffusion_factor = H_fast),
         spatial_spde = MaternSPDE{1}(κ = κₛ, smoothness = 1, diffusion_factor = H_fast),
     )
     spde_fast_left = AdvectionDiffusionSPDE{1}(
@@ -39,7 +72,7 @@ using SparseArrays
         H = H_fast,
         γ = γ_left,
         τ = τ,
-        initial_spde = MaternSPDE{1}(κ = κₛ, smoothness = 2, diffusion_factor = H_fast),
+        initial_spde = MaternSPDE{1}(κ = κₛ, smoothness = 1, diffusion_factor = H_fast),
         spatial_spde = MaternSPDE{1}(κ = κₛ, smoothness = 1, diffusion_factor = H_fast),
     )
     spde_fast_static = AdvectionDiffusionSPDE{1}(
@@ -102,5 +135,24 @@ using SparseArrays
         final_vals_fast = A_last * mean(x_cond_fast_static)
 
         @test maximum(final_vals_slow) > maximum(final_vals_fast)
+    end
+
+    @testset "Boundary conditions" begin
+        x_prior_fast_right_periodic = discretize(spde_fast_right, disc_periodic, ts; streamline_diffusion = sd)
+        x_cond_fast_right_periodic = condition_on_observations(x_prior_fast_right_periodic, A_ic, 1e8, ys)
+
+        x_prior_fast_right_dirichlet = discretize(spde_fast_right, disc_dirichlet, ts; streamline_diffusion = sd)
+        x_cond_fast_right_dirichlet = condition_on_observations(x_prior_fast_right_dirichlet, A_ic, 1e8, ys)
+
+        N_samples = 3
+        samples_periodic = [time_rands(x_cond_fast_right_periodic, rng) for _ in 1:N_samples]
+        samples_dirichlet = [time_rands(x_cond_fast_right_dirichlet, rng) for _ in 1:N_samples]
+        for samp_idx in 1:N_samples
+            for t in eachindex(ts)
+                @test samples_periodic[samp_idx][t][1] ≈ samples_periodic[samp_idx][t][end] atol = 1e-1
+                @test samples_dirichlet[samp_idx][t][1] ≈ 0.0 atol = 1e-1
+                @test samples_dirichlet[samp_idx][t][end] ≈ 0.0 atol = 1e-1
+            end
+        end
     end
 end

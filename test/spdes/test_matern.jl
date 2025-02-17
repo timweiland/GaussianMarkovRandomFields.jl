@@ -97,7 +97,6 @@ end
         disc_pbc = FEMDiscretization(grid, ip, qr, ((:u, nothing),), [(pbc, 1e-4)])
         disc_dbc = FEMDiscretization(grid, ip, qr, ((:u, nothing),), [(dbc, 1e-4)])
 
-        println("Testan this now")
         for smoothness ∈ [1, 3]
             spde = MaternSPDE{1}(range = 0.3, smoothness = smoothness, σ² = 0.3)
             x = discretize(spde, disc_pbc)

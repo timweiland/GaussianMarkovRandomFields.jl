@@ -162,10 +162,10 @@ function matern_mean_precision(
     end
 
     apply_soft_constraints!(
-        K,
-        f_rhs,
         ch,
-        constraint_noise,
+        constraint_noise;
+        K=K,
+        f_rhs=f_rhs,
         Q_rhs = Q_rhs,
         Q_rhs_sqrt = Q_rhs_sqrt,
     )

@@ -165,10 +165,6 @@ function discretize(
         apply!(S, zeros(Base.size(S, 2)), ch)
         propagation_mat += S
     end
-    for dof in ch.prescribed_dofs
-        M[dof, dof] = prescribed_noise # TODO
-        propagation_mat[dof, dof] = 0.0
-    end
     G_fn = dt -> LinearMap(M + (dt / spde.c) * propagation_mat)
     M⁻¹ = spdiagm(0 => 1 ./ diag(M))
 
@@ -177,20 +173,13 @@ function discretize(
     Nₛ = Base.size(propagation_mat, 2)
     total_ndofs = Nₛ * length(ts)
     mean_offset = fill(mean_offset, total_ndofs)
-    for dof in ch.prescribed_dofs
-        noise_mat[dof, dof] = prescribed_noise
-        st_dofs = dof:Nₛ:total_ndofs
-        mean_offset[st_dofs] .= 0.0
-    end
+
     inv_noise_mat = spdiagm(0 => 1 ./ diag(noise_mat))
     β = dt -> sqrt(dt) * noise_mat
     β⁻¹ = dt -> (1 / sqrt(dt)) * inv_noise_mat
-    # TODO
-    # β⁻¹ = dt -> sqrt(spde.c / (dt * τ^2))
-    # β = dt -> sqrt((dt * τ^2) / spde.c)
 
     ssm = ImplicitEulerSSM(
-        (x₀ isa ConstrainedGMRF) ? x₀.inner_gmrf : x₀,
+        x₀,
         G_fn,
         dt -> LinearMap(M),
         dt -> LinearMap(M⁻¹),
@@ -198,6 +187,8 @@ function discretize(
         β⁻¹,
         xₛ,
         ts,
+        discretization.constraint_handler,
+        discretization.constraint_noise,
     )
     X = joint_ssm(ssm)
     X = ImplicitEulerConstantMeshSTGMRF(
@@ -207,8 +198,5 @@ function discretize(
         ssm,
         solver_bp,
     )
-    if length(ch.prescribed_dofs) > 0
-        return ConstrainedGMRF(X, ch)
-    end
     return X
 end

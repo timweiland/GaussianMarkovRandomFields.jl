@@ -167,41 +167,52 @@ are modified in place as well.
                                                  matrix for the right-hand side.
 """
 function apply_soft_constraints!(
-    K::SparseMatrixCSC,
-    f_rhs::AbstractVector,
     ch::ConstraintHandler,
     constraint_noise::AbstractVector;
+    K::Union{Nothing, SparseMatrixCSC} = nothing,
+    change_K::Bool = true,
+    f_rhs::Union{Nothing, AbstractVector} = nothing,
     Q_rhs::Union{Nothing,SparseMatrixCSC} = nothing,
     Q_rhs_sqrt::Union{Nothing,SparseMatrixCSC} = nothing,
 )
+    if (f_rhs !== nothing) && (K === nothing)
+        throw(ArgumentError("K must be provided if f_rhs is provided"))
+    end
     for p_dof in ch.prescribed_dofs
         constraint_idx = ch.dofmapping[p_dof]
-        r = nzrange(K, p_dof)
-        K[p_dof, :] .= 0.0
-        dofcoeffs = ch.dofcoefficients[constraint_idx]
-        if dofcoeffs !== nothing
-            for (k, v) in dofcoeffs
-                K[p_dof, k] = -v
-                for j in r
-                    idx = K.rowval[j]
-                    #M[idx, idx] += noise * v
-                    if idx != p_dof
-                        K[idx, k] += v * K.nzval[j]
+        if (K !== nothing) && change_K
+            r = nzrange(K, p_dof)
+            K[p_dof, :] .= 0.0
+            dofcoeffs = ch.dofcoefficients[constraint_idx]
+            if dofcoeffs !== nothing
+                for (k, v) in dofcoeffs
+                    K[p_dof, k] = -v
+                    for j in r
+                        idx = K.rowval[j]
+                        #M[idx, idx] += noise * v
+                        if idx != p_dof
+                            K[idx, k] += v * K.nzval[j]
+                        end
                     end
                 end
             end
         end
-        inhomogeneity = ch.inhomogeneities[constraint_idx]
-        if inhomogeneity !== nothing
-            f_rhs[p_dof] = inhomogeneity
-            for j in r
-                f_rhs[K.rowval[j]] -= inhomogeneity * K.nzval[j]
+        if (f_rhs !== nothing) && (K !== nothing)
+            r = nzrange(K, p_dof)
+            inhomogeneity = ch.inhomogeneities[constraint_idx]
+            if inhomogeneity !== nothing
+                #f_rhs[p_dof] = inhomogeneity
+                for j in r
+                    f_rhs[K.rowval[j]] -= inhomogeneity * K.nzval[j]
+                end
+                f_rhs[p_dof] = inhomogeneity
             end
         end
-        K.nzval[r] .= 0.0
 
-        K[p_dof, p_dof] = 1.0
-
+        if (K !== nothing) && change_K
+            K.nzval[r] .= 0.0
+            K[p_dof, p_dof] = 1.0
+        end
         if Q_rhs !== nothing
             Q_rhs[p_dof, :] .= 0.0
             Q_rhs[:, p_dof] .= 0.0
