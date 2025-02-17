@@ -45,7 +45,7 @@ size(X_train, 1), size(X_test, 1)
 # efficient Gaussian inference through sparse precision matrices.
 # Can we combine the modelling power of GPs with the efficiency of GMRFs?
 #
-# Yes, we can: [1] told us how.
+# Yes, we can: [Lindgren2011](@cite) told us how.
 # It turns out that Matern processes may equivalently be interpreted as
 # solutions of certain stochastic partial differential equations (SPDEs).
 # If we discretize this SPDE appropriately -- for example using the finite

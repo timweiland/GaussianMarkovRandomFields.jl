@@ -1,6 +1,8 @@
-using Documenter, GMRFs
+using Documenter, GMRFs, DocumenterCitations
 
 include("generate_literate.jl")
+
+bib = CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"))
 
 makedocs(
     sitename = "GMRFs.jl",
@@ -13,5 +15,10 @@ makedocs(
         ],
         "Autoregressive Models"=>"topics/autoregressive.md",
         "Spatial Models"=>"topics/spatial.md",
+        "References"=>"references.md",
     ],
+    format = Documenter.HTML(
+        assets=String["assets/citations.css"],
+    ),
+    plugins=[bib],
 )

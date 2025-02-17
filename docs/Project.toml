@@ -2,6 +2,7 @@
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+DocumenterCitations = "daee34ce-89f3-4625-b898-19384cb65244"
 Ferrite = "c061ca5d-56c9-439f-9c0e-210fe06d3992"
 GMRFs = "d5f06795-35bb-4323-9f0b-405ef76cfc5b"
 Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
