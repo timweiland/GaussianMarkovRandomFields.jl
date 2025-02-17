@@ -79,9 +79,9 @@ function _plot_spde_gmrf_separate(
 
     eval_mat = evaluation_matrix(disc, [Tensors.Vec(x) for x in plot_points]; field = field)
 
-    means = full_mean(d)
+    means = mean(d)
     if compute_std
-        stds = full_std(d)
+        stds = std(d)
     else
         stds = spzeros(size(means))
     end
@@ -145,8 +145,6 @@ end
 ST_GMRF_1D = Union{
     ConstantMeshSTGMRF{1},
     LinearConditionalGMRF{<:ConstantMeshSTGMRF{1}},
-    ConstrainedGMRF{<:ConstantMeshSTGMRF{1}},
-    ConstrainedGMRF{<:LinearConditionalGMRF{<:ConstantMeshSTGMRF{1}}},
 }
 
 ### 1D ###

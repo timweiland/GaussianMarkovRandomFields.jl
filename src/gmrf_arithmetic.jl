@@ -60,26 +60,3 @@ function condition_on_observations(
     return LinearConditionalGMRF(x, A, Q_ϵ, y, b, solver_blueprint)
 end
 
-function condition_on_observations(
-    x::ConstrainedGMRF,
-    A::Union{AbstractMatrix,LinearMap},
-    Q_ϵ::Union{AbstractMatrix,LinearMap,Real},
-    y::AbstractVector = spzeros(Base.size(A)[1]),
-    b::AbstractVector = spzeros(Base.size(A)[1]);
-    solver_blueprint::AbstractSolverBlueprint = CholeskySolverBlueprint(),
-)
-    A_mat = to_matrix(A)
-    A_mat, y = constrainify_linear_system(A, y, x)
-    A = LinearMap(A_mat)
-    if Q_ϵ isa Real
-        Q_ϵ = LinearMaps.UniformScalingMap(Q_ϵ, Base.size(A)[1])
-    end
-    inner_gmrf = LinearConditionalGMRF(x.inner_gmrf, A, Q_ϵ, y, b, solver_blueprint)
-    return ConstrainedGMRF(
-        inner_gmrf,
-        x.prescribed_dofs,
-        x.free_dofs,
-        x.free_to_prescribed_mat,
-        x.free_to_prescribed_offset,
-    )
-end
