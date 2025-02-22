@@ -38,7 +38,7 @@ include("optim/stopping_criterion.jl")
 include("optim/gn_solvers.jl")
 include("optim/line_search.jl")
 include("optim/gauss_newton.jl")
-include("plot_utils.jl")
+include("plots/makie.jl")
 include("mesh_utils.jl")
 include("mesh/scattered.jl")
 

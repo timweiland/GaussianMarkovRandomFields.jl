@@ -57,7 +57,7 @@ x = discretize(matern_spde, disc)
 # the variance vanishes at the boundary:
 using CairoMakie
 CairoMakie.activate!()
-plot_spde_gmrf(x, disc)
+plot(x, disc)
 
 # ### Periodic boundary
 # We can also define a periodic boundary condition in terms of an affine
@@ -88,7 +88,7 @@ x_periodic = discretize(matern_spde, disc_periodic)
 
 # Verify for yourself that the values at the left and right boundary match
 # for all samples:
-plot_spde_gmrf(x_periodic, disc)
+plot(x_periodic, disc)
 
 # ## Spatiotemporal example: Advection-Diffusion SPDE
 # This works just as well in the spatiotemporal case.
@@ -119,19 +119,19 @@ x_adv_diff_periodic = condition_on_observations(
 )
 
 # First, check the initial observations:
-plot_spatiotemporal_gmrf_at_time(x_adv_diff_dirichlet, 1)
+plot(x_adv_diff_dirichlet, 1)
 
 # Now, let's see how the process evolves over time:
-plot_spatiotemporal_gmrf_at_time(x_adv_diff_dirichlet, N_t ÷ 2)
+plot(x_adv_diff_dirichlet, N_t ÷ 2)
 
 #
-plot_spatiotemporal_gmrf_at_time(x_adv_diff_dirichlet, N_t)
+plot(x_adv_diff_dirichlet, N_t)
 
 # Compare to this to the periodic case:
-plot_spatiotemporal_gmrf_at_time(x_adv_diff_periodic, N_t ÷ 2)
+plot(x_adv_diff_periodic, N_t ÷ 2)
 
 #
-plot_spatiotemporal_gmrf_at_time(x_adv_diff_periodic, N_t)
+plot(x_adv_diff_periodic, N_t)
 
 # ## Conclusion
 # We have seen how to specify more complex boundary conditions for GMRFs.

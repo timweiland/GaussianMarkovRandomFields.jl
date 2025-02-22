@@ -16,6 +16,7 @@ makedocs(
         ],
         "Autoregressive Models"=>"topics/autoregressive.md",
         "Spatial Models"=>"topics/spatial.md",
+        "Plotting"=>"topics/plotting.md",
         "References"=>"references.md",
     ],
     format = Documenter.HTML(

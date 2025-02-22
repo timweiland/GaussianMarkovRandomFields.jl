@@ -16,7 +16,6 @@ IterativeSolvers = "42fd0dbc-a981-5370-80f2-aaf504508153"
 LibGEOS = "a90b1aa1-3769-5649-ba7e-abc5a9d163eb"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 LinearMaps = "7a12625a-238d-50fd-b39a-03d52299707e"
-Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 Preconditioners = "af69fa37-3177-5a40-98ee-561f696e4fcd"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
@@ -26,6 +25,12 @@ SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 Tensors = "48a634ad-e948-5137-8d70-aa71f2a747f4"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
+
+[weakdeps]
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+
+[extensions]
+GMRFsMakie = "Makie"
 
 [compat]
 AMD = ">=0.5"
