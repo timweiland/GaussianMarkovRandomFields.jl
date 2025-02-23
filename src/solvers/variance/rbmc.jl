@@ -6,14 +6,15 @@ export RBMCStrategy, BlockRBMCStrategy, compute_variance
     RBMCStrategy(n_samples; rng)
 
 Rao-Blackwellized Monte Carlo estimator of a GMRF's marginal variances
-based on [1].
+based on [Siden2018](@cite).
 Particularly useful in large-scale regimes where Takahashi recursions may be
 too expensive.
 
-References:
-[1]  Sidén, Per, et al. "Efficient covariance approximations for large sparse
-precision matrices." Journal of Computational and Graphical Statistics 27.4
-(2018): 898-909.
+# Arguments
+- `n_samples::Int`: Number of samples to draw.
+
+# Keyword arguments
+- `rng::Random.AbstractRNG = Random.default_rng()`: Random number generator.
 """
 struct RBMCStrategy <: AbstractVarianceStrategy
     n_samples::Int
@@ -72,7 +73,7 @@ end
     BlockRBMCStrategy(n_samples; rng, enclosure_size)
 
 Block Rao-Blackwellized Monte Carlo estimator of a GMRF's marginal variances
-based on [1].
+based on [Siden2018](@cite).
 Achieves faster convergence than plain RBMC by considering blocks of nodes
 rather than individual nodes, thus integrating more information about the
 precision matrix.
@@ -82,10 +83,12 @@ increased compute.
 Thus, one should aim for a sweet spot between sampling costs and block operation
 costs.
 
-References:
-[1]  Sidén, Per, et al. "Efficient covariance approximations for large sparse
-precision matrices." Journal of Computational and Graphical Statistics 27.4
-(2018): 898-909.
+# Arguments
+- `n_samples::Int`: Number of samples to draw.
+
+# Keyword arguments
+- `rng::Random.AbstractRNG = Random.default_rng()`: Random number generator.
+- `enclosure_size::Int = 1`: Size of the blocks.
 """
 struct BlockRBMCStrategy <: AbstractVarianceStrategy
     n_samples::Int

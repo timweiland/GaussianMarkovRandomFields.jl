@@ -100,6 +100,19 @@ function compute_mean(s::LinearConditionalCholeskySolver)
     return s.computed_posterior_mean
 end
 
+"""
+    CholeskySolverBlueprint(; var_strategy = RBMCStrategy(100), perm = nothing)
+
+A blueprint for a direct solver that uses a sparse Cholesky decomposition
+computed through CHOLMOD.
+
+# Keyword arguments
+- `var_strategy::AbstractVarianceStrategy`: Strategy for computing the marginal
+   variances of the GMRF. Defaults to `RBMCStrategy(100)`.
+- `perm::Union{Nothing,Vector{Int}}`: Permutation / node reordering to use for
+    the Cholesky decomposition. Defaults to `nothing`, which means that the
+    solver will compute its own permutation.
+"""
 struct CholeskySolverBlueprint <: AbstractSolverBlueprint
     var_strategy::AbstractVarianceStrategy
     perm::Union{Nothing,Vector{Int}}

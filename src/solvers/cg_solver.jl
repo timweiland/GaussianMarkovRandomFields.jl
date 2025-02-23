@@ -149,6 +149,21 @@ function default_preconditioner_strategy(
     return temporal_block_gauss_seidel(Q, block_size)
 end
 
+"""
+    CGSolverBlueprint(; reltol, abstol, maxiter, preconditioner_strategy,
+                        var_strategy, mean_residual_guess)
+
+A blueprint for a conjugate gradient-based solver.
+
+# Keyword arguments
+- `reltol::Real = sqrt(eps(Float64))`: Relative tolerance of CG.
+- `abstol::Real = 0.0`: Absolute tolerance of CG.
+- `maxiter::Int = 1000`: Maximum number of iterations.
+- `preconditioner_strategy::Function`: Maps a GMRF instance to a preconditioner.
+- `var_strategy::AbstractVarianceStrategy`: A variance strategy.
+- `mean_residual_guess::Union{Nothing,AbstractVector}`: An initial guess for the
+                                                        mean residual.
+"""
 struct CGSolverBlueprint <: AbstractSolverBlueprint
     reltol::Real
     abstol::Real

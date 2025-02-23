@@ -2,6 +2,13 @@ using SparseArrays
 
 export TakahashiStrategy, compute_variance
 
+"""
+    TakahashiStrategy()
+
+Takahashi recursions [1] for computing the marginal variances of a GMRF.
+Highly accurate, but computationally expensive.
+Uses `SparseInverseSubset.jl`.
+"""
 struct TakahashiStrategy <: AbstractVarianceStrategy
     function TakahashiStrategy()
         new()
