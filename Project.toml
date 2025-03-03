@@ -27,12 +27,12 @@ Tensors = "48a634ad-e948-5137-8d70-aa71f2a747f4"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [weakdeps]
-Pardiso = "46dd5b70-b6fb-5a00-ae2d-e8fea33afaf2"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+Pardiso = "46dd5b70-b6fb-5a00-ae2d-e8fea33afaf2"
 
 [extensions]
-GMRFsPardiso = "Pardiso"
 GMRFsMakie = "Makie"
+GMRFsPardiso = "Pardiso"
 
 [compat]
 AMD = ">=0.5"
@@ -49,6 +49,7 @@ LibGEOS = ">=0.8"
 LinearAlgebra = "<0.0.1, 1"
 LinearMaps = ">=3.11"
 Makie = "0.19"
+Pardiso = "1"
 Preconditioners = ">=0.6"
 Random = "<0.0.1, 1"
 ReTest = "0.3"
