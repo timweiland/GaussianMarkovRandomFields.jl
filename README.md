@@ -20,7 +20,7 @@
 
 Gaussian Markov Random Fields (GMRFs) are Gaussian distributions with sparse
 precision (inverse covariance) matrices.
-`GMRFs.jl` provides utilities for working with GMRFs in Julia.
+GMRFs.jl provides utilities for working with GMRFs in Julia.
 The goal is to enable **flexible** and **efficient** Bayesian inference from
 GMRFs, powered by sparse linear algebra.
 
@@ -40,12 +40,12 @@ priors.
 ## Installation
 
 GMRFs.jl is not yet a registered Julia package.
-Until it is, you can install it locally.
+Until it is, you can install it from this GitHub repository.
 To do so:
 
 1. [Download Julia (>= version 1.10)](https://julialang.org/downloads/).
 
-2. Launch the Julia REPL and type `] add /path/to/GMRFs.jl`. 
+2. Launch the Julia REPL and type `] add https://github.com/timweiland/GMRFs.jl`. 
 
 ## Your first GMRF
 
@@ -89,4 +89,4 @@ Make sure to check the documentation for further examples!
 
 ## Contributing
 
-TODO
+Check our [contribution guidelines](./CONTRIBUTING.md).
