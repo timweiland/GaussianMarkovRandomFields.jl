@@ -40,7 +40,7 @@ include("optim/gn_solvers.jl")
 include("optim/line_search.jl")
 include("optim/gauss_newton.jl")
 include("plots/makie.jl")
-include("mesh_utils.jl")
+include("mesh/rectangle.jl")
 include("mesh/scattered.jl")
 
 end
