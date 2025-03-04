@@ -1,0 +1,5 @@
+include("preconditioner.jl")
+include("full_cholesky.jl")
+include("block_jacobi.jl")
+include("tridiag_block_gauss_seidel.jl")
+include("spatiotemporal_preconditioner.jl")

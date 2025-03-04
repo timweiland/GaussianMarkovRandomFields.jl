@@ -1,0 +1,7 @@
+include("fem/fem_discretization.jl")
+include("fem/fem_derivatives.jl")
+include("fem/utils.jl")
+include("spatiotemporal/spatiotemporal.jl")
+include("spde.jl")
+include("matern.jl")
+include("advection_diffusion.jl")

@@ -141,14 +141,6 @@ function default_preconditioner_strategy(::AbstractGMRF)
     return Identity()
 end
 
-function default_preconditioner_strategy(
-    x::Union{<:ConstantMeshSTGMRF,LinearConditionalGMRF{<:ConstantMeshSTGMRF}},
-)
-    block_size = N_spatial(x)
-    Q = sparse(to_matrix(precision_map(x)))
-    return temporal_block_gauss_seidel(Q, block_size)
-end
-
 """
     CGSolverBlueprint(; reltol, abstol, maxiter, preconditioner_strategy,
                         var_strategy, mean_residual_guess)

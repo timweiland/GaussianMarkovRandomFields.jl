@@ -94,3 +94,12 @@ time_rands(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}, rng::AbstractRNG) =
     make_chunks(rand(rng, x), N_t(x))
 discretization_at_time(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}, ::Int) =
     x.prior.discretization
+
+
+function default_preconditioner_strategy(
+    x::Union{<:ConstantMeshSTGMRF,LinearConditionalGMRF{<:ConstantMeshSTGMRF}},
+)
+    block_size = N_spatial(x)
+    Q = sparse(to_matrix(precision_map(x)))
+    return temporal_block_gauss_seidel(Q, block_size)
+end

@@ -1,3 +1,5 @@
+include("linear_conditional_gmrf.jl")
+
 using LinearAlgebra
 
 export condition_on_observations, joint_gmrf
