@@ -36,7 +36,43 @@ To do so:
 
 ## Your first GMRF
 
-TODO
+Let's construct a GMRF approximation to a Matern process on a square grid:
+
+``` julia
+using GMRFs
+
+# Define mesh via Ferrite.jl
+using Ferrite
+grid = generate_grid(Triangle, (50, 50))
+interpolation_fn = Lagrange{RefTriangle, 1}()
+quad_rule = QuadratureRule{RefTriangle}(2)
+disc = FEMDiscretization(grid, interpolation_fn, quad_rule)
+
+# Define SPDE and discretize to get a GMRF
+spde = MaternSPDE{2}(range = 0.3, smoothness = 1)
+x = discretize(spde, disc)
+```
+
+`x` is a Gaussian distribution, and we can compute all the things Gaussians are
+known for.
+
+```julia
+# Get interesting quantities
+using Distributions
+μ = mean(x)
+σ_marginal = std(x)
+samp = rand(x) # Sample
+Q_linmap = precision_map(x) # Linear map
+Q = to_matrix(Q_linmap) # Sparse matrix
+
+# Form posterior under point observations
+A = evaluation_matrix(disc, [Tensors.Vec(0.1, 0.0), Tensors.Vec(-0.3, 0.55)])
+noise_precision = 1e2 # Inverse of the noise variance
+y = [0.83, 0.12]
+x_cond = condition_on_observations(x, A, noise_precision, y) # Again a GMRF!
+```
+
+Make sure to check the documentation for further examples!
 
 ## Contributing
 
