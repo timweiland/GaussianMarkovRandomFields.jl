@@ -8,7 +8,6 @@ AMD = "14f7f29c-3bd6-536c-9a0b-7339e30b5a3e"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Ferrite = "c061ca5d-56c9-439f-9c0e-210fe06d3992"
 FerriteGmsh = "4f95f4f8-b27c-4ae5-9a39-ea55e634e36b"
-ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 GeoInterface = "cf35fbd7-0cd7-5166-be24-54bfbe79505f"
 GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
 Gmsh = "705231aa-382f-11e9-3f0c-b7cb4346fdeb"
@@ -19,20 +18,23 @@ LinearMaps = "7a12625a-238d-50fd-b39a-03d52299707e"
 Preconditioners = "af69fa37-3177-5a40-98ee-561f696e4fcd"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
-SparseDiffTools = "47a9eef4-7e08-11e9-0b38-333d64bd3804"
 SparseInverseSubset = "dc90abb0-5640-4711-901d-7e5b23a2fada"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
-Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 Tensors = "48a634ad-e948-5137-8d70-aa71f2a747f4"
-Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [weakdeps]
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 Pardiso = "46dd5b70-b6fb-5a00-ae2d-e8fea33afaf2"
+SparseDiffTools = "47a9eef4-7e08-11e9-0b38-333d64bd3804"
+Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
+Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [extensions]
+GMRFsAutoDiff = ["ForwardDiff", "Zygote"]
 GMRFsMakie = "Makie"
 GMRFsPardiso = "Pardiso"
+GMRFsSparseJacobian = ["Symbolics", "SparseDiffTools"]
 
 [compat]
 AMD = ">=0.5"
@@ -71,4 +73,4 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Aqua", "LinearAlgebra", "ReTest", "SparseArrays", "Test"]
+test = ["Aqua", "LinearAlgebra", "ReTest", "SparseArrays", "Test", "ForwardDiff", "Zygote"]

@@ -1,4 +1,4 @@
-using GMRFs, ForwardDiff
+using GMRFs, ForwardDiff, Zygote
 
 @testset "AD Jacobian" begin
     function f(x)
