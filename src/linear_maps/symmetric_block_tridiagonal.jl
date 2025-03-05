@@ -7,7 +7,10 @@ import Base: size
 export SymmetricBlockTridiagonalMap
 
 """
-    SymmetricBlockTridiagonalMap
+    SymmetricBlockTridiagonalMap(
+        diagonal_blocks::Tuple{LinearMap{T},Vararg{LinearMap{T},ND}},
+        off_diagonal_blocks::Tuple{LinearMap{T},Vararg{LinearMap{T},NOD}},
+    )
 
 A linear map representing a symmetric block tridiagonal matrix
 with diagonal blocks `diagonal_blocks` and lower off-diagonal blocks

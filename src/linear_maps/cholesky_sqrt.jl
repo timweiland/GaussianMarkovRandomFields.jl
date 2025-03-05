@@ -3,6 +3,16 @@ import LinearMaps: _unsafe_mul!
 
 export CholeskySqrt
 
+"""
+    CholeskySqrt{T}(cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}})
+
+A linear map representing the square root obtained from a Cholesky
+factorization, i.e. for `A = L * L'`, this map represents `L`.
+
+# Arguments
+- `cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}}`:
+    The Cholesky factorization of a symmetric positive definite matrix.
+"""
 struct CholeskySqrt{T} <: LinearMap{T}
     cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}}
     sqrt_map::Function

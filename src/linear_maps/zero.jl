@@ -2,6 +2,15 @@ using LinearMaps, SparseArrays
 
 export ZeroMap
 
+"""
+    ZeroMap{T}(N::Int, M::Int)
+
+A linear map that maps all vectors to the zero vector.
+
+# Arguments
+- `N::Int`: Output dimension
+- `M::Int`: Input dimension
+"""
 struct ZeroMap{T} <: LinearMaps.LinearMap{T}
     N::Int
     M::Int

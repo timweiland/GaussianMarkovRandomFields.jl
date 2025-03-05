@@ -3,17 +3,26 @@ using LinearMaps
 export SSMBidiagonalMap
 
 # TODO: Better naming for this?
-"""
-    SSMBidiagonalMap{T}(A, B, C, N_t)
+@doc raw"""
+    SSMBidiagonalMap{T}(
+        A::LinearMap{T},
+        B::LinearMap{T},
+        C::LinearMap{T},
+        N_t::Int,
+    )
 
 Represents the block-bidiagonal map given by the (N_t) x (N_t - 1) sized
 block structure:
 
-[ A   0  ... ...  0
-  B   C   0  ...  0
-  0   B   C  ...  0
- ... ... ... ... ...
-  0  ... ...  0   B],
+```math
+\begin{bmatrix}
+A & 0 & \cdots & 0 \\
+B & C & \cdots & 0 \\
+0 & B & C & 0 \\
+\vdots & \vdots & \ddots & \vdots \\
+0 & 0 & \cdots & B
+\end{bmatrix}
+```
 
 which occurs as a square root in the discretization of GMRF-based state-space
 models. `N_t` is the total number of blocks along the rows.

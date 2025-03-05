@@ -18,6 +18,7 @@ makedocs(
         "Spatial Models"=>"topics/spatial.md",
         "Plotting"=>"topics/plotting.md",
         "Solvers"=>"topics/solvers.md",
+        "Linear maps"=>"topics/linear_maps.md",
         "References"=>"references.md",
     ],
     format = Documenter.HTML(

@@ -3,10 +3,13 @@ import LinearAlgebra: issymmetric
 
 import Base: size
 
-export OuterProductMap, to_matrix
+export OuterProductMap
 
 """
-    OuterProductMap{T}(A, Q)
+    OuterProductMap{T}(
+        A::LinearMap{T},
+        Q::LinearMap{T},
+    )
 
 Represents the outer product A' Q A, without actually forming it in memory.
 """

@@ -2,6 +2,20 @@ export LinearMapWithSqrt
 import LinearMaps: _unsafe_mul!
 import LinearAlgebra: issymmetric
 
+"""
+    LinearMapWithSqrt{T}(
+        A::LinearMap{T},
+        A_sqrt::LinearMap{T},
+    )
+
+A symmetric positive definite linear map `A` with known square root `A_sqrt`,
+i.e. `A = A_sqrt * A_sqrt'`.
+Behaves just like `A`, but taking the square root directly returns `A_sqrt`.
+
+# Arguments
+- `A::LinearMap{T}`: The linear map `A`.
+- `A_sqrt::LinearMap{T}`: The square root of `A`.
+"""
 mutable struct LinearMapWithSqrt{T} <: LinearMaps.LinearMap{T}
     A::LinearMaps.LinearMap{T}
     A_sqrt::LinearMaps.LinearMap{T}
