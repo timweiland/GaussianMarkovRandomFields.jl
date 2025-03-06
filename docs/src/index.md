@@ -16,13 +16,15 @@ process priors.
 Furthermore, the expressive power of SPDEs allows for flexible, problem-tailored
 priors.
 
-To get started with GMRFs.jl, consider going through the Tutorials.
+To get started with GMRFs.jl, consider going through the [Tutorials](@ref).
 
 ## Installation
-GMRFs.jl can be installed from the Pkg REPL (press `]` in the Julia REPL):
+<!--
+GMRFs.jl can be installed from the Pkg REPL (press `]` in the Julia REPL): -->
+GMRFs.jl can be installed via its GitHub repo from the Pkg REPL:
 
 ```
-pkg> add GMRFs
+pkg> add https://github.com/timweiland/GMRFs.jl
 ```
 
 Afterwards, you may load the package using

@@ -35,7 +35,7 @@ y_train = zinc[train_idcs]
 y_test = zinc[test_idcs]
 size(X_train, 1), size(X_test, 1)
 
-# # Spatial Modelling
+# ## Spatial Modelling
 # Matern Gaussian processes (GPs) are a powerful model class commonly used in
 # geostatistics for such data.
 # Unfortunately, without using any further tricks, GPs have a cubic runtime

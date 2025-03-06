@@ -38,6 +38,7 @@ makedocs(
     ],
     format = Documenter.HTML(
         assets=String["assets/citations.css"],
+        collapselevel=1,
     ),
     plugins=[bib],
     modules=[GMRFs],

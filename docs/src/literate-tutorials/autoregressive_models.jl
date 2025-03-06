@@ -47,7 +47,7 @@
 # model first manually by computing the mean and precision, and then
 # automatically by simply specifying the parameters of the model.
 
-# # Building an AR(1) model
+# ## Building an AR(1) model
 # We begin by loading `GMRFs` and `LinearAlgebra`.
 using GMRFs, LinearAlgebra
 
