@@ -6,7 +6,7 @@ export AdvectionDiffusionSPDE, discretize
     AdvectionDiffusionSPDE{D}(κ::Real, α::Rational, H::AbstractMatrix,
     γ::AbstractVector, c::Real, τ::Real) where {D}
 
-Spatiotemporal advection-diffusion SPDE as proposed in [1]:
+Spatiotemporal advection-diffusion SPDE as proposed in [Clarotto2024](@cite):
 
 ```math
 \left[ \frac{∂}{∂t} + \frac{1}{c} \left( κ^2 - ∇ ⋅ H ∇ \right)^\alpha
@@ -14,9 +14,6 @@ Spatiotemporal advection-diffusion SPDE as proposed in [1]:
 ```
 
 where Z(t, s) is spatiotemporal noise which may be colored.
-
-[1] Clarotto, Lucia, et al. "The SPDE approach for spatio-temporal datasets with
-advection and diffusion." Spatial Statistics (2024): 100847.
 """
 struct AdvectionDiffusionSPDE{D} <: SPDE
     κ::Real

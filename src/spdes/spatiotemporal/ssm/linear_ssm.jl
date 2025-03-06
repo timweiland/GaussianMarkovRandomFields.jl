@@ -3,6 +3,25 @@ import Base: step
 
 export joint_ssm, JointSSMMatrices
 
+"""
+    JointSSMMatrices
+
+Abstract type for the matrices defining the transition of a certain linear
+state-space model of the form
+
+```math
+G(Δt) x_{k+1} ∣ xₖ ∼ 𝒩(M(Δt) xₖ, Σ)
+```
+
+# Fields
+- `Δt::Real`: Time step.
+- `G::LinearMap`: Transition matrix.
+- `M::LinearMap`: Observation matrix.
+- `Σ⁻¹::LinearMap`: Transition precision map.
+- `Σ⁻¹_sqrt::LinearMap`: Square root of the transition precision map.
+- `constraint_handler`: Ferrite constraint handler.
+- `constraint_noise`: Constraint noise.
+"""
 abstract type JointSSMMatrices end;
 
 step(x::JointSSMMatrices) = x.Δt

@@ -1,0 +1,10 @@
+# Preconditioners
+
+```@docs
+AbstractPreconditioner
+BlockJacobiPreconditioner
+FullCholeskyPreconditioner
+temporal_block_gauss_seidel
+TridiagonalBlockGaussSeidelPreconditioner
+TridiagSymmetricBlockGaussSeidelPreconditioner
+```

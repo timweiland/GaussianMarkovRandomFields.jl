@@ -32,6 +32,22 @@ function lump_matrix(A::AbstractMatrix, ::Lagrange)
 end
 
 
+"""
+    assemble_mass_matrix(
+        Ce::SparseMatrixCSC,
+        cellvalues::CellValues,
+        interpolation;
+        lumping = true,
+    )
+
+Assemble the mass matrix `Ce` for the given cell values.
+
+# Arguments
+- `Ce::SparseMatrixCSC`: The mass matrix.
+- `cellvalues::CellValues`: Ferrite cell values.
+- `interpolation::Interpolation`: The interpolation scheme.
+- `lumping::Bool=true`: Whether to lump the mass matrix.
+"""
 function assemble_mass_matrix(
     Ce::SparseMatrixCSC,
     cellvalues::CellValues,
@@ -62,6 +78,20 @@ function assemble_mass_matrix(
     return Ce
 end
 
+"""
+    assemble_diffusion_matrix(
+        Ge::SparseMatrixCSC,
+        cellvalues::CellValues;
+        diffusion_factor = I,
+    )
+
+Assemble the diffusion matrix `Ge` for the given cell values.
+
+# Arguments
+- `Ge::SparseMatrixCSC`: The diffusion matrix.
+- `cellvalues::CellValues`: Ferrite cell values.
+- `diffusion_factor=I`: The diffusion factor.
+"""
 function assemble_diffusion_matrix(
     Ge::SparseMatrixCSC,
     cellvalues::CellValues;
@@ -88,6 +118,20 @@ function assemble_diffusion_matrix(
     return Ge
 end
 
+"""
+    assemble_advection_matrix(
+        Be::SparseMatrixCSC,
+        cellvalues::CellValues;
+        advection_velocity = 1,
+    )
+
+Assemble the advection matrix `Be` for the given cell values.
+
+# Arguments
+- `Be::SparseMatrixCSC`: The advection matrix.
+- `cellvalues::CellValues`: Ferrite cell values.
+- `advection_velocity=1`: The advection velocity.
+"""
 function assemble_advection_matrix(
     Be::SparseMatrixCSC,
     cellvalues::CellValues;
@@ -114,6 +158,22 @@ function assemble_advection_matrix(
     return Be
 end
 
+"""
+    assemble_streamline_diffusion_matrix(
+        Ge::SparseMatrixCSC,
+        cellvalues::CellValues,
+        advection_velocity,
+        h,
+    )
+
+Assemble the streamline diffusion matrix `Ge` for the given cell values.
+
+# Arguments
+- `Ge::SparseMatrixCSC`: The streamline diffusion matrix.
+- `cellvalues::CellValues`: Ferrite cell values.
+- `advection_velocity`: The advection velocity.
+- `h`: The mesh size.
+"""
 function assemble_streamline_diffusion_matrix(
     Ge::SparseMatrixCSC,
     cellvalues::CellValues,

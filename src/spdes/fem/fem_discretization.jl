@@ -4,10 +4,29 @@ import Ferrite: ndofs
 export FEMDiscretization, ndim, evaluation_matrix, node_selection_matrix
 
 """
-    FEMDiscretization(grid, interpolation, quadrature_rule)
+    FEMDiscretization(
+        grid::Ferrite.Grid,
+        interpolation::Ferrite.Interpolation,
+        quadrature_rule::Ferrite.QuadratureRule,
+        fields = ((:u, nothing),),
+        boundary_conditions = (),
+    )
 
 A struct that contains all the information needed to discretize
-a (S)PDE using the Finite Element Method.
+an (S)PDE using the Finite Element Method.
+
+# Arguments
+- `grid::Ferrite.Grid`: The grid on which the discretization is defined.
+- `interpolation::Ferrite.Interpolation`: The interpolation scheme, i.e. the
+                                          type of FEM elements.
+- `quadrature_rule::Ferrite.QuadratureRule`: The quadrature rule.
+- `fields::Vector{Tuple{Symbol, Union{Nothing, Ferrite.Interpolation}}}`:
+        The fields to be discretized. Each tuple contains the field name and
+        the geometric interpolation scheme. If the interpolation scheme is
+        `nothing`, `interpolation` is used for geometric interpolation.
+- `boundary_conditions::Vector{Tuple{Ferrite.BoundaryCondition, Float64}}`:
+        The (soft) boundary conditions. Each tuple contains the boundary
+        condition and the noise standard deviation.
 """
 struct FEMDiscretization{
     D,

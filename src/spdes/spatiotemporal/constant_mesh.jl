@@ -14,12 +14,17 @@ export ConstantMeshSTGMRF, ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMesh
 
 A spatiotemporal GMRF with constant spatial discretization.
 """
-
 abstract type ConstantMeshSTGMRF{D,T} <: AbstractSpatiotemporalGMRF end
 
 precision_map(x::ConstantMeshSTGMRF) = x.precision
 mean(x::ConstantMeshSTGMRF) = x.mean
 
+"""
+    ImplicitEulerConstantMeshSTGMRF
+
+A spatiotemporal GMRF with constant spatial discretization and an implicit Euler
+discretization of the temporal dynamics.
+"""
 struct ImplicitEulerConstantMeshSTGMRF{D,T} <: ConstantMeshSTGMRF{D,T}
     mean::AbstractVector{T}
     precision::LinearMap{T}
@@ -46,6 +51,12 @@ struct ImplicitEulerConstantMeshSTGMRF{D,T} <: ConstantMeshSTGMRF{D,T}
     end
 end
 
+"""
+    ConcreteConstantMeshSTGMRF
+
+A concrete implementation of a spatiotemporal GMRF with constant spatial
+discretization.
+"""
 struct ConcreteConstantMeshSTGMRF{D,T} <: ConstantMeshSTGMRF{D,T}
     mean::AbstractVector{T}
     precision::LinearMap{T}

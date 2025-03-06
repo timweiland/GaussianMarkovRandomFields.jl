@@ -3,6 +3,16 @@ import Base: \, size
 
 export AbstractPreconditioner
 
+@doc raw"""
+    AbstractPreconditioner
+
+Abstract type for preconditioners.
+Should implement the following methods:
+- ldiv!(y, P::AbstractPreconditioner, x::AbstractVector)
+- ldiv!(P::AbstractPreconditioner, x::AbstractVector)
+- \\(P::AbstractPreconditioner, x::AbstractVector)
+- size(P::AbstractPreconditioner)
+"""
 abstract type AbstractPreconditioner{T} end;
 
 ldiv!(y, ::AbstractPreconditioner, x::AbstractVector) =

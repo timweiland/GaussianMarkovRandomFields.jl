@@ -6,6 +6,28 @@ export LinearConditionalGMRF
 ensure_linearmap(A::AbstractMatrix) = LinearMap(A)
 ensure_linearmap(A::LinearMap) = A
 
+"""
+    LinearConditionalGMRF{G}(
+        prior::G,
+        A::Union{AbstractMatrix,LinearMap},
+        Q_ϵ::Union{AbstractMatrix,LinearMap},
+        y::AbstractVector,
+        b::AbstractVector=spzeros(size(A, 1)),
+        solver_blueprint::AbstractSolverBlueprint=DefaultSolverBlueprint(),
+    ) where {G<:AbstractGMRF}
+
+A GMRF conditioned on observations `y = A * x + b + ϵ` where `ϵ ~ N(0, Q_ϵ)`.
+
+# Arguments
+- `prior::G`: The prior GMRF.
+- `A::Union{AbstractMatrix,LinearMap}`: The matrix `A`.
+- `Q_ϵ::Union{AbstractMatrix,LinearMap}`: The precision matrix of the
+                                          noise term `ϵ`.
+- `y::AbstractVector=spzeros(size(A, 1))`: The observations `y`.
+- `b::AbstractVector=spzeros(size(A, 1))`: The offset vector `b`.
+- `solver_blueprint::AbstractSolverBlueprint=DefaultSolverBlueprint()`:
+        The solver blueprint.
+"""
 struct LinearConditionalGMRF{G<:AbstractGMRF} <: AbstractGMRF
     prior::G
     precision::LinearMap

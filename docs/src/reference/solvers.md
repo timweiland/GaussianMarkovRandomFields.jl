@@ -9,7 +9,9 @@ still allowing power users to customize the behavior of the solvers.
 Read further to learn about the available solvers and how to use them.
 
 If you don't have time for the details and you're just looking for a
-recommendation, skip to [Choosing a solver](#choosing-a-solver).
+recommendation, skip to [Choosing a solver](#Choosing-a-solver).
+
+If you're interested in the interface of solvers, skip to [Solver interface](#Solver-interface).
 
 ## Cholesky (CHOLMOD)
 [CHOLMOD](https://github.com/DrTimothyAldenDavis/SuiteSparse) is a
@@ -75,6 +77,10 @@ The default solver uses the `CholeskySolver` for small to medium-sized GMRFs
 and switches to the `CGSolver` for large GRMFs. 
 Similarly, the default variance strategy is `TakahashiStrategy` for small to 
 medium-sized GMRFs and `RBMCStrategy` for large GMRFs.
+See:
+```@docs
+DefaultSolverBlueprint
+```
 
 Indeed, this matches our general recommendations:
 Direct solvers combined with the Takahashi recursions are highly accurate and
@@ -87,3 +93,14 @@ If you have access to both strong parallel computing resources and a Pardiso
 license, we recommend the use of the `PardisoGMRFSolver`.
 In particular, Pardiso's Takahashi recursions are highly optimized and much
 faster than the implementation used for our `TakahashiStrategy`.
+
+## Solver interface
+```@docs
+AbstractSolver
+AbstractSolverBlueprint
+AbstractVarianceStrategy
+gmrf_precision
+compute_mean
+compute_variance
+compute_rand!
+```

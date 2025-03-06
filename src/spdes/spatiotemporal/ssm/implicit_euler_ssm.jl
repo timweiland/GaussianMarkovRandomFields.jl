@@ -1,9 +1,20 @@
 using SparseArrays
 
-export ImplicitEulerSSM, ImplicitEulerJointSSMMatrices, joint_ssm
+export ImplicitEulerSSM, ImplicitEulerJointSSMMatrices
 
 """
-    ImplicitEulerSSM(x₀, G, A, E, spatial_noise)
+    ImplicitEulerSSM(
+        x₀::AbstractGMRF,
+        G::Function,
+        M::Function,
+        M⁻¹::Function,
+        β::Function,
+        β⁻¹::Function,
+        spatial_noise::AbstractGMRF,
+        ts::AbstractVector,
+        constraint_handler::ConstraintHandler,
+        constraint_noise::AbstractVector,
+    )
 
 State-space model for the implicit Euler discretization of a stochastic
 differential equation.
@@ -33,6 +44,19 @@ struct ImplicitEulerSSM
     end
 end
 
+"""
+    ImplicitEulerJointSSMMatrices(
+        ssm::ImplicitEulerSSM,
+        Δt::Real
+    )
+
+Construct the joint state-space model matrices for the implicit Euler
+discretization scheme.
+
+# Arguments
+- `ssm::ImplicitEulerSSM`: The implicit Euler state-space model.
+- `Δt::Real`: The time step.
+"""
 struct ImplicitEulerJointSSMMatrices <: JointSSMMatrices
     Δt::Real
     G::AbstractMatrix

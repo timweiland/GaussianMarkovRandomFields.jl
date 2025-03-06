@@ -2,12 +2,7 @@ using Tensors, Ferrite, SparseArrays
 using Tensors: ⊗
 
 export derivative_matrices,
-    second_derivative_matrices,
-    geom_jacobian,
-    shape_gradient_global,
-    shape_gradient_local,
-    shape_hessian_global,
-    shape_hessian_local
+    second_derivative_matrices
 
 """
     shape_gradient_local(f::FEMDiscretization, shape_idx::Int, ξ)

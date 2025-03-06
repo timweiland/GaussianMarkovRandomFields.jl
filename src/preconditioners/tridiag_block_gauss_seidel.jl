@@ -4,27 +4,35 @@ import Base: \, size, show
 export TridiagonalBlockGaussSeidelPreconditioner,
     TridiagSymmetricBlockGaussSeidelPreconditioner
 
-"""
+@doc raw"""
     TridiagonalBlockGaussSeidelPreconditioner{T}(D_blocks, L_blocks)
     TridiagonalBlockGaussSeidelPreconditioner{T}(D⁻¹_blocks, L_blocks)
 
 Block Gauss-Seidel preconditioner for block tridiagonal matrices.
 For a matrix given by
-A = [
- D₁  L₁ᵀ  0  ... ...   0
- L₁  D₂  L₂ᵀ  0  ...   0
-  0  L₂  D₃  L₃ᵀ ...  ...
- ... ... ... ... ...  ...
-  0  ... ... ... Lₙ₋₁ Lₙ
- ],
+
+```math
+A = \begin{bmatrix}
+D₁ & L₁ᵀ & 0 & \cdots & 0 \\
+L₁ & D₂ & L₂ᵀ & 0 & \cdots \\
+0 & L₂ & D₃ & L₃ᵀ & \cdots \\
+\vdots & \vdots & \vdots & \ddots & \vdots \\
+0 & \cdots & 0 & Lₙ₋₁ & Lₙ
+\end{bmatrix}
+```
+
 this preconditioner is given by
-P = [
- D₁  0   ... ...   0
- L₁  D₂   0  ...  ...
-  0  L₂  D₃   0   ...
- ... ... ... ...  ...
-  0  ... ... Lₙ₋₁ Lₙ
-] ≈ A.
+
+```math
+P = \begin{bmatrix}
+D₁ & 0 & \cdots & 0 \\
+L₁ & D₂ & 0 & \cdots \\
+0 & L₂ & D₃ & \cdots \\
+\vdots & \vdots & \vdots & \ddots & \vdots \\
+0 & \cdots & 0 & Lₙ₋₁ & Dₙ
+\end{bmatrix}
+```
+
 Solving linear systems with the preconditioner is made efficient through block
 forward / backward substitution.
 The diagonal blocks must be inverted. As such, they may be specified

@@ -89,12 +89,7 @@ end
     matern_precision(C_inv::AbstractMatrix, K::AbstractMatrix, α::Integer)
 
 Compute the precision matrix of a GMRF discretization of a Matérn SPDE.
-Implements the recursion described in [1].
-
-[1] Lindgren, F., Rue, H. and Lindström, J. (2011), An explicit link between
-Gaussian fields and Gaussian Markov random fields: the stochastic partial differential
-equation approach. Journal of the Royal Statistical Society: Series B
-(Statistical Methodology), 73: 423-498.
+Implements the recursion described in [Lindgren2011](@cite).
 
 # Arguments
 - `C_inv::AbstractMatrix`: The inverse of the (possibly lumped) mass matrix.

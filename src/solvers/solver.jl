@@ -1,11 +1,11 @@
 using Random
 
-export gmrf_precision, compute_mean, compute_variance, compute_rand!, construct_solver
+export gmrf_precision, compute_mean, compute_variance, compute_rand!
 
 """
     gmrf_precision(s::AbstractSolver)
 
-Return the precision matrix of the GMRF associated with a solver.
+Return the precision map of the GMRF associated with a solver.
 """
 gmrf_precision(s::AbstractSolver) = s.precision
 

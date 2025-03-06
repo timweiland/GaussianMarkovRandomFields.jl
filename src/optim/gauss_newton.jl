@@ -1,6 +1,6 @@
 using LinearAlgebra, Preconditioners
 
-export GaussNewtonOptimizer, optimize
+export GaussNewtonOptimizer, take_step, optimize
 
 """
     GaussNewtonOptimizer
@@ -108,7 +108,12 @@ function ∇obj_fn(
 end
 
 
-function step(optim::GaussNewtonOptimizer)
+"""
+    take_step(optim::GaussNewtonOptimizer)
+
+Take a Gauss-Newton step in the optimization process.
+"""
+function take_step(optim::GaussNewtonOptimizer)
     p = _compute_direction(optim, optim.solver_bp)
     optim.newton_decrement = -dot(optim.∇objₖ, p)
     optim.xₖ =
@@ -155,13 +160,13 @@ function _compute_direction(optim::GaussNewtonOptimizer, solver_bp::GNCGSolverBl
 end
 
 """
-    optimize(optim)
+    optimize(optim::GaussNewtonOptimizer)
 
 Iterate until the stopping criterion is fulfilled.
 """
 function optimize(optim::GaussNewtonOptimizer)
     while !_should_stop(optim, optim.stopping_criterion)
-        step(optim)
+        take_step(optim)
     end
 end
 
