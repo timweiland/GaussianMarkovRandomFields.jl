@@ -23,15 +23,15 @@ spatial precision matrices.
         The solver blueprint.
 """
 function kronecker_product_spatiotemporal_model(
-    Q_t::AbstractMatrix,
-    Q_s::AbstractMatrix,
+    Q_t::LinearMap,
+    Q_s::LinearMap,
     spatial_disc::FEMDiscretization;
     solver_blueprint = DefaultSolverBlueprint(),
 )
-    Q = kron(Q_t, Q_s)
+    Q_st = kron(Q_t, Q_s)
     return ConcreteConstantMeshSTGMRF(
-        zeros(Base.size(Q, 1)),
-        LinearMap(Q),
+        zeros(Base.size(Q_st, 1)),
+        Q_st,
         spatial_disc,
         solver_blueprint,
     )

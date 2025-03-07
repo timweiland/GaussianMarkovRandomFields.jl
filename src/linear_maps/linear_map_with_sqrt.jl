@@ -1,6 +1,7 @@
 export LinearMapWithSqrt
 import LinearMaps: _unsafe_mul!
 import LinearAlgebra: issymmetric
+import Base: kron
 
 """
     LinearMapWithSqrt{T}(
@@ -57,4 +58,14 @@ end
 
 function linmap_sqrt(L::LinearMapWithSqrt)
     return L.A_sqrt
+end
+
+function Base.kron(
+    A::LinearMapWithSqrt,
+    B::LinearMapWithSqrt,
+)
+    return LinearMapWithSqrt(
+        Base.kron(A.A, B.A),
+        Base.kron(A.A_sqrt, B.A_sqrt),
+    )
 end
