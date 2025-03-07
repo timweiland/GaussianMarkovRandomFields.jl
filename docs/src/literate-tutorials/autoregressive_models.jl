@@ -169,4 +169,4 @@ plot!()
 # turns out that popular Gaussian processes can be approximated quite nicely
 # through GMRFs, allowing us to do the modelling in terms of a GP and the
 # computations in terms of a GMRF. To learn more about this approach, check the
-# tutorial on Spatial Modelling with SPDEs.
+# tutorial on [Spatial Modelling with SPDEs](@ref).

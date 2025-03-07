@@ -13,6 +13,7 @@ makedocs(
             "Overview" => "tutorials/index.md",
             "tutorials/autoregressive_models.md",
             "tutorials/spatial_modelling_spdes.md",
+            "tutorials/spatiotemporal_modelling.md",
             "tutorials/boundary_conditions.md",
         ],
         "API Reference"=>[
