@@ -20,7 +20,7 @@ using GMRFs
 using Ferrite
 
 grid = generate_grid(Line, (Nₓ - 1,), Tensors.Vec(x_left), Tensors.Vec(x_right))
-interpolation = Lagrange{RefLine, 1}()
+interpolation = Lagrange{RefLine,1}()
 quadrature_rule = QuadratureRule{RefLine}(2)
 disc = FEMDiscretization(grid, interpolation, quadrature_rule)
 
@@ -50,9 +50,7 @@ using LinearAlgebra, SparseArrays
 Q_noise = sparse(I, N_obs_all, N_obs_all) * noise_precision_initial
 Q_noise[end, end] = noise_precision_later
 
-x_st_kron_posterior = condition_on_observations(
-    x_st_kron, A_all, Q_noise, ys_all
-)
+x_st_kron_posterior = condition_on_observations(x_st_kron, A_all, Q_noise, ys_all)
 
 using CairoMakie
 CairoMakie.activate!()
@@ -65,16 +63,17 @@ plot(x_st_kron_posterior, 2 * Nₜ ÷ 3)
 plot(x_st_kron_posterior, Nₜ)
 
 adv_diff_spde = AdvectionDiffusionSPDE{1}(
-    γ = [-0.6], H = 0.1 * sparse(I, (1, 1)), τ=0.1, α = 2//1,
+    γ = [-0.6],
+    H = 0.1 * sparse(I, (1, 1)),
+    τ = 0.1,
+    α = 2 // 1,
     spatial_spde = spde_space,
-    initial_spde = spde_space
+    initial_spde = spde_space,
 )
 
 x_adv_diff = discretize(adv_diff_spde, disc, ts)
 
-x_adv_diff_posterior = condition_on_observations(
-    x_adv_diff, A_all, Q_noise, ys_all
-)
+x_adv_diff_posterior = condition_on_observations(x_adv_diff, A_all, Q_noise, ys_all)
 
 plot(x_adv_diff_posterior, t_initial_idx)
 

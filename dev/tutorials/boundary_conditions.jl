@@ -1,6 +1,6 @@
 using GMRFs, Ferrite
 grid = generate_grid(Line, (50,))
-interpolation = Lagrange{RefLine, 1}()
+interpolation = Lagrange{RefLine,1}()
 quadrature_rule = QuadratureRule{RefLine}(2)
 
 function get_dirichlet_constraint(grid::Ferrite.Grid{1})
@@ -13,9 +13,7 @@ dbc = get_dirichlet_constraint(grid)
 
 bcs = [(dbc, 1e-4)] # 1e-4 is the noise in terms of the standard deviation
 
-disc = FEMDiscretization(
-    grid, interpolation, quadrature_rule, [(:u, nothing)], bcs
-)
+disc = FEMDiscretization(grid, interpolation, quadrature_rule, [(:u, nothing)], bcs)
 
 matern_spde = MaternSPDE{1}(range = 0.5, smoothness = 1, σ² = 0.3)
 x = discretize(matern_spde, disc)
@@ -42,18 +40,20 @@ end
 pbc = get_periodic_constraint(grid)
 
 bcs = [(pbc, 1e-4)]
-disc_periodic = FEMDiscretization(
-    grid, interpolation, quadrature_rule, [(:u, nothing)], bcs
-)
+disc_periodic =
+    FEMDiscretization(grid, interpolation, quadrature_rule, [(:u, nothing)], bcs)
 x_periodic = discretize(matern_spde, disc_periodic)
 
 plot(x_periodic, disc)
 
 using LinearAlgebra, SparseArrays
 spde = AdvectionDiffusionSPDE{1}(
-    γ = [-0.6], H = 0.1 * sparse(I, (1, 1)), τ=0.1, α = 2//1,
+    γ = [-0.6],
+    H = 0.1 * sparse(I, (1, 1)),
+    τ = 0.1,
+    α = 2 // 1,
     spatial_spde = matern_spde,
-    initial_spde = matern_spde
+    initial_spde = matern_spde,
 )
 ts = 0:0.05:1
 N_t = length(ts)
@@ -65,12 +65,8 @@ ys_ic = exp.(-xs_ic .^ 2 / 0.2^2)
 A_ic = evaluation_matrix(disc, [Tensors.Vec(x) for x in xs_ic])
 A_ic = spatial_to_spatiotemporal(A_ic, 1, N_t)
 
-x_adv_diff_dirichlet = condition_on_observations(
-    x_adv_diff_dirichlet, A_ic, 1e8, ys_ic
-)
-x_adv_diff_periodic = condition_on_observations(
-    x_adv_diff_periodic, A_ic, 1e8, ys_ic
-)
+x_adv_diff_dirichlet = condition_on_observations(x_adv_diff_dirichlet, A_ic, 1e8, ys_ic)
+x_adv_diff_periodic = condition_on_observations(x_adv_diff_periodic, A_ic, 1e8, ys_ic)
 
 plot(x_adv_diff_dirichlet, 1)
 
