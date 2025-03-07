@@ -67,11 +67,9 @@ mutable struct PardisoGMRFSolver <: AbstractPardisoGMRFSolver
     Q_tril::SparseMatrixCSC
     computed_var::Union{Nothing,AbstractVector}
 
-    function PardisoGMRFSolver(
-        gmrf::AbstractGMRF,
-    )
+    function PardisoGMRFSolver(gmrf::AbstractGMRF)
         ps = PardisoSolver()
-        Pardiso.set_matrixtype!(ps,Pardiso.REAL_SYM_INDEF)
+        Pardiso.set_matrixtype!(ps, Pardiso.REAL_SYM_INDEF)
         Pardiso.ccall_pardisoinit(ps)
         ps.msglvl = Pardiso.MESSAGE_LEVEL_ON
 
@@ -92,11 +90,9 @@ mutable struct LinearConditionalPardisoGMRFSolver <: AbstractPardisoGMRFSolver
     computed_posterior_mean::Union{Nothing,AbstractVector}
     computed_var::Union{Nothing,AbstractVector}
 
-    function LinearConditionalPardisoGMRFSolver(
-        gmrf::LinearConditionalGMRF,
-    )
+    function LinearConditionalPardisoGMRFSolver(gmrf::LinearConditionalGMRF)
         ps = PardisoSolver()
-        Pardiso.set_matrixtype!(ps,Pardiso.REAL_SYM_INDEF)
+        Pardiso.set_matrixtype!(ps, Pardiso.REAL_SYM_INDEF)
         Pardiso.ccall_pardisoinit(ps)
         ps.msglvl = Pardiso.MESSAGE_LEVEL_ON
 

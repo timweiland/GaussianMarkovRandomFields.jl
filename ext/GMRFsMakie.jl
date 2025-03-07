@@ -42,8 +42,8 @@ end
 
 
 function Makie.plot!(
-    gmrf_fem_plot::GMRF_FEM_1D_Plot{<:Tuple{<:AbstractGMRF, <:FEMDiscretization{1}}},
-    )
+    gmrf_fem_plot::GMRF_FEM_1D_Plot{<:Tuple{<:AbstractGMRF,<:FEMDiscretization{1}}},
+)
     gmrf = gmrf_fem_plot[1]
     disc = gmrf_fem_plot[2]
 
@@ -61,7 +61,11 @@ function Makie.plot!(
         bounds = (minimum(node_coords), maximum(node_coords))
         plot_points[] = range(bounds[1], bounds[2], length = 10 * length(node_coords))
 
-        eval_mat = evaluation_matrix(disc, [Tensors.Vec(x) for x in plot_points[]]; field = gmrf_fem_plot.field[])
+        eval_mat = evaluation_matrix(
+            disc,
+            [Tensors.Vec(x) for x in plot_points[]];
+            field = gmrf_fem_plot.field[],
+        )
 
         means[] = eval_mat * mean(gmrf)
         if gmrf_fem_plot.with_std[]
@@ -80,7 +84,12 @@ function Makie.plot!(
     update_plot(gmrf[], disc[])
 
     _plot_1d_gaussian!(
-        gmrf_fem_plot, plot_points, means, lower, upper, samples,
+        gmrf_fem_plot,
+        plot_points,
+        means,
+        lower,
+        upper,
+        samples,
         mean_color = gmrf_fem_plot.mean_color[],
         conf_band_color = gmrf_fem_plot.conf_band_color[],
         sample_color = gmrf_fem_plot.sample_color[],
@@ -100,20 +109,20 @@ end
     )
 end
 
-ST_GMRF_1D = Union{
-    ConstantMeshSTGMRF{1},
-    LinearConditionalGMRF{<:ConstantMeshSTGMRF{1}},
-}
+ST_GMRF_1D = Union{ConstantMeshSTGMRF{1},LinearConditionalGMRF{<:ConstantMeshSTGMRF{1}}}
 
 function Makie.plot!(
-    gmrf_fem_st_plot::GMRF_FEM_1D_Spatiotemporal_Plot{<:Tuple{<:ST_GMRF_1D, <:Int}},
-    )
+    gmrf_fem_st_plot::GMRF_FEM_1D_Spatiotemporal_Plot{<:Tuple{<:ST_GMRF_1D,<:Int}},
+)
     gmrf = gmrf_fem_st_plot[1]
     t_idx = gmrf_fem_st_plot[2]
 
     means_t = Observable(time_means(gmrf[]))
     stds_t = Observable(time_stds(gmrf[]))
-    samples_t = [Observable(time_rands(gmrf[], gmrf_fem_st_plot.rng[])) for _ = 1:gmrf_fem_st_plot.N_samples[]]
+    samples_t = [
+        Observable(time_rands(gmrf[], gmrf_fem_st_plot.rng[])) for
+        _ = 1:gmrf_fem_st_plot.N_samples[]
+    ]
 
     means = Observable(Float64[])
     stds = Observable(Float64[])
@@ -139,7 +148,11 @@ function Makie.plot!(
         bounds = (minimum(node_coords), maximum(node_coords))
         plot_points[] = range(bounds[1], bounds[2], length = 10 * length(node_coords))
 
-        eval_mat = evaluation_matrix(disc, [Tensors.Vec(x) for x in plot_points[]]; field = gmrf_fem_st_plot.field[])
+        eval_mat = evaluation_matrix(
+            disc,
+            [Tensors.Vec(x) for x in plot_points[]];
+            field = gmrf_fem_st_plot.field[],
+        )
 
         means[] = eval_mat * means_t[][t_idx]
         if gmrf_fem_st_plot.with_std[]
@@ -159,7 +172,12 @@ function Makie.plot!(
     update_vals(gmrf[])
 
     _plot_1d_gaussian!(
-        gmrf_fem_st_plot, plot_points, means, lower, upper, samples,
+        gmrf_fem_st_plot,
+        plot_points,
+        means,
+        lower,
+        upper,
+        samples,
         mean_color = gmrf_fem_st_plot.mean_color[],
         conf_band_color = gmrf_fem_st_plot.conf_band_color[],
         sample_color = gmrf_fem_st_plot.sample_color[],

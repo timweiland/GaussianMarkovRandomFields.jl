@@ -95,12 +95,18 @@ function joint_ssm(x₀::GMRF, ssm_mats::JointSSMMatrices, ts::AbstractRange)
     ch = get_constraint_handler(ssm_mats)
     constraint_noise = get_constraint_noise(ssm_mats)
 
-    apply_soft_constraints!(ch, constraint_noise; K=G, Q_rhs=Σ⁻¹, Q_rhs_sqrt=Σ⁻¹_sqrt)
+    apply_soft_constraints!(ch, constraint_noise; K = G, Q_rhs = Σ⁻¹, Q_rhs_sqrt = Σ⁻¹_sqrt)
 
     means = [mean(x₀)]
-    for i in 2:length(ts)
+    for i = 2:length(ts)
         cur_mean = M * means[i-1]
-        apply_soft_constraints!(ch, constraint_noise; K=G_cpy, f_rhs=cur_mean, change_K=false)
+        apply_soft_constraints!(
+            ch,
+            constraint_noise;
+            K = G_cpy,
+            f_rhs = cur_mean,
+            change_K = false,
+        )
         push!(means, G \ cur_mean)
     end
 

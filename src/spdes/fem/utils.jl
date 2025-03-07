@@ -229,9 +229,9 @@ are modified in place as well.
 function apply_soft_constraints!(
     ch::ConstraintHandler,
     constraint_noise::AbstractVector;
-    K::Union{Nothing, SparseMatrixCSC} = nothing,
+    K::Union{Nothing,SparseMatrixCSC} = nothing,
     change_K::Bool = true,
-    f_rhs::Union{Nothing, AbstractVector} = nothing,
+    f_rhs::Union{Nothing,AbstractVector} = nothing,
     Q_rhs::Union{Nothing,SparseMatrixCSC} = nothing,
     Q_rhs_sqrt::Union{Nothing,SparseMatrixCSC} = nothing,
 )

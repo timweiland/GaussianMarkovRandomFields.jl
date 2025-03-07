@@ -1,8 +1,7 @@
 using Tensors, Ferrite, SparseArrays
 using Tensors: ⊗
 
-export derivative_matrices,
-    second_derivative_matrices
+export derivative_matrices, second_derivative_matrices
 
 """
     shape_gradient_local(f::FEMDiscretization, shape_idx::Int, ξ)

@@ -33,7 +33,7 @@ function GMRFs.sparse_jacobian_map(
     N_outputs::Int;
     colors::AbstractVector{Int64} = nothing,
     jac::SparseMatrixCSC{T} = nothing,
-    ) where {T}
+) where {T}
     N_outputs > 0 || throw(ArgumentError("N_outputs must be positive"))
 
     output = rand(N_outputs)

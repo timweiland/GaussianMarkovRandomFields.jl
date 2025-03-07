@@ -37,10 +37,18 @@ end
     qr = QuadratureRule{RefLine}(2)
     disc = FEMDiscretization(grid, ip, qr)
     disc_periodic = FEMDiscretization(
-        grid, ip, qr, [(:u, nothing)], [(_get_periodic_constraint(grid), 1e-4)]
+        grid,
+        ip,
+        qr,
+        [(:u, nothing)],
+        [(_get_periodic_constraint(grid), 1e-4)],
     )
     disc_dirichlet = FEMDiscretization(
-        grid, ip, qr, [(:u, nothing)], [(_get_dirichlet_constraint(grid, 0.0, 0.0), 1e-4)]
+        grid,
+        ip,
+        qr,
+        [(:u, nothing)],
+        [(_get_dirichlet_constraint(grid, 0.0, 0.0), 1e-4)],
     )
 
 
@@ -138,18 +146,24 @@ end
     end
 
     @testset "Boundary conditions" begin
-        x_prior_fast_right_periodic = discretize(spde_fast_right, disc_periodic, ts; streamline_diffusion = sd)
-        x_cond_fast_right_periodic = condition_on_observations(x_prior_fast_right_periodic, A_ic, 1e8, ys)
+        x_prior_fast_right_periodic =
+            discretize(spde_fast_right, disc_periodic, ts; streamline_diffusion = sd)
+        x_cond_fast_right_periodic =
+            condition_on_observations(x_prior_fast_right_periodic, A_ic, 1e8, ys)
 
-        x_prior_fast_right_dirichlet = discretize(spde_fast_right, disc_dirichlet, ts; streamline_diffusion = sd)
-        x_cond_fast_right_dirichlet = condition_on_observations(x_prior_fast_right_dirichlet, A_ic, 1e8, ys)
+        x_prior_fast_right_dirichlet =
+            discretize(spde_fast_right, disc_dirichlet, ts; streamline_diffusion = sd)
+        x_cond_fast_right_dirichlet =
+            condition_on_observations(x_prior_fast_right_dirichlet, A_ic, 1e8, ys)
 
         N_samples = 3
-        samples_periodic = [time_rands(x_cond_fast_right_periodic, rng) for _ in 1:N_samples]
-        samples_dirichlet = [time_rands(x_cond_fast_right_dirichlet, rng) for _ in 1:N_samples]
-        for samp_idx in 1:N_samples
+        samples_periodic = [time_rands(x_cond_fast_right_periodic, rng) for _ = 1:N_samples]
+        samples_dirichlet =
+            [time_rands(x_cond_fast_right_dirichlet, rng) for _ = 1:N_samples]
+        for samp_idx = 1:N_samples
             for t in eachindex(ts)
-                @test samples_periodic[samp_idx][t][1] ≈ samples_periodic[samp_idx][t][end] atol = 1e-1
+                @test samples_periodic[samp_idx][t][1] ≈ samples_periodic[samp_idx][t][end] atol =
+                    1e-1
                 @test samples_dirichlet[samp_idx][t][1] ≈ 0.0 atol = 1e-1
                 @test samples_dirichlet[samp_idx][t][end] ≈ 0.0 atol = 1e-1
             end

@@ -39,8 +39,30 @@ struct ImplicitEulerSSM
     constraint_handler::ConstraintHandler
     constraint_noise::AbstractVector
 
-    function ImplicitEulerSSM(x₀, G, M, M⁻¹, β, β⁻¹, spatial_noise, ts::AbstractVector, constraint_handler, constraint_noise)
-        new(x₀, G, M, M⁻¹, β, β⁻¹, spatial_noise, ts::AbstractVector, constraint_handler, constraint_noise)
+    function ImplicitEulerSSM(
+        x₀,
+        G,
+        M,
+        M⁻¹,
+        β,
+        β⁻¹,
+        spatial_noise,
+        ts::AbstractVector,
+        constraint_handler,
+        constraint_noise,
+    )
+        new(
+            x₀,
+            G,
+            M,
+            M⁻¹,
+            β,
+            β⁻¹,
+            spatial_noise,
+            ts::AbstractVector,
+            constraint_handler,
+            constraint_noise,
+        )
     end
 end
 

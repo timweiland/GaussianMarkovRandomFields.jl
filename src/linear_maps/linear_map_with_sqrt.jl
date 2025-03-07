@@ -60,12 +60,6 @@ function linmap_sqrt(L::LinearMapWithSqrt)
     return L.A_sqrt
 end
 
-function Base.kron(
-    A::LinearMapWithSqrt,
-    B::LinearMapWithSqrt,
-)
-    return LinearMapWithSqrt(
-        Base.kron(A.A, B.A),
-        Base.kron(A.A_sqrt, B.A_sqrt),
-    )
+function Base.kron(A::LinearMapWithSqrt, B::LinearMapWithSqrt)
+    return LinearMapWithSqrt(Base.kron(A.A, B.A), Base.kron(A.A_sqrt, B.A_sqrt))
 end

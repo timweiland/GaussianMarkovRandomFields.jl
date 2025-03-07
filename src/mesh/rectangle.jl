@@ -140,4 +140,3 @@ function create_inflated_rectangle(
 
     return Ferrite.Grid(elements, nodes, facesets = facesets, cellsets = cellsets)
 end
-

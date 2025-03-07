@@ -93,4 +93,3 @@ function condition_on_observations(
     end
     return LinearConditionalGMRF(x, A, Q_ϵ, y, b, solver_blueprint)
 end
-

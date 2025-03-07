@@ -21,9 +21,7 @@ Results in a matrix that selects the spatial information exactly at time `t_idx`
 - `t_idx::Integer`: The time index.
 - `N_t::Integer`: The number of time points.
 """
-function spatial_to_spatiotemporal(
-    spatial_matrix::AbstractMatrix, t_idx::Int, N_t::Int
-)
+function spatial_to_spatiotemporal(spatial_matrix::AbstractMatrix, t_idx::Int, N_t::Int)
     E_t = spzeros(1, N_t)
     E_t[t_idx] = 1
     return kron(E_t, spatial_matrix)
