@@ -57,7 +57,7 @@ disc = FEMDiscretization(grid, interpolation, quadrature_rule)
 # Perhaps the simplest spatiotemporal model is a separable one, where the
 # spatial and temporal components are independent.
 # We can model both the spatial and temporal components using Matern processes:
-spde_space = MaternSPDE{1}(range = 0.4, smoothness = 1, σ² = 0.3)
+spde_space = MaternSPDE{1}(range = 0.2, smoothness = 1, σ² = 0.3)
 spde_time = MaternSPDE{1}(range = 0.5, smoothness = 1)
 
 # Discretize:
