@@ -19,8 +19,6 @@ priors.
 To get started with GMRFs.jl, consider going through the [Tutorials](@ref).
 
 ## Installation
-<!--
-GMRFs.jl can be installed from the Pkg REPL (press `]` in the Julia REPL): -->
 GMRFs.jl can be installed via its GitHub repo from the Pkg REPL:
 
 ```
@@ -34,3 +32,16 @@ using GMRFs
 ```
 
 You're good to go!
+
+!!! info
+    While a fair amount of time was spent on this documentation, it is far from
+    perfect. 
+    If you spot parts of the documentation that you find confusing or that are
+    incomplete, please open an issue or a pull request.
+    Your help is much appreciated!
+
+!!! tip
+    Missing a feature?
+    Let us know!
+    If you're interested in contributing, that's even better!
+    Check our contribution guidelines for assistance.

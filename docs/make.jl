@@ -44,3 +44,7 @@ makedocs(
     plugins=[bib],
     modules=[GMRFs],
 )
+
+deploydocs(
+    repo = "github.com/timweiland/GMRFs.jl.git",
+)
