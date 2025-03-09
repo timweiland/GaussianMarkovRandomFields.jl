@@ -1,4 +1,4 @@
-using GMRFs, Ferrite
+using GaussianMarkovRandomFields, Ferrite
 grid = generate_grid(Line, (50,))
 interpolation = Lagrange{RefLine,1}()
 quadrature_rule = QuadratureRule{RefLine}(2)

@@ -1,4 +1,4 @@
-using GMRFs, LinearAlgebra
+using GaussianMarkovRandomFields, LinearAlgebra
 
 xs = 0:0.01:1
 N = length(xs)

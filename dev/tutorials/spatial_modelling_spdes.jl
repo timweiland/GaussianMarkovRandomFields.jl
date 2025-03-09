@@ -22,7 +22,7 @@ y_train = zinc[train_idcs]
 y_test = zinc[test_idcs]
 size(X_train, 1), size(X_test, 1)
 
-using GMRFs
+using GaussianMarkovRandomFields
 points = zip(x, y)
 grid = generate_mesh(points, 600.0, 100.0, save_path = "meuse.msh")
 

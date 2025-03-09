@@ -48,8 +48,8 @@
 # automatically by simply specifying the parameters of the model.
 
 # ## Building an AR(1) model
-# We begin by loading `GMRFs` and `LinearAlgebra`.
-using GMRFs, LinearAlgebra
+# We begin by loading `GaussianMarkovRandomFields` and `LinearAlgebra`.
+using GaussianMarkovRandomFields, LinearAlgebra
 
 # We define a discretization of the real interval $[0, 1]$, and specify
 # some example parameters for the AR(1) model:
@@ -132,7 +132,7 @@ for i = 1:N
     end
 end
 
-# Now that we have the adjacency matrix, we can use a GMRFs.jl utility function
+# Now that we have the adjacency matrix, we can use a GaussianMarkovRandomFields.jl utility function
 # to generate a CAR model from it, which internally constructs a slight variation
 # of the graph Laplacian to form the precision matrix.
 x_car = generate_car_model(W, 0.9; μ = μ, σ = 0.001)

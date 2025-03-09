@@ -16,7 +16,7 @@ xs_all = [xs_initial; x_later]
 ys_all = [ys_initial; y_later]
 N_obs_all = length(ys_all)
 
-using GMRFs
+using GaussianMarkovRandomFields
 using Ferrite
 
 grid = generate_grid(Line, (Nₓ - 1,), Tensors.Vec(x_left), Tensors.Vec(x_right))
