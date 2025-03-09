@@ -233,15 +233,16 @@ function product_matern(
     solver_blueprint = DefaultSolverBlueprint(),
 )
     offset = N_t ÷ 10
-    temporal_grid = generate_grid(Line, (N_t + 2 * offset - 1,))
-    temporal_ip = Lagrange{1,RefCube,1}()
-    temporal_qr = QuadratureRule{1,RefCube}(2)
+    temporal_grid = generate_grid(Ferrite.Line, (N_t + 2 * offset - 1,))
+    temporal_ip = Lagrange{RefLine,1}()
+    temporal_qr = QuadratureRule{RefLine}(2)
     temporal_disc = FEMDiscretization(temporal_grid, temporal_ip, temporal_qr)
     x_t = discretize(matern_temporal, temporal_disc)
 
     Q_t = to_matrix(precision_map(x_t))[offset+1:end-offset, offset+1:end-offset]
+    Q_t = LinearMap(Q_t)
     x_s = discretize(matern_spatial, spatial_disc)
-    Q_s = to_matrix(precision_map(x_s))
+    Q_s = precision_map(x_s)
 
     return kronecker_product_spatiotemporal_model(
         Q_t,
