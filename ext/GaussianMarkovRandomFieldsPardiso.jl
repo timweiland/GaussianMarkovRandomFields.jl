@@ -1,7 +1,7 @@
 # COV_EXCL_START
-module GMRFsPardiso
+module GaussianMarkovRandomFieldsPardiso
 
-using GMRFs
+using GaussianMarkovRandomFields
 using Pardiso
 using Random, SparseArrays, LinearAlgebra, Distributions, LinearMaps
 
@@ -127,11 +127,17 @@ function compute_mean(s::LinearConditionalPardisoGMRFSolver)
     return s.computed_posterior_mean
 end
 
-function GMRFs.construct_solver(_::PardisoGMRFSolverBlueprint, gmrf::AbstractGMRF)
+function GaussianMarkovRandomFields.construct_solver(
+    _::PardisoGMRFSolverBlueprint,
+    gmrf::AbstractGMRF,
+)
     return PardisoGMRFSolver(gmrf)
 end
 
-function GMRFs.construct_solver(_::PardisoGMRFSolverBlueprint, gmrf::LinearConditionalGMRF)
+function GaussianMarkovRandomFields.construct_solver(
+    _::PardisoGMRFSolverBlueprint,
+    gmrf::LinearConditionalGMRF,
+)
     return LinearConditionalPardisoGMRFSolver(gmrf)
 end
 

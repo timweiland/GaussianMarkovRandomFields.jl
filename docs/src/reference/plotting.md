@@ -1,6 +1,6 @@
 # Plotting
 
-GMRFs.jl offers recipes to make plotting spatial and spatiotemporal GMRFs effortless.
+GaussianMarkovRandomFields.jl offers recipes to make plotting spatial and spatiotemporal GMRFs effortless.
 These recipes are contained in a package extension which gets loaded automatically when using Makie (or rather: one of its backends).
 
 All of the following methods may also be called more simply by calling `plot`

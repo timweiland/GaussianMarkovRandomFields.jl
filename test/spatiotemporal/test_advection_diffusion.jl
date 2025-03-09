@@ -1,7 +1,7 @@
 import Random: MersenneTwister
 
 using Ferrite
-using GMRFs
+using GaussianMarkovRandomFields
 using LinearAlgebra
 using SparseArrays
 

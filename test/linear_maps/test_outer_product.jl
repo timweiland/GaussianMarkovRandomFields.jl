@@ -1,4 +1,4 @@
-using GMRFs, LinearMaps, LinearAlgebra, Random
+using GaussianMarkovRandomFields, LinearMaps, LinearAlgebra, Random
 
 @testset "Outer product map" begin
     rng = MersenneTwister(52398)

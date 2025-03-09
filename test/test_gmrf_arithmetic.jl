@@ -1,4 +1,4 @@
-using GMRFs, Ferrite, Random, LinearAlgebra, SparseArrays
+using GaussianMarkovRandomFields, Ferrite, Random, LinearAlgebra, SparseArrays
 
 @testset "GMRF arithmetic" begin
     spde = MaternSPDE{2}(κ = 1.0, ν = 1)

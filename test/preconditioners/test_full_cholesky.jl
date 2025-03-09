@@ -1,4 +1,4 @@
-using GMRFs, SparseArrays, LinearAlgebra
+using GaussianMarkovRandomFields, SparseArrays, LinearAlgebra
 import Random: MersenneTwister
 
 @testset "Full Cholesky Preconditioner" begin

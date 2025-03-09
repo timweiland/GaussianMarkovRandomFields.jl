@@ -1,4 +1,4 @@
 # Solvers
 ```@docs
-GMRFs.construct_solver
+GaussianMarkovRandomFields.construct_solver
 ```

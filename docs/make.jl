@@ -1,4 +1,4 @@
-using Documenter, GMRFs, DocumenterCitations
+using Documenter, GaussianMarkovRandomFields, DocumenterCitations
 using Ferrite
 
 include("generate_literate.jl")
@@ -6,7 +6,7 @@ include("generate_literate.jl")
 bib = CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"))
 
 makedocs(
-    sitename = "GMRFs.jl",
+    sitename = "GaussianMarkovRandomFields.jl",
     pages = Any[
         "Home"=>"index.md",
         "Tutorials"=>[
@@ -39,7 +39,7 @@ makedocs(
     ],
     format = Documenter.HTML(assets = String["assets/citations.css"], collapselevel = 1),
     plugins = [bib],
-    modules = [GMRFs],
+    modules = [GaussianMarkovRandomFields],
 )
 
-deploydocs(repo = "github.com/timweiland/GMRFs.jl.git")
+deploydocs(repo = "github.com/timweiland/GaussianMarkovRandomFields.jl.git")

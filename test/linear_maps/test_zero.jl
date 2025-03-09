@@ -1,4 +1,4 @@
-using GMRFs, SparseArrays
+using GaussianMarkovRandomFields, SparseArrays
 
 @testset "Zero map" begin
     Ns, Ms = [10, 20], [10, 15]

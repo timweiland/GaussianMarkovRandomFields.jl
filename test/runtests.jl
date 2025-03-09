@@ -1,8 +1,8 @@
-using GMRFs, ReTest
-include("GMRFsTests.jl")
+using GaussianMarkovRandomFields, ReTest
+include("GaussianMarkovRandomFieldsTests.jl")
 
 if "skip-aqua" in ARGS
-    GMRFTests.retest(r"\b(?!Aqua\b)\w+")
+    GaussianMarkovRandomFieldsTests.retest(r"\b(?!Aqua\b)\w+")
 else
-    GMRFTests.retest()
+    GaussianMarkovRandomFieldsTests.retest()
 end

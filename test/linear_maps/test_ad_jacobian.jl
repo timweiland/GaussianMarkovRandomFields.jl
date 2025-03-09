@@ -1,4 +1,4 @@
-using GMRFs, ForwardDiff, Zygote
+using GaussianMarkovRandomFields, ForwardDiff, Zygote
 
 @testset "AD Jacobian" begin
     function f(x)

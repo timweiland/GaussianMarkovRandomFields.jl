@@ -52,10 +52,10 @@ size(X_train, 1), size(X_test, 1)
 # element method (FEM) -- we get a discrete GMRF approximation of a Matern
 # process. The approximation quality improves as the resolution of the FEM
 # mesh increases. If this all sounds overly complicated to you, fear not!
-# GMRFs.jl takes care of the technical details for you, so you can focus on the
+# GaussianMarkovRandomFields.jl takes care of the technical details for you, so you can focus on the
 # modelling.
 #
-# We start by generating a FEM mesh for our data. Internally, GMRFs.jl computes
+# We start by generating a FEM mesh for our data. Internally, GaussianMarkovRandomFields.jl computes
 # a convex hull around the scattered data and then extends it slightly to
 # counteract effects from the boundary condition of the SPDE.
 #
@@ -63,7 +63,7 @@ size(X_train, 1), size(X_test, 1)
 #
 # The final output is a Ferrite.jl grid. We can also save the generated mesh,
 # e.g. to visualize it via Gmsh.
-using GMRFs
+using GaussianMarkovRandomFields
 points = zip(x, y)
 grid = generate_mesh(points, 600.0, 100.0, save_path = "meuse.msh")
 

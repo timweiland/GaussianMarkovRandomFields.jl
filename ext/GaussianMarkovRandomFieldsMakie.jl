@@ -1,12 +1,13 @@
 # COV_EXCL_START
-module GMRFsMakie
+module GaussianMarkovRandomFieldsMakie
 
-using GMRFs
+using GaussianMarkovRandomFields
 using Makie, Random
 using Distributions, Tensors
 
-import GMRFs: gmrf_fem_1d_plot, gmrf_fem_1d_plot!
-import GMRFs: gmrf_fem_1d_spatiotemporal_plot, gmrf_fem_1d_spatiotemporal_plot!
+import GaussianMarkovRandomFields: gmrf_fem_1d_plot, gmrf_fem_1d_plot!
+import GaussianMarkovRandomFields:
+    gmrf_fem_1d_spatiotemporal_plot, gmrf_fem_1d_spatiotemporal_plot!
 
 @recipe(GMRF_FEM_1D_Plot) do scene
     Attributes(

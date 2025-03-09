@@ -1,6 +1,6 @@
-# Contributing to GMRFs.jl
+# Contributing to GaussianMarkovRandomFields.jl
 
-Thank you for your interest in contributing to **GMRFs.jl**!
+Thank you for your interest in contributing to **GaussianMarkovRandomFields.jl**!
 We appreciate your help in improving and maintaining this package.
 The following guidelines will help you get started.
 
@@ -8,8 +8,8 @@ The following guidelines will help you get started.
 
 1. **Fork and Clone** the repository:
    ```sh
-   git clone https://github.com/timweiland/GMRFs.jl.git
-   cd GMRFs.jl
+   git clone https://github.com/timweiland/GaussianMarkovRandomFields.jl.git
+   cd GaussianMarkovRandomFields.jl
    ```
 2. **Set up the environment**:
    ```julia
@@ -20,7 +20,7 @@ The following guidelines will help you get started.
 3. **Run tests** to ensure everything works:
    ```julia
    using Pkg
-   Pkg.test("GMRFs")
+   Pkg.test("GaussianMarkovRandomFields")
    ```
 
 ## Code Style
@@ -42,11 +42,11 @@ The following guidelines will help you get started.
 
 ## Testing
 
-GMRFs.jl uses `Test.jl` for unit tests. To run tests:
+GaussianMarkovRandomFields.jl uses `Test.jl` for unit tests. To run tests:
 
 ```julia
 using Pkg
-Pkg.test("GMRFs")
+Pkg.test("GaussianMarkovRandomFields")
 ```
 
 When adding a new feature:
@@ -65,16 +65,16 @@ When adding a new feature:
 
 ## Reporting Issues
 
-If you find a bug or have a feature request, please [open an issue](https://github.com/timweiland/GMRFs.jl/issues). When reporting bugs:
+If you find a bug or have a feature request, please [open an issue](https://github.com/timweiland/GaussianMarkovRandomFields.jl/issues). When reporting bugs:
 - Provide a **minimal reproducible example**.
-- Include Julia and GMRFs.jl version information.
+- Include Julia and GaussianMarkovRandomFields.jl version information.
 - Describe expected vs. actual behavior.
 
 ## License
 
 By contributing, you agree that your contributions will be licensed under the same license as the repository.
 
-Thank you for contributing to **GMRFs.jl**! 🚀
+Thank you for contributing to **GaussianMarkovRandomFields.jl**! 🚀
 
 
 

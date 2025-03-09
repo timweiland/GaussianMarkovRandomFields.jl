@@ -1,4 +1,4 @@
-using GMRFs
+using GaussianMarkovRandomFields
 using Random
 using Ferrite
 using SparseArrays

@@ -1,4 +1,4 @@
-module GMRFs
+module GaussianMarkovRandomFields
 
 include("typedefs.jl")
 include("utils/utils.jl")

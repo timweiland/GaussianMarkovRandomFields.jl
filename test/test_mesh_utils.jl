@@ -1,4 +1,4 @@
-using GMRFs, Ferrite
+using GaussianMarkovRandomFields, Ferrite
 
 @testset "Mesh Utils" begin
     N_xy = 20

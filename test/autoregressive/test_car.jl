@@ -1,4 +1,4 @@
-using GMRFs
+using GaussianMarkovRandomFields
 using LinearAlgebra
 using SparseArrays
 

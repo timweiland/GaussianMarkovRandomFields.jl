@@ -15,12 +15,12 @@
 #
 # But what if we know the behavior of the process at the boundary, and it's
 # not "the normal derivative is zero"?
-# Fortunately, GMRFs.jl interfaces rather smoothly with Ferrite.jl, which we
+# Fortunately, GaussianMarkovRandomFields.jl interfaces rather smoothly with Ferrite.jl, which we
 # can use to specify more complex boundary conditions. Let's see how this works.
 #
 # ## Spatial example: Matern SPDE
 # We start by specifying a mesh over the interval [-1, 1].
-using GMRFs, Ferrite
+using GaussianMarkovRandomFields, Ferrite
 grid = generate_grid(Line, (50,))
 interpolation = Lagrange{RefLine,1}()
 quadrature_rule = QuadratureRule{RefLine}(2)
@@ -36,7 +36,7 @@ end
 
 dbc = get_dirichlet_constraint(grid)
 
-# GMRFs.jl supports such boundary conditions in a "soft" way.
+# GaussianMarkovRandomFields.jl supports such boundary conditions in a "soft" way.
 # This means that we enforce the boundary conditions up to noise of a certain,
 # user-specified magnitude.
 # This ensures that the resulting GMRF has full rank.

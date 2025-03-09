@@ -1,4 +1,4 @@
-using GMRFs, LinearAlgebra, LinearMaps, Random, SparseArrays
+using GaussianMarkovRandomFields, LinearAlgebra, LinearMaps, Random, SparseArrays
 
 @testset "Cholesky Sqrt" begin
     rng = MersenneTwister(98234811)

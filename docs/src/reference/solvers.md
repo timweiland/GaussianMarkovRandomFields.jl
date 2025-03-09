@@ -2,7 +2,7 @@
 
 Fundamentally, all interesting quantities of GMRFs (samples, marginal variances,
 posterior means, ...) must be computed through **sparse linear algebra**.
-GMRFs.jl provides a number of so-called *solvers* which perform the underlying
+GaussianMarkovRandomFields.jl provides a number of so-called *solvers* which perform the underlying
 computations in different ways and with different trade-offs.
 Our goal is to provide sane defaults that "just work" for most users, while
 still allowing power users to customize the behavior of the solvers.

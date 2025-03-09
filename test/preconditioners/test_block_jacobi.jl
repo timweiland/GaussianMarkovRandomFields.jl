@@ -1,4 +1,4 @@
-using GMRFs, SparseArrays, LinearAlgebra
+using GaussianMarkovRandomFields, SparseArrays, LinearAlgebra
 import Random: MersenneTwister
 
 @testset "Block Jacobi Preconditioner" begin

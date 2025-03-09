@@ -1,10 +1,10 @@
 # Discretizations
 ## Spatial discretization with FEM
 ```@docs
-GMRFs.shape_gradient_local
-GMRFs.shape_gradient_global
-GMRFs.shape_hessian_local
-GMRFs.shape_hessian_global
-GMRFs.geom_jacobian
-GMRFs.geom_hessian
+GaussianMarkovRandomFields.shape_gradient_local
+GaussianMarkovRandomFields.shape_gradient_global
+GaussianMarkovRandomFields.shape_hessian_local
+GaussianMarkovRandomFields.shape_hessian_global
+GaussianMarkovRandomFields.geom_jacobian
+GaussianMarkovRandomFields.geom_hessian
 ```

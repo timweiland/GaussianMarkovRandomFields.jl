@@ -1,6 +1,6 @@
-module GMRFTests
+module GaussianMarkovRandomFieldsTests
 
-using GMRFs
+using GaussianMarkovRandomFields
 using ReTest
 using Aqua
 
@@ -28,8 +28,8 @@ include("spatiotemporal/test_advection_diffusion.jl")
 include("autoregressive/test_car.jl")
 
 @testset "Code quality (Aqua.jl)" begin
-    Aqua.test_all(GMRFs; ambiguities = false)
-    @test length(Test.detect_ambiguities(GMRFs)) == 0
+    Aqua.test_all(GaussianMarkovRandomFields; ambiguities = false)
+    @test length(Test.detect_ambiguities(GaussianMarkovRandomFields)) == 0
 end
 
 end

@@ -1,4 +1,4 @@
-using GMRFs, Ferrite, SparseArrays
+using GaussianMarkovRandomFields, Ferrite, SparseArrays
 
 @testset "FEMDiscretization" begin
     N_xy = 20

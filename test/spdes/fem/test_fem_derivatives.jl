@@ -1,4 +1,4 @@
-using GMRFs, Ferrite, SparseArrays, Tensors
+using GaussianMarkovRandomFields, Ferrite, SparseArrays, Tensors
 
 @testset "FEM Derivatives" begin
     N_xy = 20
@@ -17,8 +17,8 @@ using GMRFs, Ferrite, SparseArrays, Tensors
         @testset "Local shape function derivatives" begin
             for i = 1:getnbasefunctions(ip), j = 1:length(X)
                 ξ = peh.local_coords[j]
-                ∇ϕᵢ = GMRFs.shape_gradient_local(f, i, ξ)
-                Hϕᵢ = GMRFs.shape_hessian_local(f, i, ξ)
+                ∇ϕᵢ = GaussianMarkovRandomFields.shape_gradient_local(f, i, ξ)
+                Hϕᵢ = GaussianMarkovRandomFields.shape_hessian_local(f, i, ξ)
                 @test size(∇ϕᵢ) == (ndim(f),)
                 @test size(Hϕᵢ) == (ndim(f), ndim(f))
                 if d == 1
@@ -32,8 +32,8 @@ using GMRFs, Ferrite, SparseArrays, Tensors
                 reinit!(cc, peh.cells[j])
                 ξ = peh.local_coords[j]
                 dof_coords = getcoordinates(cc)
-                ∇ϕᵢ = GMRFs.shape_gradient_global(f, dof_coords, i, ξ)
-                Hϕᵢ = GMRFs.shape_hessian_global(f, dof_coords, i, ξ)
+                ∇ϕᵢ = GaussianMarkovRandomFields.shape_gradient_global(f, dof_coords, i, ξ)
+                Hϕᵢ = GaussianMarkovRandomFields.shape_hessian_global(f, dof_coords, i, ξ)
                 @test size(∇ϕᵢ) == (ndim(f),)
                 @test size(Hϕᵢ) == (ndim(f), ndim(f))
                 if d == 1

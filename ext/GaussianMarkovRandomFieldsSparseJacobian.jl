@@ -1,6 +1,6 @@
-module GMRFsSparseJacobian
+module GaussianMarkovRandomFieldsSparseJacobian
 
-using GMRFs
+using GaussianMarkovRandomFields
 using LinearMaps, Symbolics, SparseDiffTools
 using SparseArrays
 
@@ -27,7 +27,7 @@ Construct a linear map representing the sparse Jacobian of `f!` at `x₀`.
 - `jac::SparseMatrixCSC{T}`: Optional pre-computed sparsity pattern for the
                              Jacobian.
 """
-function GMRFs.sparse_jacobian_map(
+function GaussianMarkovRandomFields.sparse_jacobian_map(
     f!::Function,
     x₀::AbstractVector{T},
     N_outputs::Int;

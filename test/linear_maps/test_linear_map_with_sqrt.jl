@@ -1,4 +1,4 @@
-using GMRFs, LinearMaps, LinearAlgebra, Random
+using GaussianMarkovRandomFields, LinearMaps, LinearAlgebra, Random
 
 @testset "Linear map with sqrt" begin
     rng = MersenneTwister(823498)

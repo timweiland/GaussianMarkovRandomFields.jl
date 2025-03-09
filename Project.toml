@@ -1,4 +1,4 @@
-name = "GMRFs"
+name = "GaussianMarkovRandomFields"
 uuid = "d5f06795-35bb-4323-9f0b-405ef76cfc5b"
 authors = ["Tim Weiland <hello@timwei.land> and contributors"]
 version = "0.1.0"
@@ -31,10 +31,10 @@ Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [extensions]
-GMRFsAutoDiff = ["ForwardDiff", "Zygote"]
-GMRFsMakie = "Makie"
-GMRFsPardiso = "Pardiso"
-GMRFsSparseJacobian = ["Symbolics", "SparseDiffTools"]
+GaussianMarkovRandomFieldsAutoDiff = ["ForwardDiff", "Zygote"]
+GaussianMarkovRandomFieldsMakie = "Makie"
+GaussianMarkovRandomFieldsPardiso = "Pardiso"
+GaussianMarkovRandomFieldsSparseJacobian = ["Symbolics", "SparseDiffTools"]
 
 [compat]
 AMD = "0.5"

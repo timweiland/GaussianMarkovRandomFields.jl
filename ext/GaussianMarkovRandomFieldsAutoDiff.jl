@@ -1,6 +1,6 @@
-module GMRFsAutoDiff
+module GaussianMarkovRandomFieldsAutoDiff
 
-using GMRFs
+using GaussianMarkovRandomFields
 using ForwardDiff, Zygote, LinearAlgebra, LinearMaps
 import LinearMaps: _unsafe_mul!
 
@@ -9,7 +9,7 @@ function LinearMaps._unsafe_mul!(y, J::ADJacobianMap, x::AbstractVector)
     y .= ForwardDiff.derivative(g, 0.0)
 end
 
-function GMRFs.ADJacobianAdjointMap(
+function GaussianMarkovRandomFields.ADJacobianAdjointMap(
     f::Function,
     x₀::AbstractVector{T},
     N_outputs::Int,
