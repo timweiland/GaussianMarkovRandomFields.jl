@@ -49,9 +49,9 @@ function GaussianMarkovRandomFields.compute_rand!(
     rng::Random.AbstractRNG,
     x::AbstractVector,
 )
-    randn!(rng, x)
-    x = _ensure_dense(x)
-    x = linmap_sqrt(s.precision) * x # Centered sample with covariance Q
+    M = linmap_sqrt(s.precision)
+    z = randn(rng, size(M, 2))
+    x .= linmap_sqrt(s.precision) * z # Centered sample with covariance Q
 
     _prepare_for_solve(s)
     # Centered sample with covariance Q^-1
