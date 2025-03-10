@@ -26,8 +26,8 @@ function _prepare_for_solve(s::AbstractPardisoGMRFSolver)
     end
 end
 
-compute_mean(s::AbstractPardisoGMRFSolver) = s.mean
-function compute_variance(s::AbstractPardisoGMRFSolver)
+GaussianMarkovRandomFields.compute_mean(s::AbstractPardisoGMRFSolver) = s.mean
+function GaussianMarkovRandomFields.compute_variance(s::AbstractPardisoGMRFSolver)
     if s.computed_var !== nothing
         return s.computed_var
     end
@@ -44,7 +44,7 @@ function compute_variance(s::AbstractPardisoGMRFSolver)
     return s.computed_var
 end
 
-function compute_rand!(
+function GaussianMarkovRandomFields.compute_rand!(
     s::AbstractPardisoGMRFSolver,
     rng::Random.AbstractRNG,
     x::AbstractVector,
@@ -112,7 +112,7 @@ mutable struct LinearConditionalPardisoGMRFSolver <: AbstractPardisoGMRFSolver
     end
 end
 
-function compute_mean(s::LinearConditionalPardisoGMRFSolver)
+function GaussianMarkovRandomFields.compute_mean(s::LinearConditionalPardisoGMRFSolver)
     if s.computed_posterior_mean !== nothing
         return s.computed_posterior_mean
     end
