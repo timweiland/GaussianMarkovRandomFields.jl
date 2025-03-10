@@ -9,3 +9,4 @@ function linmap_sqrt(A::LinearMap)
     throw(ArgumentError("No square root available for $A"))
 end
 linmap_sqrt(L::LinearMaps.LinearCombination) = hcat([linmap_sqrt(Li) for Li in L.maps]...)
+linmap_sqrt(L::LinearMaps.KroneckerMap) = mapreduce(linmap_sqrt, kron, L.maps)

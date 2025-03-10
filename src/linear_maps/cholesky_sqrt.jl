@@ -57,3 +57,5 @@ function to_matrix(L::CholeskySqrt)
         return sparse(L.cho.L)[invperm(L.cho.p), :]
     end
 end
+
+linmap_sqrt(A::LinearMaps.WrappedMap) = CholeskySqrt(cholesky(to_matrix(A)))
