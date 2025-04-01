@@ -13,6 +13,7 @@ SSMBidiagonalMap
 OuterProductMap
 LinearMapWithSqrt
 CholeskySqrt
+CholeskyFactorizedMap
 ZeroMap
 ADJacobianMap
 ADJacobianAdjointMap
