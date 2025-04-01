@@ -5,6 +5,7 @@ using ReTest
 using Aqua
 
 include("test_gmrf.jl")
+include("utils/test_linmap_cholesky.jl")
 include("linear_maps/test_ad_jacobian.jl")
 include("linear_maps/test_zero.jl")
 include("linear_maps/test_outer_product.jl")

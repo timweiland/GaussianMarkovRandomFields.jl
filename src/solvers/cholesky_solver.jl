@@ -45,9 +45,7 @@ mutable struct CholeskySolver{V<:AbstractVarianceStrategy} <: AbstractCholeskySo
         var_strategy::V,
         perm::Union{Nothing,Vector{Int}} = nothing,
     ) where {V<:AbstractVarianceStrategy}
-        mat = to_matrix(precision_map(gmrf))
-
-        precision_chol = (perm !== nothing) ? cholesky(mat; perm = perm) : cholesky(mat)
+        precision_chol = linmap_cholesky(precision_map(gmrf); perm = perm)
         new{V}(mean(gmrf), precision_map(gmrf), precision_chol, var_strategy, perm, nothing)
     end
 end
@@ -71,8 +69,7 @@ mutable struct LinearConditionalCholeskySolver{V<:AbstractVarianceStrategy} <:
         var_strategy::V,
         perm::Union{Nothing,Vector{Int}} = nothing,
     ) where {V<:AbstractVarianceStrategy}
-        mat = to_matrix(precision_map(gmrf))
-        precision_chol = cholesky(mat; perm = perm)
+        precision_chol = linmap_cholesky(precision_map(gmrf); perm = perm)
         new{V}(
             mean(gmrf.prior),
             precision_map(gmrf),
