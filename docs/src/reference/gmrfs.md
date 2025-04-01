@@ -4,6 +4,7 @@
 AbstractGMRF
 GMRF
 precision_map
+precision_matrix
 ```
 
 ## Arithmetic

@@ -21,8 +21,10 @@ using Random
 
         @test mean(d_standard) == μ_standard
         @test mean(d_diag) == μ_diag
-        @test sparse(precision_map(d_standard)) == Q_standard
-        @test sparse(precision_map(d_diag)) == Q_diag
+        @test to_matrix(precision_map(d_standard)) == Q_standard
+        @test to_matrix(precision_map(d_diag)) == Q_diag
+        @test precision_matrix(d_standard) == Q_standard
+        @test precision_matrix(d_diag) == Q_diag
 
         @test invcov(d_standard) == Q_standard
         @test invcov(d_diag) == Q_diag

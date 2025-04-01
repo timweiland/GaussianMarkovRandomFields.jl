@@ -16,7 +16,7 @@ using Random
 using SparseArrays, SparseInverseSubset
 using LinearMaps
 
-export AbstractGMRF, GMRF, precision_map
+export AbstractGMRF, GMRF, precision_map, precision_matrix
 
 ########################################################
 #
@@ -47,6 +47,14 @@ mean(s::AbstractGMRF) = compute_mean(solver_ref(s)[])
 Return the precision (inverse covariance) map of the GMRF.
 """
 precision_map(::AbstractGMRF) = error("precision_map not implemented for GMRF")
+
+"""
+    precision_matrix(::AbstractGMRF)
+
+Return the precision (inverse covariance) matrix of the GMRF.
+"""
+precision_matrix(x::AbstractGMRF) = to_matrix(precision_map(x))
+
 length(d::AbstractGMRF) = Base.size(precision_map(d), 1)
 
 ### Generic derived methods
