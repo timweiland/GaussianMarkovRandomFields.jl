@@ -19,23 +19,22 @@ struct CholeskySqrt{T} <: LinearMap{T}
     sqrt_adjoint_map::Function
 
     function CholeskySqrt(cho::Cholesky{T}) where {T}
-        sqrt_map = (x) -> cho.L * x
-        sqrt_adjoint_map = (x) -> cho.U * x
+        sqrt_map = (y, x) -> mul!(y, cho.L, x)
+        sqrt_adjoint_map = (y, x) -> mul!(y, cho.U, x)
         new{T}(cho, sqrt_map, sqrt_adjoint_map)
     end
 
     function CholeskySqrt(cho::SparseArrays.CHOLMOD.Factor{T}) where {T}
-        p = cho.p
-        p⁻¹ = invperm(p)
-        L_sp = sparse(cho.L)
-        sqrt_map = (x) -> (L_sp*x)[p⁻¹]
-        sqrt_adjoint_map = (x) -> (L_sp' * x[p])
+        p⁻¹ = invperm(cho.p)
+        L_sp = sparse(cho.L)[p⁻¹, :]
+        sqrt_map = (y, x) -> mul!(y, L_sp, x)
+        sqrt_adjoint_map = (y, x) -> mul!(y, L_sp', x)
         new{T}(cho, sqrt_map, sqrt_adjoint_map)
     end
 end
 
 function LinearMaps._unsafe_mul!(y, L::CholeskySqrt, x::AbstractVector)
-    y .= L.sqrt_map(x)
+    L.sqrt_map(y, x)
 end
 
 function LinearMaps._unsafe_mul!(
@@ -43,11 +42,11 @@ function LinearMaps._unsafe_mul!(
     transL::LinearMaps.TransposeMap{<:Any,<:CholeskySqrt},
     x::AbstractVector,
 )
-    y .= transL.lmap.sqrt_adjoint_map(x)
+    transL.lmap.sqrt_adjoint_map(y, x)
 end
 
 function LinearAlgebra.size(L::CholeskySqrt)
-    return size(L.cho, 1), size(L.cho, 1)
+    return size(L.cho)
 end
 
 function to_matrix(L::CholeskySqrt)
