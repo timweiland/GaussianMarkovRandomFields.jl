@@ -35,6 +35,7 @@ makedocs(
             "Solvers" => "dev-docs/solvers.md",
             "SPDEs" => "dev-docs/spdes.md",
             "Discretizations" => "dev-docs/discretizations.md",
+            "Utilities" => "dev-docs/utils.md",
         ],
     ],
     format = Documenter.HTML(assets = String["assets/citations.css"], collapselevel = 1),
