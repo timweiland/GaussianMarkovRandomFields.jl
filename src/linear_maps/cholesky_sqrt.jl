@@ -3,6 +3,17 @@ import LinearMaps: _unsafe_mul!
 
 export CholeskySqrt
 
+function sparse_cho_sqrt(cho::SparseArrays.CHOLMOD.Factor)
+	s = unsafe_load(pointer(cho))
+    p⁻¹ = invperm(cho.p)
+    if Bool(s.is_ll)
+        return sparse(cho.L)[p⁻¹, :]
+    end
+	LD = sparse(cho.LD)
+    L, d = SparseArrays.CHOLMOD.getLd!(LD)
+    return (L .* d')[p⁻¹, :]
+end
+
 """
     CholeskySqrt{T}(cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}})
 
@@ -25,8 +36,7 @@ struct CholeskySqrt{T} <: LinearMap{T}
     end
 
     function CholeskySqrt(cho::SparseArrays.CHOLMOD.Factor{T}) where {T}
-        p⁻¹ = invperm(cho.p)
-        L_sp = sparse(cho.L)[p⁻¹, :]
+        L_sp = sparse_cho_sqrt(cho)
         sqrt_map = (y, x) -> mul!(y, L_sp, x)
         sqrt_adjoint_map = (y, x) -> mul!(y, L_sp', x)
         new{T}(cho, sqrt_map, sqrt_adjoint_map)
