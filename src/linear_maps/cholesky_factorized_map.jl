@@ -2,6 +2,8 @@ using LinearAlgebra
 using LinearMaps
 using SparseArrays
 
+import Base: getproperty
+
 export CholeskyFactorizedMap
 
 """
@@ -14,15 +16,25 @@ i.e. for `A = L * L'`, this map represents `A`.
 - `cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}}`:
     The Cholesky factorization of a symmetric positive definite matrix.
 """
-struct CholeskyFactorizedMap{T} <: LinearMap{T}
+mutable struct CholeskyFactorizedMap{T} <: LinearMap{T}
     cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}}
-    sqrt_map::CholeskySqrt{T}
+    _sqrt_map_cache::Union{Nothing, CholeskySqrt{T}}
 
     function CholeskyFactorizedMap(
         cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}}
     ) where {T}
-        sqrt_map = CholeskySqrt(cho)
-        new{T}(cho, sqrt_map)
+        new{T}(cho, nothing)
+    end
+end
+
+function getproperty(C::CholeskyFactorizedMap, sym::Symbol)
+    if sym === :sqrt_map
+        if C._sqrt_map_cache === nothing
+            C._sqrt_map_cache = CholeskySqrt(C.cho)
+        end
+        return C._sqrt_map_cache
+    else
+        return getfield(C, sym)
     end
 end
 
