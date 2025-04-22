@@ -1,7 +1,7 @@
 export DefaultSolverBlueprint, construct_solver
 
-MC_THRESHOLD = 10000 # Threshold for switching to Monte Carlo variance estimation
-CG_THRESHOLD = 100000 # Threshold for switching to CG-based solver
+const CG_THRESHOLD = 250000 # Threshold for switching to CG-based solver
+const MC_THRESHOLD = CG_THRESHOLD # Threshold for switching to Monte Carlo variance estimation
 
 """
     DefaultSolverBlueprint()

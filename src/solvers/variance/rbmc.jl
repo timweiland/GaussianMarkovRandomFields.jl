@@ -1,4 +1,6 @@
-using Random, AMD
+using AMD
+using Random
+using SelectedInversion
 
 export RBMCStrategy, BlockRBMCStrategy, compute_variance
 
@@ -131,7 +133,7 @@ function compute_variance(s::BlockRBMCStrategy, solver::AbstractSolver)
         block_chol = cholesky(Symmetric(Q_block))
 
         var_estimate[interior] .=
-            diag(sparseinv(block_chol, depermute = true)[1])[1:length(interior)]
+            diag(selinv(block_chol, depermute = true)[1])[1:length(interior)]
 
         κs = block_chol \ (Q_block_row * sample_mat - Q_block * sample_mat[block_idcs, :])
         var_estimate[interior] .+= var(κs, dims = 2)[1:length(interior), 1]

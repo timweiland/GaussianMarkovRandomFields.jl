@@ -1,4 +1,5 @@
 using SparseArrays
+using SelectedInversion
 
 export TakahashiStrategy, compute_variance
 
@@ -7,7 +8,7 @@ export TakahashiStrategy, compute_variance
 
 Takahashi recursions [1] for computing the marginal variances of a GMRF.
 Highly accurate, but computationally expensive.
-Uses `SparseInverseSubset.jl`.
+Uses `SelectedInversion.jl`.
 """
 struct TakahashiStrategy <: AbstractVarianceStrategy
     function TakahashiStrategy()
@@ -17,8 +18,8 @@ end
 
 function compute_variance(::TakahashiStrategy, solver::CholeskySolver)
     if solver.precision_chol isa SparseArrays.CHOLMOD.Factor
-        return diag(sparseinv(solver.precision_chol, depermute = true)[1])
+        return diag(selinv(solver.precision_chol, depermute = true)[1])
     else
-        return diag(sparseinv(sparse(to_matrix(solver.precision)), depermute = true)[1])
+        return diag(inv(Array(to_matrix(solver.precision))))
     end
 end

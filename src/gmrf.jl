@@ -13,7 +13,7 @@ import Distributions:
     std
 using LinearAlgebra
 using Random
-using SparseArrays, SparseInverseSubset
+using SparseArrays
 using LinearMaps
 
 export AbstractGMRF, GMRF, precision_map, precision_matrix
