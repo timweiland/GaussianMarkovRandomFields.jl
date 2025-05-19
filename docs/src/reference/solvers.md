@@ -90,9 +90,7 @@ GMRFs, both in terms of compute and memory use.
 In these regimes, CG with a good preconditioner may still be a viable option.
 
 If you have access to both strong parallel computing resources and a Pardiso
-license, we recommend the use of the `PardisoGMRFSolver`.
-In particular, Pardiso's Takahashi recursions are highly optimized and much
-faster than the implementation used for our `TakahashiStrategy`.
+license, `PardisoGMRFSolver` may be a good fit.
 
 ## Solver interface
 ```@docs
@@ -103,4 +101,5 @@ gmrf_precision
 compute_mean
 compute_variance
 compute_rand!
+compute_logdetcov
 ```

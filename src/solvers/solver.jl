@@ -32,6 +32,14 @@ compute_rand!(::AbstractSolver, ::Random.AbstractRNG, ::AbstractVector) =
     error("compute_rand! not implemented for Solver")
 
 """
+    compute_logdetcov(s::AbstractSolver)
+
+Compute the log determinant of the covariance matrix of the GMRF associated with
+a solver.
+"""
+compute_logdetcov(::AbstractSolver) = error("compute_logdetcov not implemented for Solver")
+
+"""
     construct_solver(blueprint::AbstractSolverBlueprint, gmrf::AbstractGMRF)
 
 Construct a solver for a GMRF using a blueprint.

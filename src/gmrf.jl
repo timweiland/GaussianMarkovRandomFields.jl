@@ -61,11 +61,7 @@ length(d::AbstractGMRF) = Base.size(precision_map(d), 1)
 invcov(d::AbstractGMRF) = Symmetric(precision_matrix(d))
 cov(::AbstractGMRF) = error("Prevented forming dense covariance matrix in memory.")
 
-# TODO: Throw this out at some point
-precision_chol(d::AbstractGMRF) = cholesky(invcov(d))
-
-logdetprecision(d::AbstractGMRF) = logdet(precision_chol(d))
-logdetcov(d::AbstractGMRF) = -logdetprecision(d)
+logdetcov(d::AbstractGMRF) = compute_logdetcov(solver_ref(d)[])
 
 sqmahal(d::AbstractGMRF, x::AbstractVector) = (Δ = x - mean(d);
 dot(Δ, precision_map(d) * Δ))

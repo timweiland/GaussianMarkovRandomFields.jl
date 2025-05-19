@@ -10,6 +10,7 @@ _ensure_dense(x::SparseVector) = Array(x)
 abstract type AbstractCholeskySolver{V<:AbstractVarianceStrategy} <: AbstractSolver end
 
 compute_mean(s::AbstractCholeskySolver) = s.mean
+
 function compute_variance(s::AbstractCholeskySolver)
     if s.computed_var !== nothing
         return s.computed_var
@@ -32,6 +33,16 @@ function compute_rand!(
     return x
 end
 
+function compute_logdetcov(
+    s::AbstractCholeskySolver,
+)
+    if s.computed_logdetcov !== nothing
+        return s.computed_logdetcov
+    end
+    s.computed_logdetcov = -logdet(s.precision_chol)
+    return s.computed_logdetcov
+end
+
 mutable struct CholeskySolver{V<:AbstractVarianceStrategy} <: AbstractCholeskySolver{V}
     mean::AbstractVector
     precision::LinearMap
@@ -39,6 +50,7 @@ mutable struct CholeskySolver{V<:AbstractVarianceStrategy} <: AbstractCholeskySo
     var_strategy::V
     perm::Union{Nothing,Vector{Int}}
     computed_var::Union{Nothing,AbstractVector}
+    computed_logdetcov::Union{Nothing,Real}
 
     function CholeskySolver(
         gmrf::AbstractGMRF,
@@ -46,7 +58,7 @@ mutable struct CholeskySolver{V<:AbstractVarianceStrategy} <: AbstractCholeskySo
         perm::Union{Nothing,Vector{Int}} = nothing,
     ) where {V<:AbstractVarianceStrategy}
         precision_chol = linmap_cholesky(precision_map(gmrf); perm = perm)
-        new{V}(mean(gmrf), precision_map(gmrf), precision_chol, var_strategy, perm, nothing)
+        new{V}(mean(gmrf), precision_map(gmrf), precision_chol, var_strategy, perm, nothing, nothing)
     end
 end
 
@@ -63,6 +75,7 @@ mutable struct LinearConditionalCholeskySolver{V<:AbstractVarianceStrategy} <:
     perm::Union{Nothing,Vector{Int}}
     computed_posterior_mean::Union{Nothing,AbstractVector}
     computed_var::Union{Nothing,AbstractVector}
+    computed_logdetcov::Union{Nothing,Real}
 
     function LinearConditionalCholeskySolver(
         gmrf::LinearConditionalGMRF,
@@ -80,6 +93,7 @@ mutable struct LinearConditionalCholeskySolver{V<:AbstractVarianceStrategy} <:
             gmrf.b,
             var_strategy,
             perm,
+            nothing,
             nothing,
             nothing,
         )
