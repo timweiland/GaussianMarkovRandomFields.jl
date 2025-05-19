@@ -58,9 +58,8 @@ precision_matrix(x::AbstractGMRF) = to_matrix(precision_map(x))
 length(d::AbstractGMRF) = Base.size(precision_map(d), 1)
 
 ### Generic derived methods
-invcov(d::AbstractGMRF) = Hermitian(sparse(precision_map(d)))
-cov(d::AbstractGMRF) =
-    precision_chol(d) \ Matrix{eltype(precision_map(d))}(I, size(precision_map(d))...)
+invcov(d::AbstractGMRF) = Symmetric(precision_matrix(d))
+cov(::AbstractGMRF) = error("Prevented forming dense covariance matrix in memory.")
 
 # TODO: Throw this out at some point
 precision_chol(d::AbstractGMRF) = cholesky(invcov(d))

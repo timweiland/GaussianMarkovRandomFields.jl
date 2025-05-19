@@ -30,8 +30,8 @@ using Random
         @test invcov(d_diag) == Q_diag
     end
 
-    @test cov(d_standard) ≈ inv(Array(Q_standard))
-    @test cov(d_diag) ≈ inv(Array(Q_diag))
+    @test_throws ErrorException cov(d_standard)
+    @test_throws ErrorException cov(d_diag)
 
     @test logdetcov(d_standard) ≈ -logdet(Q_standard)
     @test logdetcov(d_diag) ≈ -logdet(Q_diag)
