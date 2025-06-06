@@ -7,7 +7,7 @@ _ensure_dense(x) = x
 _ensure_dense(x::SparseVector) = Array(x)
 
 
-abstract type AbstractCholeskySolver{V<:AbstractVarianceStrategy} <: AbstractSolver end
+abstract type AbstractCholeskySolver{M, V<:AbstractVarianceStrategy} <: AbstractSolver end
 
 compute_mean(s::AbstractCholeskySolver) = s.mean
 
@@ -18,6 +18,7 @@ function compute_variance(s::AbstractCholeskySolver)
     s.computed_var = compute_variance(s.var_strategy, s)
     return s.computed_var
 end
+
 function compute_rand!(
     s::AbstractCholeskySolver,
     rng::Random.AbstractRNG,
@@ -43,10 +44,10 @@ function compute_logdetcov(
     return s.computed_logdetcov
 end
 
-mutable struct CholeskySolver{V<:AbstractVarianceStrategy} <: AbstractCholeskySolver{V}
+mutable struct CholeskySolver{M, V<:AbstractVarianceStrategy} <: AbstractCholeskySolver{M, V}
     mean::AbstractVector
     precision::LinearMap
-    precision_chol::Union{Cholesky,SparseArrays.CHOLMOD.Factor}
+    precision_chol
     var_strategy::V
     perm::Union{Nothing,Vector{Int}}
     computed_var::Union{Nothing,AbstractVector}
@@ -56,17 +57,18 @@ mutable struct CholeskySolver{V<:AbstractVarianceStrategy} <: AbstractCholeskySo
         gmrf::AbstractGMRF,
         var_strategy::V,
         perm::Union{Nothing,Vector{Int}} = nothing,
+        factorization_method = :default,
     ) where {V<:AbstractVarianceStrategy}
-        precision_chol = linmap_cholesky(precision_map(gmrf); perm = perm)
-        new{V}(mean(gmrf), precision_map(gmrf), precision_chol, var_strategy, perm, nothing, nothing)
+        precision_chol = linmap_cholesky(precision_map(gmrf); perm = perm, method=factorization_method)
+        new{factorization_method, V}(mean(gmrf), precision_map(gmrf), precision_chol, var_strategy, perm, nothing, nothing)
     end
 end
 
-mutable struct LinearConditionalCholeskySolver{V<:AbstractVarianceStrategy} <:
-               AbstractCholeskySolver{V}
+mutable struct LinearConditionalCholeskySolver{M, V<:AbstractVarianceStrategy} <:
+               AbstractCholeskySolver{M, V}
     prior_mean::AbstractVector
     precision::LinearMap
-    precision_chol::Union{Cholesky,SparseArrays.CHOLMOD.Factor}
+    precision_chol
     A::LinearMap
     Q_ϵ::LinearMap
     y::AbstractVector
@@ -81,9 +83,10 @@ mutable struct LinearConditionalCholeskySolver{V<:AbstractVarianceStrategy} <:
         gmrf::LinearConditionalGMRF,
         var_strategy::V,
         perm::Union{Nothing,Vector{Int}} = nothing,
+        factorization_method = :default,
     ) where {V<:AbstractVarianceStrategy}
-        precision_chol = linmap_cholesky(precision_map(gmrf); perm = perm)
-        new{V}(
+        precision_chol = linmap_cholesky(precision_map(gmrf); perm = perm, method=factorization_method)
+        new{factorization_method, V}(
             mean(gmrf.prior),
             precision_map(gmrf),
             precision_chol,
@@ -112,12 +115,19 @@ function compute_mean(s::LinearConditionalCholeskySolver)
 end
 
 """
-    CholeskySolverBlueprint(; var_strategy = RBMCStrategy(100), perm = nothing)
+    CholeskySolverBlueprint(;
+        factorization_method = :default,
+        var_strategy = RBMCStrategy(100),
+        perm = nothing
+        )
 
 A blueprint for a direct solver that uses a sparse Cholesky decomposition
 computed through CHOLMOD.
 
 # Keyword arguments
+- `factorization_method::Symbol`: One of [:default, :autodiffable].
+  Uses CHOLMOD by default to factorize. If you need to autodiff through GMRF
+  quantities, use :autodiffable, which switches to LDLFactorizations.jl.
 - `var_strategy::AbstractVarianceStrategy`: Strategy for computing the marginal
    variances of the GMRF. Defaults to `RBMCStrategy(100)`.
 - `perm::Union{Nothing,Vector{Int}}`: Permutation / node reordering to use for
@@ -125,20 +135,24 @@ computed through CHOLMOD.
     solver will compute its own permutation.
 """
 struct CholeskySolverBlueprint <: AbstractSolverBlueprint
+    factorization_method::Symbol
     var_strategy::AbstractVarianceStrategy
     perm::Union{Nothing,Vector{Int}}
     function CholeskySolverBlueprint(;
-        var_strategy::AbstractVarianceStrategy = RBMCStrategy(100),
+        factorization_method::Symbol = :default,
+        var_strategy::AbstractVarianceStrategy = TakahashiStrategy(),
         perm::Union{Nothing,Vector{Int}} = nothing,
     )
-        new(var_strategy, perm)
+        new(factorization_method, var_strategy, perm)
     end
 end
 
 function construct_solver(bp::CholeskySolverBlueprint, gmrf::AbstractGMRF)
-    return CholeskySolver(gmrf, bp.var_strategy, bp.perm)
+    return CholeskySolver(gmrf, bp.var_strategy, bp.perm, bp.factorization_method)
 end
 
 function construct_solver(bp::CholeskySolverBlueprint, gmrf::LinearConditionalGMRF)
-    return LinearConditionalCholeskySolver(gmrf, bp.var_strategy, bp.perm)
+    return LinearConditionalCholeskySolver(gmrf, bp.var_strategy, bp.perm, bp.factorization_method)
+end
+
 end
