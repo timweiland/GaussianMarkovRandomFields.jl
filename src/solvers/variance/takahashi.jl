@@ -16,7 +16,7 @@ struct TakahashiStrategy <: AbstractVarianceStrategy
     end
 end
 
-function compute_variance(::TakahashiStrategy, solver::CholeskySolver)
+function compute_variance(::TakahashiStrategy, solver::AbstractCholeskySolver)
     if solver.precision_chol isa SparseArrays.CHOLMOD.Factor
         return diag(selinv(solver.precision_chol, depermute = true)[1])
     else
