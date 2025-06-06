@@ -141,5 +141,11 @@ function GaussianMarkovRandomFields.construct_solver(
     return LinearConditionalPardisoGMRFSolver(gmrf)
 end
 
+function infer_solver_blueprint(
+    ::Union{PardisoGMRFSolver, LinearConditionalPardisoGMRFSolver}
+    )
+    return PardisoGMRFSolverBlueprint()
+end
+
 end
 # COV_EXCL_STOP

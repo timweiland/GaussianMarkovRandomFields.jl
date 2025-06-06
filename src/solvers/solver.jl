@@ -1,6 +1,7 @@
 using Random
 
 export gmrf_precision, compute_mean, compute_variance, compute_rand!
+export infer_solver_blueprint
 
 """
     gmrf_precision(s::AbstractSolver)
@@ -47,3 +48,17 @@ May be used to provide specialized solvers for specific GMRF types.
 """
 construct_solver(::AbstractSolverBlueprint, ::AbstractGMRF) =
     error("construct_solver not implemented for SolverBlueprint")
+
+"""
+    infer_solver_blueprint(solver::AbstractSolver)
+
+Infer a solver blueprint from a concrete solver instance.
+"""
+infer_solver_blueprint(::AbstractSolver) = error("Unable to infer blueprint for solver")
+
+"""
+    infer_solver_blueprint(x::AbstractGMRF)
+
+Infer the solver blueprint of a GMRF.
+"""
+infer_solver_blueprint(x::AbstractGMRF) = infer_solver_blueprint(x.solver_ref[])

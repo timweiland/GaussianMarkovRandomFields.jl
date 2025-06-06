@@ -155,4 +155,12 @@ function construct_solver(bp::CholeskySolverBlueprint, gmrf::LinearConditionalGM
     return LinearConditionalCholeskySolver(gmrf, bp.var_strategy, bp.perm, bp.factorization_method)
 end
 
+function infer_solver_blueprint(
+    s::Union{CholeskySolver{M}, LinearConditionalCholeskySolver{M}}
+    ) where {M}
+    return CholeskySolverBlueprint(
+        factorization_method=M,
+        var_strategy=s.var_strategy,
+        perm=s.perm,
+    )
 end

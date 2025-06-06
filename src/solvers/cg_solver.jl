@@ -200,3 +200,14 @@ function construct_solver(bp::CGSolverBlueprint, gmrf::LinearConditionalGMRF)
         bp.mean_residual_guess,
     )
 end
+
+function infer_solver_blueprint(
+    s::Union{CGSolver, LinearConditionalCGSolver}
+    )
+    return CGSolverBlueprint(
+        reltol=s.reltol,
+        abstol=s.abstol,
+        maxiter=s.maxiter,
+        var_strategy=s.var_strategy,
+    )
+end

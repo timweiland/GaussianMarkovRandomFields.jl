@@ -102,4 +102,5 @@ compute_mean
 compute_variance
 compute_rand!
 compute_logdetcov
+infer_solver_blueprint
 ```
