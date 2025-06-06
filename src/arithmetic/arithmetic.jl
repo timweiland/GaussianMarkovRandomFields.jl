@@ -86,10 +86,13 @@ function condition_on_observations(
     Q_ϵ::Union{AbstractMatrix,LinearMap,Real},
     y::AbstractVector = spzeros(Base.size(A)[1]),
     b::AbstractVector = spzeros(Base.size(A)[1]);
-    solver_blueprint::AbstractSolverBlueprint = CholeskySolverBlueprint(),
+    solver_blueprint::Union{Nothing, AbstractSolverBlueprint} = nothing,
 )
     if Q_ϵ isa Real
         Q_ϵ = LinearMaps.UniformScalingMap(Q_ϵ, Base.size(A)[1])
+    end
+    if solver_blueprint === nothing
+        solver_blueprint = infer_solver_blueprint(x)
     end
     return LinearConditionalGMRF(x, A, Q_ϵ, y, b, solver_blueprint)
 end
