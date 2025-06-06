@@ -92,13 +92,21 @@ struct GMRF{T} <: AbstractGMRF
     solver_ref::Base.RefValue{AbstractSolver}
 
     function GMRF(
-        mean::AbstractVector{T},
-        precision::LinearMap{T},
+        mean::AbstractVector,
+        precision::LinearMap,
         solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
-    ) where {T}
+    )
         n = length(mean)
         n == size(precision, 1) == size(precision, 2) ||
             throw(ArgumentError("size mismatch"))
+        T = promote_type(eltype(mean), eltype(precision))
+        if eltype(mean) != T
+            T = convert(AbstractVector{T}, mean)
+        end
+        if eltype(precision) != T
+            precision = LinearMap{T}(convert(AbstractMatrix{T}, to_matrix(precision)))
+        end
+
         solver_ref = Base.RefValue{AbstractSolver}()
         self = new{T}(mean, precision, solver_ref)
         solver_ref[] = construct_solver(solver_blueprint, self)
@@ -106,10 +114,10 @@ struct GMRF{T} <: AbstractGMRF
     end
 
     GMRF(
-        mean::AbstractVector{T},
-        precision::AbstractMatrix{T},
+        mean::AbstractVector,
+        precision::AbstractMatrix,
         solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
-    ) where {T} = GMRF(mean, LinearMap(precision), solver_blueprint)
+    ) = GMRF(mean, LinearMap(precision), solver_blueprint)
 end
 
 length(d::GMRF) = length(d.mean)
