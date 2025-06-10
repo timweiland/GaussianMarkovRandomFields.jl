@@ -1,6 +1,7 @@
 using Random
 
 export gmrf_precision, compute_mean, compute_variance, compute_rand!
+export compute_logdetcov
 export infer_solver_blueprint
 
 """
