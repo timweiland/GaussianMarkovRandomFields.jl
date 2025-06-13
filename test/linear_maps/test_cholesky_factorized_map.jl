@@ -12,12 +12,12 @@ using GaussianMarkovRandomFields, LinearAlgebra, LinearMaps, Random, SparseArray
 
     x = rand(N)
 
-    @test linmap_cholesky(A_cho_map) == A_cho # Yes, they should be equal!
+    @test linmap_cholesky(Val(:default), A_cho_map) == A_cho # Yes, they should be equal!
     @test size(A_cho_map) == size(A_cho) == (N, N)
     @test A_cho_map * x ≈ A * x
     @test A_cho_map' == A_cho_map
     @test to_matrix(A_cho_map) ≈ A
-    @test linmap_sqrt(A_cho_map) isa CholeskySqrt
+    @test linmap_sqrt(A_cho_map) isa SparseCholeskySqrt
     @test issymmetric(A_cho_map)
     @test isposdef(A_cho_map)
 end

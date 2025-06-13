@@ -14,7 +14,7 @@ function _generate_gmrf(disc, method)
     return discretize(
         spde,
         disc,
-        solver_blueprint=CholeskySolverBlueprint(factorization_method=method)
+        solver_blueprint=CholeskySolverBlueprint{method}()
     )
 end
 
@@ -37,11 +37,26 @@ end
         @test std(x_ldl) ≈ std(x_default)
         @test logdetcov(x_ldl) ≈ logdetcov(x_default)
 
-        @test x_cond_default.solver_ref[] isa LinearConditionalCholeskySolver{:default}
-        @test x_cond_ldl.solver_ref[] isa LinearConditionalCholeskySolver{:autodiffable}
+        @test x_cond_default.solver isa LinearConditionalCholeskySolver{:default}
+        @test x_cond_ldl.solver isa LinearConditionalCholeskySolver{:autodiffable}
         @test mean(x_cond_ldl) ≈ mean(x_cond_default)
         @test std(x_cond_ldl) ≈ std(x_cond_default)
         @test logdetcov(x_cond_ldl) ≈ logdetcov(x_cond_default)
         @test logpdf(x_cond_ldl, mean(x_cond_ldl)) ≈ logpdf(x_cond_default, mean(x_cond_default))
+    end
+
+    @testset "Autodiff" begin
+
+        function form_gmrf(range)
+            grid = generate_grid(Triangle, (50, 50))
+            interpolation_fn = Lagrange{RefTriangle, 1}()
+            quad_rule = QuadratureRule{RefTriangle}(2)
+            disc = FEMDiscretization(grid, interpolation_fn, quad_rule)
+
+            # Define SPDE and discretize to get a GMRF
+            spde = MaternSPDE{2}(range = range, smoothness = 2)
+            cbp = CholeskySolverBlueprint{:autodiffable}()
+            return discretize(spde, disc, solver_blueprint=cbp)
+        end
     end
 end
