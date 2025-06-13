@@ -45,6 +45,7 @@ mutable struct CGSolver{V<:AbstractVarianceStrategy} <: AbstractCGSolver{V}
     Q_sqrt::Union{Nothing,LinearMaps.LinearMap}
     var_strategy::V
     computed_var::Union{Nothing,AbstractVector}
+    preconditioner_strategy::Function
 
     function CGSolver(
         gmrf::AbstractGMRF,
@@ -64,6 +65,31 @@ mutable struct CGSolver{V<:AbstractVarianceStrategy} <: AbstractCGSolver{V}
             nothing,
             var_strategy,
             nothing,
+            default_preconditioner_strategy,
+        )
+    end
+
+    function CGSolver(
+        mean::AbstractVector{Tv},
+        precision::LinearMap{Tv},
+        reltol::Real,
+        abstol::Real,
+        maxiter::Int,
+        Pl::Union{Identity,AbstractPreconditioner},
+        var_strategy::V,
+        preconditioner_strategy::Function = default_preconditioner_strategy,
+    ) where {V<:AbstractVarianceStrategy, Tv<:Real}
+        new{V}(
+            mean,
+            precision,
+            reltol,
+            abstol,
+            maxiter,
+            Pl,
+            nothing,
+            var_strategy,
+            nothing,
+            preconditioner_strategy,
         )
     end
 end
@@ -84,6 +110,7 @@ mutable struct LinearConditionalCGSolver{V<:AbstractVarianceStrategy} <: Abstrac
     mean_residual_guess::Union{Nothing,AbstractVector}
     computed_posterior_mean::Union{Nothing,AbstractVector}
     computed_var::Union{Nothing,AbstractVector}
+    preconditioner_strategy::Function
 
     function LinearConditionalCGSolver(
         gmrf::LinearConditionalGMRF,
@@ -110,6 +137,42 @@ mutable struct LinearConditionalCGSolver{V<:AbstractVarianceStrategy} <: Abstrac
             mean_residual_guess,
             nothing,
             nothing,
+            default_preconditioner_strategy,
+        )
+    end
+
+    function LinearConditionalCGSolver(
+        prior_mean::AbstractVector{Tv},
+        posterior_precision::LinearMap{Tv},
+        A::LinearMap{Tv},
+        Q_ϵ::LinearMap{Tv},
+        y::AbstractVector{Tv},
+        b::AbstractVector{Tv},
+        reltol::Real,
+        abstol::Real,
+        maxiter::Int,
+        Pl::Union{Identity,AbstractPreconditioner},
+        var_strategy::V,
+        mean_residual_guess::Union{Nothing,AbstractVector} = nothing,
+        preconditioner_strategy::Function = default_preconditioner_strategy,
+    ) where {V<:AbstractVarianceStrategy, Tv<:Real}
+        new{V}(
+            prior_mean,
+            posterior_precision,
+            A,
+            Q_ϵ,
+            y,
+            b,
+            reltol,
+            abstol,
+            maxiter,
+            Pl,
+            var_strategy,
+            nothing,
+            mean_residual_guess,
+            nothing,
+            nothing,
+            preconditioner_strategy,
         )
     end
 end
@@ -201,6 +264,51 @@ function construct_solver(bp::CGSolverBlueprint, gmrf::LinearConditionalGMRF)
     )
 end
 
+function construct_solver(
+    bp::CGSolverBlueprint,
+    mean::AbstractVector,
+    Q::LinearMaps.LinearMap;
+    preconditioner::Union{Identity,AbstractPreconditioner} = Identity()
+)
+    return CGSolver(
+        mean,
+        Q,
+        bp.reltol,
+        bp.abstol,
+        bp.maxiter,
+        preconditioner,
+        bp.var_strategy,
+        bp.preconditioner_strategy,
+    )
+end
+
+function construct_conditional_solver(
+    bp::CGSolverBlueprint,
+    prior_mean::AbstractVector,
+    posterior_precision::LinearMaps.LinearMap,
+    A::LinearMaps.LinearMap,
+    Q_ε::LinearMaps.LinearMap,
+    y::AbstractVector,
+    b::AbstractVector;
+    preconditioner::Union{Identity,AbstractPreconditioner} = Identity()
+)
+    return LinearConditionalCGSolver(
+        prior_mean,
+        posterior_precision,
+        A,
+        Q_ε,
+        y,
+        b,
+        bp.reltol,
+        bp.abstol,
+        bp.maxiter,
+        preconditioner,
+        bp.var_strategy,
+        bp.mean_residual_guess,
+        bp.preconditioner_strategy,
+    )
+end
+
 function infer_solver_blueprint(
     s::Union{CGSolver, LinearConditionalCGSolver}
     )
@@ -210,4 +318,14 @@ function infer_solver_blueprint(
         maxiter=s.maxiter,
         var_strategy=s.var_strategy,
     )
+end
+
+function postprocess!(solver::CGSolver, gmrf::AbstractGMRF)
+    solver.Pl = solver.preconditioner_strategy(gmrf)
+    return nothing
+end
+
+function postprocess!(solver::LinearConditionalCGSolver, gmrf::AbstractGMRF)
+    solver.Pl = solver.preconditioner_strategy(gmrf)
+    return nothing
 end

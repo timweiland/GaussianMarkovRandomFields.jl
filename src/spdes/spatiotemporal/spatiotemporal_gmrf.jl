@@ -26,7 +26,7 @@ All time points are modelled in one joint GMRF.
 It provides utilities to get statistics, draw samples and get the spatial discretization
 at a given time.
 """
-abstract type AbstractSpatiotemporalGMRF <: AbstractGMRF end
+abstract type AbstractSpatiotemporalGMRF{T<:Real, PrecisionMap<:LinearMap{T}} <: AbstractGMRF{T, PrecisionMap} end
 
 """
     N_t(::AbstractSpatiotemporalGMRF)

@@ -36,10 +36,10 @@ A [Gaussian Markov Random Field](https://en.wikipedia.org/wiki/Markov_random_fie
 (GMRF) is a special case of a multivariate normal distribution where the precision matrix
 is sparse. The zero entries in the precision correspond to conditional independencies.
 """
-abstract type AbstractGMRF <: AbstractMvNormal end
+abstract type AbstractGMRF{T<:Real, L<:LinearMaps.LinearMap{T}} <: AbstractMvNormal end
 
-solver_ref(x::AbstractGMRF) = x.solver_ref
-mean(s::AbstractGMRF) = compute_mean(solver_ref(s)[])
+solver(x::AbstractGMRF) = x.solver
+mean(s::AbstractGMRF) = compute_mean(solver(s))
 
 """
     precision_map(::AbstractGMRF)
@@ -61,7 +61,7 @@ length(d::AbstractGMRF) = Base.size(precision_map(d), 1)
 invcov(d::AbstractGMRF) = Symmetric(precision_matrix(d))
 cov(::AbstractGMRF) = error("Prevented forming dense covariance matrix in memory.")
 
-logdetcov(d::AbstractGMRF) = compute_logdetcov(solver_ref(d)[])
+logdetcov(d::AbstractGMRF) = compute_logdetcov(solver(d))
 
 sqmahal(d::AbstractGMRF, x::AbstractVector) = (Δ = x - mean(d);
 dot(Δ, precision_map(d) * Δ))
@@ -70,9 +70,9 @@ sqmahal!(r::AbstractVector, d::AbstractGMRF, x::AbstractVector) = (r .= sqmahal(
 gradlogpdf(d::AbstractGMRF, x::AbstractVector) = -precision_map(d) * (x .- mean(d))
 
 _rand!(rng::AbstractRNG, d::AbstractGMRF, x::AbstractVector) =
-    compute_rand!(solver_ref(d)[], rng, x)
+    compute_rand!(solver(d), rng, x)
 
-var(d::AbstractGMRF) = compute_variance(solver_ref(d)[])
+var(d::AbstractGMRF) = compute_variance(solver(d))
 std(d::AbstractGMRF) = sqrt.(var(d))
 
 #####################
@@ -81,21 +81,40 @@ std(d::AbstractGMRF) = sqrt.(var(d))
 #
 #####################
 """
-    GMRF{T}(mean, precision, solver_ref)
+    GMRF(mean, precision, solver_blueprint=DefaultSolverBlueprint())
 
 A Gaussian Markov Random Field with mean `mean` and precision matrix `precision`.
-Carries a reference to a solver for the GMRF quantities.
+
+# Arguments
+- `mean::AbstractVector`: The mean vector of the GMRF.
+- `precision::LinearMap`: The precision matrix (inverse covariance) of the GMRF.
+- `solver_blueprint::AbstractSolverBlueprint`: Blueprint specifying how to construct the solver.
+
+# Type Parameters
+- `T<:Real`: The numeric type (e.g., Float64).
+- `PrecisionMap<:LinearMap{T}`: The type of the precision matrix LinearMap.
+- `Solver<:AbstractSolver`: The type of the solver instance.
+
+# Fields
+- `mean::Vector{T}`: The mean vector.
+- `precision::PrecisionMap`: The precision matrix as a LinearMap.
+- `solver::Solver`: The solver instance for computing GMRF quantities.
+
+# Notes
+The solver is constructed automatically using `construct_solver(solver_blueprint, mean, precision)`
+and is used to compute means, variances, samples, and other GMRF quantities efficiently.
 """
-struct GMRF{T} <: AbstractGMRF
-    mean::AbstractVector{T}
-    precision::LinearMap{T}
-    solver_ref::Base.RefValue{AbstractSolver}
+struct GMRF{T<:Real, PrecisionMap<:LinearMap{T}, Solver<:AbstractSolver} <: AbstractGMRF{T, PrecisionMap}
+    mean::Vector{T}
+    precision::PrecisionMap
+    solver::Solver
+    #solver_ref::Base.RefValue{AbstractSolver}
 
     function GMRF(
         mean::AbstractVector,
-        precision::LinearMap,
+        precision::PrecisionMap,
         solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
-    )
+    ) where {PrecisionMap <: LinearMap}
         n = length(mean)
         n == size(precision, 1) == size(precision, 2) ||
             throw(ArgumentError("size mismatch"))
@@ -107,10 +126,13 @@ struct GMRF{T} <: AbstractGMRF
             precision = LinearMap{T}(convert(AbstractMatrix{T}, to_matrix(precision)))
         end
 
-        solver_ref = Base.RefValue{AbstractSolver}()
-        self = new{T}(mean, precision, solver_ref)
-        solver_ref[] = construct_solver(solver_blueprint, self)
-        return self
+        #solver_ref = Base.RefValue{AbstractSolver}()
+        solver = construct_solver(solver_blueprint, mean, precision)
+        result = new{T, typeof(precision), typeof(solver)}(mean, precision, solver)
+        postprocess!(solver, result)
+        return result
+        #solver_ref[] = construct_solver(solver_blueprint, self)
+        #return self
     end
 
     GMRF(

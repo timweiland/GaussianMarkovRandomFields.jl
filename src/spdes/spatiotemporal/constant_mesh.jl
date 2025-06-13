@@ -14,7 +14,7 @@ export ConstantMeshSTGMRF, ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMesh
 
 A spatiotemporal GMRF with constant spatial discretization.
 """
-abstract type ConstantMeshSTGMRF{D,T} <: AbstractSpatiotemporalGMRF end
+abstract type ConstantMeshSTGMRF{D, T, PrecisionMap<:LinearMap{T}} <: AbstractSpatiotemporalGMRF{T, PrecisionMap} end
 
 precision_map(x::ConstantMeshSTGMRF) = x.precision
 mean(x::ConstantMeshSTGMRF) = x.mean
@@ -25,12 +25,12 @@ mean(x::ConstantMeshSTGMRF) = x.mean
 A spatiotemporal GMRF with constant spatial discretization and an implicit Euler
 discretization of the temporal dynamics.
 """
-struct ImplicitEulerConstantMeshSTGMRF{D,T} <: ConstantMeshSTGMRF{D,T}
+struct ImplicitEulerConstantMeshSTGMRF{D, T, PrecisionMap<:LinearMap{T}, Solver<:AbstractSolver} <: ConstantMeshSTGMRF{D, T, PrecisionMap}
     mean::AbstractVector{T}
-    precision::LinearMap{T}
+    precision::PrecisionMap
     discretization::FEMDiscretization{D}
     ssm::ImplicitEulerSSM
-    solver_ref::Base.RefValue{AbstractSolver}
+    solver::Solver
 
     function ImplicitEulerConstantMeshSTGMRF(
         mean::AbstractVector{T},
@@ -44,10 +44,10 @@ struct ImplicitEulerConstantMeshSTGMRF{D,T} <: ConstantMeshSTGMRF{D,T}
             throw(ArgumentError("size mismatch"))
         (n % ndofs(discretization)) == 0 || throw(ArgumentError("size mismatch"))
 
-        solver_ref = Base.RefValue{AbstractSolver}()
-        self = new{D,T}(mean, precision, discretization, ssm, solver_ref)
-        solver_ref[] = construct_solver(solver_blueprint, self)
-        return self
+        solver = construct_solver(solver_blueprint, mean, precision)
+        result = new{D,T,typeof(precision),typeof(solver)}(mean, precision, discretization, ssm, solver)
+        postprocess!(solver, result)
+        return result
     end
 end
 
@@ -57,11 +57,11 @@ end
 A concrete implementation of a spatiotemporal GMRF with constant spatial
 discretization.
 """
-struct ConcreteConstantMeshSTGMRF{D,T} <: ConstantMeshSTGMRF{D,T}
+struct ConcreteConstantMeshSTGMRF{D, T, PrecisionMap<:LinearMap{T}, Solver<:AbstractSolver} <: ConstantMeshSTGMRF{D, T, PrecisionMap}
     mean::AbstractVector{T}
-    precision::LinearMap{T}
+    precision::PrecisionMap
     discretization::FEMDiscretization{D}
-    solver_ref::Base.RefValue{AbstractSolver}
+    solver::Solver
 
     function ConcreteConstantMeshSTGMRF(
         mean::AbstractVector{T},
@@ -74,10 +74,10 @@ struct ConcreteConstantMeshSTGMRF{D,T} <: ConstantMeshSTGMRF{D,T}
             throw(ArgumentError("size mismatch"))
         (n % ndofs(discretization)) == 0 || throw(ArgumentError("size mismatch"))
 
-        solver_ref = Base.RefValue{AbstractSolver}()
-        self = new{D,T}(mean, precision, discretization, solver_ref)
-        solver_ref[] = construct_solver(solver_blueprint, self)
-        return self
+        solver = construct_solver(solver_blueprint, mean, precision)
+        result = new{D,T,typeof(precision),typeof(solver)}(mean, precision, discretization, solver)
+        postprocess!(solver, result)
+        return result
     end
 end
 

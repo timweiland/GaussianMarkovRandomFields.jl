@@ -1,4 +1,5 @@
 using SparseArrays
+import Ferrite: ConstraintHandler
 
 export ImplicitEulerSSM, ImplicitEulerJointSSMMatrices
 
