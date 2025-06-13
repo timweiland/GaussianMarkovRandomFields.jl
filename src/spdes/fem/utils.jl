@@ -99,7 +99,7 @@ function assemble_diffusion_matrix(
 )
     n_basefuncs = getnbasefunctions(cellvalues)
     # Reset to 0
-    Ge = spzeros(size(Ge))
+    fill!(Ge, 0.)
     # Loop over quadrature points
     for q_point = 1:getnquadpoints(cellvalues)
         # Get the quadrature weight
@@ -139,7 +139,7 @@ function assemble_advection_matrix(
 )
     n_basefuncs = getnbasefunctions(cellvalues)
     # Reset to 0
-    Be = spzeros(size(Be))
+    fill!(Be, 0.)
     # Loop over quadrature points
     for q_point = 1:getnquadpoints(cellvalues)
         # Get the quadrature weight
