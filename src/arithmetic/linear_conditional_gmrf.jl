@@ -28,31 +28,63 @@ A GMRF conditioned on observations `y = A * x + b + ϵ` where `ϵ ~ N(0, Q_ϵ)`.
 - `solver_blueprint::AbstractSolverBlueprint=DefaultSolverBlueprint()`:
         The solver blueprint.
 """
-struct LinearConditionalGMRF{G<:AbstractGMRF} <: AbstractGMRF
-    prior::G
-    precision::LinearMap
-    A::LinearMap
-    Q_ϵ::LinearMap
-    y::AbstractVector
-    b::AbstractVector
-    solver_ref::Base.RefValue{AbstractSolver}
+struct LinearConditionalGMRF{
+    PriorGMRF<:AbstractGMRF, 
+    T<:Real, 
+    PrecisionMap<:LinearMaps.LinearMap{T}, 
+    ObservationMap<:LinearMaps.LinearMap{T}, 
+    NoiseMap<:LinearMaps.LinearMap{T}, 
+    Solver<:AbstractSolver
+    } <: AbstractGMRF{T, PrecisionMap}
+    prior::PriorGMRF
+    precision::PrecisionMap
+    A::ObservationMap
+    Q_ϵ::NoiseMap
+    y::Vector{T}
+    b::Vector{T}
+    solver::Solver
+    #solver_ref::Base.RefValue{AbstractSolver}
 
     function LinearConditionalGMRF(
-        prior::G,
-        A::Union{AbstractMatrix,LinearMap},
-        Q_ϵ::Union{AbstractMatrix,LinearMap},
-        y::AbstractVector,
-        b::AbstractVector = spzeros(Base.size(A, 1)),
+        prior::PriorGMRF,
+        A::Union{AbstractMatrix{T},LinearMap{T}},
+        Q_ϵ::Union{AbstractMatrix{T},LinearMap{T}},
+        y::AbstractVector{T},
+        b::AbstractVector{T} = spzeros(Base.size(A, 1)),
         solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
-    ) where {G}
+    ) where {T<:Real, PrecisionMap<:LinearMaps.LinearMap{T}, PriorGMRF<:AbstractGMRF{T, PrecisionMap}}
         A = ensure_linearmap(A)
         Q_ϵ = ensure_linearmap(Q_ϵ)
         precision = precision_map(prior) + OuterProductMap(A, Q_ϵ)
+        return LinearConditionalGMRF(prior, precision, A, Q_ϵ, y, b, solver_blueprint)
+    end
+
+    function LinearConditionalGMRF(
+        prior::PriorGMRF,
+        Q_cond::Union{AbstractMatrix{T}, LinearMap{T}},
+        A::Union{AbstractMatrix{T},LinearMap{T}},
+        Q_ϵ::Union{AbstractMatrix{T},LinearMap{T}},
+        y::AbstractVector{T},
+        b::AbstractVector{T} = spzeros(Base.size(A, 1)),
+        solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
+    ) where {T<:Real, PrecisionMap<:LinearMaps.LinearMap{T}, PriorGMRF<:AbstractGMRF{T, PrecisionMap}}
+        Q_cond = ensure_linearmap(Q_cond)
+        Base.size(Q_cond) == Base.size(precision_map(prior)) || throw(ArgumentError("size mismatch"))
+        A = ensure_linearmap(A)
+        Q_ϵ = ensure_linearmap(Q_ϵ)
         Base.size(A, 1) == length(y) == length(b) || throw(ArgumentError("size mismatch"))
-        solver_ref = Base.RefValue{AbstractSolver}()
-        x = new{G}(prior, precision, A, Q_ϵ, y, b, solver_ref)
-        solver_ref[] = construct_solver(solver_blueprint, x)
-        return x
+        solver = construct_conditional_solver(
+            solver_blueprint,
+            mean(prior),
+            Q_cond,
+            A,
+            Q_ϵ,
+            y,
+            b
+        )
+        result = new{PriorGMRF, T, typeof(Q_cond), typeof(A), typeof(Q_ϵ), typeof(solver)}(prior, Q_cond, A, Q_ϵ, y, b, solver)
+        postprocess!(solver, result)
+        return result
     end
 end
 
@@ -62,6 +94,6 @@ precision_map(d::LinearConditionalGMRF) = d.precision
 function Base.show(io::IO, x::LinearConditionalGMRF)
     print(
         io,
-        "LinearConditionalGMRF of size $(length(x)) and solver $(typeof(x.solver_ref[]))",
+        "LinearConditionalGMRF of size $(length(x)) and solver $(typeof(x.solver))",
     )
 end

@@ -23,37 +23,76 @@ where Δ is the Laplacian operator, $κ > 0$, $ν > 0$.
 
 The stationary solutions to this SPDE are Matérn processes.
 """
-struct MaternSPDE{D} <: SPDE
-    κ::Real
-    ν::Rational
-    σ²::Real
-    diffusion_factor::Union{AbstractMatrix,UniformScaling}
+struct MaternSPDE{D, Tv<:Real, Ti<:Integer} <: SPDE
+    κ::Tv
+    ν::Rational{Ti}
+    σ²::Tv
+    diffusion_factor::Matrix{Tv}
+    #diffusion_factor::Union{AbstractMatrix,UniformScaling}
 
-    function MaternSPDE{D}(;
-        κ::Union{Real,Nothing} = nothing,
-        ν::Union{Integer,Rational,Nothing} = nothing,
-        range::Union{Real,Nothing} = nothing,
-        smoothness::Union{Integer,Nothing} = nothing,
-        σ² = 1.0,
-        diffusion_factor = I,
-    ) where {D}
-        ((κ === nothing) ⊻ (range === nothing)) ||
-            throw(ArgumentError("Either κ or range must be specified"))
-        ((ν === nothing) ⊻ (smoothness === nothing)) ||
-            throw(ArgumentError("Either ν or smoothness must be specified"))
-        if ν === nothing
-            ν = smoothness_to_ν(smoothness, D)
-        end
-        if κ === nothing
-            κ = range_to_κ(range, ν)
-        end
-        κ > 0 || throw(ArgumentError("κ must be positive"))
-        ν >= 0 || throw(ArgumentError("ν must be non-negative"))
-        (D >= 1 && isinteger(D)) || throw(ArgumentError("D must be a positive integer"))
-        (σ² > 0) || throw(ArgumentError("σ² must be positive"))
-        new{D}(κ, ν, σ², diffusion_factor)
-    end
+    #function MaternSPDE{D}(;
+        #κ::Union{Tv,Nothing} = nothing,
+        #ν::Union{Ti,Rational{Ti},Nothing} = nothing,
+        #range::Union{Tv,Nothing} = nothing,
+        #smoothness::Union{Ti,Nothing} = nothing,
+        #σ²::Tv = 1.0,
+        #diffusion_factor::Union{Matrix{Tv}, Nothing} = nothing
+    #) where {D, Tv, Ti}
+        #((κ === nothing) ⊻ (range === nothing)) ||
+            #throw(ArgumentError("Either κ or range must be specified"))
+        #((ν === nothing) ⊻ (smoothness === nothing)) ||
+            #throw(ArgumentError("Either ν or smoothness must be specified"))
+        #if ν === nothing
+            #ν = smoothness_to_ν(smoothness, D)
+        #end
+        #if κ === nothing
+            #κ = range_to_κ(range, ν)
+        #end
+        #κ > 0 || throw(ArgumentError("κ must be positive"))
+        #ν >= 0 || throw(ArgumentError("ν must be non-negative"))
+        #(D >= 1 && isinteger(D)) || throw(ArgumentError("D must be a positive integer"))
+        #(σ² > 0) || throw(ArgumentError("σ² must be positive"))
+        #println(typeof(range))
+        #println(Tv)
+        #if diffusion_factor === nothing
+            #diffusion_factor = Matrix{Tv}(I, D, D)
+        #end
+        #new{D, Tv, Ti}(κ, ν, σ², diffusion_factor)
+    #end
 end
+
+function MaternSPDE{D}(;
+    κ::Union{Real, Nothing} = nothing,
+    ν::Union{Integer, Rational, Nothing} = nothing,
+    range::Union{Real, Nothing} = nothing,
+    smoothness::Union{Integer, Nothing} = nothing,
+    σ²::Real = 1.0,
+    diffusion_factor::Union{AbstractMatrix, Nothing} = nothing,
+) where {D}
+    # Same logic as before, but D is fixed from the type
+    ((κ === nothing) ⊻ (range === nothing)) || throw(ArgumentError("Either κ or range must be specified"))
+    ((ν === nothing) ⊻ (smoothness === nothing)) || throw(ArgumentError("Either ν or smoothness must be specified"))
+
+    if ν === nothing
+        ν = smoothness_to_ν(smoothness, D)
+    end
+    if κ === nothing
+        κ = range_to_κ(range, ν)
+    end
+
+    Tv = promote_type(typeof(κ), typeof(σ²))
+    Ti = ν isa Rational ? typeof(denominator(ν)) : typeof(ν)
+    ν_r = ν isa Rational ? ν : Rational{Ti}(ν)
+
+    κ > 0 || throw(ArgumentError("κ must be positive"))
+    ν_r >= 0 || throw(ArgumentError("ν must be non-negative"))
+    σ² > 0 || throw(ArgumentError("σ² must be positive"))
+
+    diffusion_factor_mat = diffusion_factor === nothing ? Matrix{Tv}(I, D, D) : Matrix{Tv}(diffusion_factor)
+
+    return MaternSPDE{D, Tv, Ti}(κ, ν_r, σ², diffusion_factor_mat)
+end
+
 
 α(𝒟::MaternSPDE{D}) where {D} = 𝒟.ν + D // 2
 ndim(::MaternSPDE{D}) where {D} = D
@@ -62,13 +101,13 @@ function assemble_C_G_matrices(
     cellvalues::CellValues,
     dh::DofHandler,
     interpolation,
-    diffusion_factor,
-)
-    C, G = allocate_matrix(dh), allocate_matrix(dh)
+    diffusion_factor::Matrix{Tv},
+) where {Tv}
+    C, G = allocate_matrix(SparseMatrixCSC{Tv, Int}, dh), allocate_matrix(SparseMatrixCSC{Tv, Int}, dh)
 
     n_basefuncs = getnbasefunctions(cellvalues)
-    Ce = spzeros(n_basefuncs, n_basefuncs)
-    Ge = spzeros(n_basefuncs, n_basefuncs)
+    Ce = spzeros(Tv, n_basefuncs, n_basefuncs)
+    Ge = spzeros(Tv, n_basefuncs, n_basefuncs)
 
     C_assembler = start_assemble(C)
     G_assembler = start_assemble(G)
@@ -97,26 +136,26 @@ Implements the recursion described in [Lindgren2011](@cite).
 - `α::Integer`: The parameter α = ν + d/2 of the Matérn SPDE.
 """
 function matern_mean_precision(
-    C::AbstractMatrix,
-    K::AbstractMatrix,
+    C::SparseMatrixCSC{Tv, Ti},
+    K::SparseMatrixCSC{Tv, Ti},
     α::Integer,
     ch,
     constraint_noise,
-    scaling_factor = 1.0,
-)
+    scaling_factor::Real = 1.0,
+) where {Tv, Ti}
     if α < 1
         throw(ArgumentError("α must be positive and non-zero"))
     end
     C_inv = spdiagm(0 => 1 ./ diag(C))
-    scale_mat = scaling_factor * sparse(I, size(K)...)
-    scale_mat_sqrt = sqrt(scaling_factor) * sparse(I, size(K)...)
+    scale_mat = scaling_factor * sparse(Tv, 1.0*I, size(K)...)
+    scale_mat_sqrt = sqrt(scaling_factor) * sparse(Tv, I, size(K)...)
     for dof in ch.prescribed_dofs
         scale_mat[dof, dof] = 1.0
         scale_mat_sqrt[dof, dof] = 1.0
     end
 
     if α == 1
-        f_rhs = zeros(size(C, 1))
+        f_rhs = zeros(Tv, size(C, 1))
 
         for dof in ch.prescribed_dofs
             constraint_idx = ch.dofmapping[dof]
@@ -140,20 +179,24 @@ function matern_mean_precision(
         end
 
         Q_sym = Symmetric(scale_mat * K)
-        Q_sqrt = CholeskySqrt(cholesky(Q_sym))
-        Q = LinearMapWithSqrt(LinearMap(Q_sym), Q_sqrt)
-        return μ, Q
+        #Q_sym = Symmetric(Q_sym)
+        Q_sym_cho = cholesky(Q_sym)
+        Q_cho_sqrt = LinearMap(sparse_cho_sqrt(Q_sym_cho))
+        #Q_cho_sqrt = SparseCholeskySqrt{Tv, Ti}(Q_sym_cho, sparse_cho_sqrt(Q_sym_cho))
+        #Q_sqrt = CholeskySqrt(cholesky(Q_sym))
+        Q_alpha_1 = LinearMapWithSqrt(LinearMap(Q_sym), Q_cho_sqrt)
+        return μ, Q_alpha_1
     elseif α == 2
         C_inv_sqrt = spdiagm(0 => sqrt.(diag(C_inv)))
-        f_rhs = zeros(size(C, 1))
+        f_rhs = zeros(Tv, size(C, 1))
         Q_rhs = C_inv
         Q_rhs_sqrt = C_inv_sqrt
     else
         f_inner, Q_inner =
             matern_mean_precision(copy(C), copy(K), α - 2, ch, constraint_noise)
         f_rhs = C * f_inner
-        Q_rhs = C_inv * to_matrix(Q_inner.A) * C_inv
-        Q_rhs_sqrt = C_inv * to_matrix(Q_inner.A_sqrt)
+        Q_rhs::SparseMatrixCSC{Tv, Ti} = C_inv * sparse(to_matrix(Q_inner.A)) * C_inv
+        Q_rhs_sqrt::SparseMatrixCSC{Tv, Ti} = C_inv * to_matrix(Q_inner.A_sqrt)
     end
 
     apply_soft_constraints!(
@@ -164,9 +207,13 @@ function matern_mean_precision(
         Q_rhs = Q_rhs,
         Q_rhs_sqrt = Q_rhs_sqrt,
     )
-    μ = K \ f_rhs
-    Q = LinearMap(Symmetric(K' * (scale_mat * Q_rhs) * K))
-    Q_sqrt = LinearMap(K' * (scale_mat_sqrt * Q_rhs_sqrt))
+    if any(f_rhs .> 0.)
+        μ = lu(K) \ f_rhs
+    else
+        μ = zeros(Tv, length(f_rhs))
+    end
+    Q = LinearMaps.WrappedMap{Tv}(Symmetric(K' * (scale_mat * Q_rhs) * K))
+    Q_sqrt = LinearMaps.WrappedMap{Tv}(K' * (scale_mat_sqrt * Q_rhs_sqrt))
     return μ, LinearMapWithSqrt(Q, Q_sqrt)
 end
 

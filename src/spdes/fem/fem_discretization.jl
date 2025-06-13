@@ -44,7 +44,7 @@ struct FEMDiscretization{
     geom_interpolation::GI
     dof_handler::H
     constraint_handler::CH
-    constraint_noise::AbstractVector{Float64} # Noise std
+    constraint_noise::Vector{Float64} # Noise std
 
     function FEMDiscretization(
         grid::G,

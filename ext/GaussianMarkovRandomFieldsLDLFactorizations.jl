@@ -11,6 +11,11 @@ function GaussianMarkovRandomFields.linmap_cholesky_ldl_factorizations(
     return ldl(A)
 end
 
+# Helper to create CholeskyFactorizedMap from LDLFactorization
+function GaussianMarkovRandomFields.CholeskyFactorizedMap(cho::LDLFactorizations.LDLFactorization{T}) where {T}
+    return GaussianMarkovRandomFields.CholeskyFactorizedMap{T}(cho)
+end
+
 function GaussianMarkovRandomFields.compute_rand!(
     s::AbstractCholeskySolver{:autodiffable},
     rng::Random.AbstractRNG,
@@ -35,6 +40,17 @@ function GaussianMarkovRandomFields.compute_logdetcov(
     end
     s.computed_logdetcov = -logdet(s.precision_chol.D)
     return s.computed_logdetcov
+end
+
+function GaussianMarkovRandomFields.linmap_cholesky(
+    ::Val{:autodiffable}, 
+    C::GaussianMarkovRandomFields.CholeskyFactorizedMap{T,<:LDLFactorizations.LDLFactorization};
+    perm=nothing
+) where {T}
+    if perm !== nothing
+        @warn "User-specified permutation for Cholesky of CholeskyFactorizedMap!"
+    end
+    return C.cho
 end
 
 end

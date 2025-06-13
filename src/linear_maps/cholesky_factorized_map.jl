@@ -7,23 +7,30 @@ import Base: getproperty
 export CholeskyFactorizedMap
 
 """
-    CholeskyFactorizedMap{T}(cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}})
+    CholeskyFactorizedMap{T,C}(cho::C) where {T,C}
 
 A linear map represented in terms of its Cholesky factorization,
 i.e. for `A = L * L'`, this map represents `A`.
 
-# Arguments
-- `cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}}`:
-    The Cholesky factorization of a symmetric positive definite matrix.
-"""
-mutable struct CholeskyFactorizedMap{T} <: LinearMap{T}
-    cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}}
-    _sqrt_map_cache::Union{Nothing, CholeskySqrt{T}}
+# Type Parameters
+- `T`: Element type of the matrix
+- `C`: Type of the Cholesky factorization
 
-    function CholeskyFactorizedMap(
-        cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}}
-    ) where {T}
-        new{T}(cho, nothing)
+# Arguments
+- `cho`: The Cholesky factorization of a symmetric positive definite matrix.
+  Can be `Cholesky`, `SparseArrays.CHOLMOD.Factor`, or `LDLFactorization`.
+"""
+mutable struct CholeskyFactorizedMap{T,C} <: LinearMap{T}
+    cho::C
+    _sqrt_map_cache::Union{Nothing, SparseCholeskySqrt{T}, DenseCholeskySqrt{T}}
+
+    function CholeskyFactorizedMap(cho::C) where {T,C<:Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}}}
+        new{T,C}(cho, nothing)
+    end
+    
+    # Constructor for LDLFactorization (from LDLFactorizations.jl extension)
+    function CholeskyFactorizedMap{T}(cho::C) where {T,C}
+        new{T,C}(cho, nothing)
     end
 end
 
@@ -58,7 +65,7 @@ end
 
 linmap_sqrt(C::CholeskyFactorizedMap) = C.sqrt_map
 
-function linmap_cholesky(C::CholeskyFactorizedMap; perm=nothing)
+function linmap_cholesky(::Val{:default}, C::CholeskyFactorizedMap{T,<:Union{Cholesky,SparseArrays.CHOLMOD.Factor}}; perm=nothing) where {T}
     if perm !== nothing
         @warn "User-specified permutation for Cholesky of CholeskyFactorizedMap!"
     end

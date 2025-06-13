@@ -2,6 +2,12 @@ using LinearMaps, LinearAlgebra
 
 export linmap_cholesky
 
+function _ensure_symmetry(A::LinearMap)
+    if !issymmetric(A)
+        throw(ArgumentError("$A is not symmetric; Cholesky not available"))
+    end
+end
+
 """
     linmap_cholesky(A::LinearMap; perm=nothing)
 
@@ -11,22 +17,19 @@ optionally up to a permutation `perm`.
 # Returns
 A Cholesky factorization.
 """
-function linmap_cholesky(A::LinearMap; perm=nothing, method=:default)
-    if issymmetric(A)
-        if method === :default
-            return linmap_cholesky_default(to_matrix(A); perm=perm)
-        elseif method === :autodiffable
-            return linmap_cholesky_ldl_factorizations(sparse(to_matrix(A)); perm=perm)
-        else
-            throw(ArgumentError("Invalid factorization method: $method"))
-        end
-    end
-    throw(ArgumentError("$A is not symmetric; Cholesky not available"))
+function linmap_cholesky(::Val{:default}, A::LinearMap; perm=nothing)
+    _ensure_symmetry(A)
+    return linmap_cholesky_default(to_matrix(A); perm=perm)
+end
+
+function linmap_cholesky(::Val{:autodiffable}, A::LinearMap; perm=nothing)
+    _ensure_symmetry(A)
+    return linmap_cholesky_ldl_factorizations(sparse(to_matrix(A)); perm=perm)
 end
 
 function linmap_cholesky_default(A::AbstractMatrix; perm=nothing)
     if perm !== nothing
-        return cholesky(A; perm=perm)
+        return cholesky(to_matrix(A); perm=perm)
     end
     return cholesky(A)
 end

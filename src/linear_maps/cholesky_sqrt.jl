@@ -1,9 +1,9 @@
 using LinearAlgebra, SparseArrays
 import LinearMaps: _unsafe_mul!
 
-export CholeskySqrt
+export CholeskySqrt, DenseCholeskySqrt, SparseCholeskySqrt
 
-function sparse_cho_sqrt(cho::SparseArrays.CHOLMOD.Factor)
+function sparse_cho_sqrt(cho::SparseArrays.CHOLMOD.Factor{Tv, Ti}) where {Tv, Ti}
 	s = unsafe_load(pointer(cho))
     p⁻¹ = invperm(cho.p)
     if Bool(s.is_ll)
@@ -15,7 +15,7 @@ function sparse_cho_sqrt(cho::SparseArrays.CHOLMOD.Factor)
 end
 
 """
-    CholeskySqrt{T}(cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}})
+    CholeskySqrt(cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}})
 
 A linear map representing the square root obtained from a Cholesky
 factorization, i.e. for `A = L * L'`, this map represents `L`.
@@ -24,47 +24,51 @@ factorization, i.e. for `A = L * L'`, this map represents `L`.
 - `cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}}`:
     The Cholesky factorization of a symmetric positive definite matrix.
 """
-struct CholeskySqrt{T} <: LinearMap{T}
-    cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}}
-    sqrt_map::Function
-    sqrt_adjoint_map::Function
+CholeskySqrt(cho::Cholesky{T}) where {T} = DenseCholeskySqrt{T}(cho)
+CholeskySqrt(cho::SparseArrays.CHOLMOD.Factor) = SparseCholeskySqrt(cho)
 
-    function CholeskySqrt(cho::Cholesky{T}) where {T}
-        sqrt_map = (y, x) -> mul!(y, cho.L, x)
-        sqrt_adjoint_map = (y, x) -> mul!(y, cho.U, x)
-        new{T}(cho, sqrt_map, sqrt_adjoint_map)
-    end
-
-    function CholeskySqrt(cho::SparseArrays.CHOLMOD.Factor{T}) where {T}
-        L_sp = sparse_cho_sqrt(cho)
-        sqrt_map = (y, x) -> mul!(y, L_sp, x)
-        sqrt_adjoint_map = (y, x) -> mul!(y, L_sp', x)
-        new{T}(cho, sqrt_map, sqrt_adjoint_map)
-    end
+struct DenseCholeskySqrt{T} <: LinearMap{T}
+    cho::Cholesky{T}
 end
 
-function LinearMaps._unsafe_mul!(y, L::CholeskySqrt, x::AbstractVector)
-    L.sqrt_map(y, x)
+struct SparseCholeskySqrt{Tv, Ti} <: LinearMap{Tv}
+    cho::SparseArrays.CHOLMOD.Factor{Tv, Ti}
+    L_sparse::SparseMatrixCSC{Tv}
+end
+
+function SparseCholeskySqrt(cho::SparseArrays.CHOLMOD.Factor{Tv, Ti}) where {Tv, Ti}
+    L_sparse = sparse_cho_sqrt(cho)
+    return SparseCholeskySqrt{Tv, Ti}(cho, L_sparse)
+end
+
+function LinearMaps._unsafe_mul!(y, L::DenseCholeskySqrt, x::AbstractVector)
+    mul!(y, L.cho.L, x)
+end
+
+function LinearMaps._unsafe_mul!(y, L::SparseCholeskySqrt, x::AbstractVector)
+    mul!(y, L.L_sparse, x)
 end
 
 function LinearMaps._unsafe_mul!(
     y,
-    transL::LinearMaps.TransposeMap{<:Any,<:CholeskySqrt},
+    transL::LinearMaps.TransposeMap{<:Any,<:DenseCholeskySqrt},
     x::AbstractVector,
 )
-    transL.lmap.sqrt_adjoint_map(y, x)
+    mul!(y, transL.lmap.cho.U, x)
 end
 
-function LinearAlgebra.size(L::CholeskySqrt)
-    return size(L.cho)
+function LinearMaps._unsafe_mul!(
+    y,
+    transL::LinearMaps.TransposeMap{<:Any,<:SparseCholeskySqrt},
+    x::AbstractVector,
+)
+    mul!(y, transL.lmap.L_sparse', x)
 end
 
-function to_matrix(L::CholeskySqrt)
-    if L.cho isa Cholesky
-        return L.cho.L
-    else
-        return sparse(L.cho.L)[invperm(L.cho.p), :]
-    end
-end
+LinearAlgebra.size(L::Union{DenseCholeskySqrt, SparseCholeskySqrt}) = size(L.cho)
+
+to_matrix(L::DenseCholeskySqrt) = L.cho.L
+to_matrix(L::SparseCholeskySqrt) = L.L_sparse
+
 
 linmap_sqrt(A::LinearMaps.WrappedMap) = CholeskySqrt(cholesky(to_matrix(A)))
