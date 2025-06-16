@@ -28,7 +28,7 @@ The CAR is constructed using a variant of the graph Laplacian, i.e.
 Q = \sigma^{-1} \cdot (W 1 - ρ \cdot W).
 ```
 """
-function generate_car_model(W::SparseMatrixCSC, ρ::Real; σ = 1.0, μ = nothing)
+function generate_car_model(W::SparseMatrixCSC, ρ::Real; σ = 1.0, μ = nothing, solver_blueprint=DefaultSolverBlueprint())
     if (ρ >= 1) || (ρ < 0)
         throw(ArgumentError("Expected 0 < ρ < 1."))
     end
@@ -38,5 +38,5 @@ function generate_car_model(W::SparseMatrixCSC, ρ::Real; σ = 1.0, μ = nothing
     if μ === nothing
         μ = spzeros(N)
     end
-    return GMRF(μ, Q)
+    return GMRF(μ, Q, solver_blueprint)
 end
