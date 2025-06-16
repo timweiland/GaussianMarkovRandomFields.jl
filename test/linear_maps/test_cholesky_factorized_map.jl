@@ -17,7 +17,6 @@ using GaussianMarkovRandomFields, LinearAlgebra, LinearMaps, Random, SparseArray
     @test A_cho_map * x ≈ A * x
     @test A_cho_map' == A_cho_map
     @test to_matrix(A_cho_map) ≈ A
-    @test linmap_sqrt(A_cho_map) isa SparseCholeskySqrt
     @test issymmetric(A_cho_map)
     @test isposdef(A_cho_map)
 end

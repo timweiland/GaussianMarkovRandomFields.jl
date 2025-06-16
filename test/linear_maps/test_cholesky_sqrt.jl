@@ -17,16 +17,6 @@ using GaussianMarkovRandomFields, LinearAlgebra, LinearMaps, Random, SparseArray
     C_sp = CholeskySqrt(A_sp_cho)
 
     @test size(C) == size(C_sp) == (N, N)
-    @test C * x ≈ A_cho.L * x
-    @test C' * x ≈ A_cho.U * x
-    @test to_matrix(C) ≈ A_cho.L
-
-    p = A_sp_cho.p
-    p⁻¹ = invperm(p)
-    A_sp_cho_L = sparse(A_sp_cho.L)
-    A_sp_cho_L_unpermuted = A_sp_cho_L[p⁻¹, :]
-
-    @test to_matrix(C_sp) ≈ A_sp_cho_L_unpermuted
-    @test C_sp * x ≈ A_sp_cho_L_unpermuted * x
-    @test C_sp' * x ≈ A_sp_cho_L_unpermuted' * x
+    @test C * (C' * x) ≈ A * x
+    @test C_sp * (C_sp' * x) ≈ A_sp * x
 end

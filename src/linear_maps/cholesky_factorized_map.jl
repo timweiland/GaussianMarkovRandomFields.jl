@@ -22,7 +22,7 @@ i.e. for `A = L * L'`, this map represents `A`.
 """
 mutable struct CholeskyFactorizedMap{T,C} <: LinearMap{T}
     cho::C
-    _sqrt_map_cache::Union{Nothing, SparseCholeskySqrt{T}, DenseCholeskySqrt{T}}
+    _sqrt_map_cache::Union{Nothing, LinearMaps.WrappedMap{T}}
 
     function CholeskyFactorizedMap(cho::C) where {T,C<:Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}}}
         new{T,C}(cho, nothing)

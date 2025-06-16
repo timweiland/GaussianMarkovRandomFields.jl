@@ -3,7 +3,16 @@ module GaussianMarkovRandomFieldsLDLFactorizations
 using GaussianMarkovRandomFields
 using LDLFactorizations
 
+using SparseArrays
+using LinearMaps
 using LinearAlgebra, Random
+
+function GaussianMarkovRandomFields.CholeskySqrt(cho::LDLFactorizations.LDLFactorization{Tv, Ti}) where {Tv, Ti}
+    L = cho.L::SparseMatrixCSC{Tv, Ti}
+    L = L * Diagonal(sqrt.(cho.d))
+    Lp = L[invperm(cho.P), :]
+    return LinearMaps.LinearMap(Lp)
+end
 
 function GaussianMarkovRandomFields.linmap_cholesky_ldl_factorizations(
     A::AbstractMatrix; perm=nothing
