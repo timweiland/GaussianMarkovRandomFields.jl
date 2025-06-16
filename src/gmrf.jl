@@ -120,7 +120,7 @@ struct GMRF{T<:Real, PrecisionMap<:LinearMap{T}, Solver<:AbstractSolver} <: Abst
             throw(ArgumentError("size mismatch"))
         T = promote_type(eltype(mean), eltype(precision))
         if eltype(mean) != T
-            T = convert(AbstractVector{T}, mean)
+            mean = convert(AbstractVector{T}, mean)
         end
         if eltype(precision) != T
             precision = LinearMap{T}(convert(AbstractMatrix{T}, to_matrix(precision)))
