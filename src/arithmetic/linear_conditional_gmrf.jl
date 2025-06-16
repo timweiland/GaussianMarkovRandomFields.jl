@@ -32,8 +32,8 @@ struct LinearConditionalGMRF{
     PriorGMRF<:AbstractGMRF, 
     T<:Real, 
     PrecisionMap<:LinearMaps.LinearMap{T}, 
-    ObservationMap<:LinearMaps.LinearMap{T}, 
-    NoiseMap<:LinearMaps.LinearMap{T}, 
+    ObservationMap<:LinearMaps.LinearMap, 
+    NoiseMap<:LinearMaps.LinearMap, 
     Solver<:AbstractSolver
     } <: AbstractGMRF{T, PrecisionMap}
     prior::PriorGMRF
@@ -46,13 +46,13 @@ struct LinearConditionalGMRF{
     #solver_ref::Base.RefValue{AbstractSolver}
 
     function LinearConditionalGMRF(
-        prior::PriorGMRF,
-        A::Union{AbstractMatrix{T},LinearMap{T}},
-        Q_ϵ::Union{AbstractMatrix{T},LinearMap{T}},
-        y::AbstractVector{T},
-        b::AbstractVector{T} = spzeros(Base.size(A, 1)),
+        prior::AbstractGMRF,
+        A::Union{AbstractMatrix,LinearMap},
+        Q_ϵ::Union{AbstractMatrix,LinearMap},
+        y::AbstractVector,
+        b::AbstractVector = zeros(size(A, 1)),
         solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
-    ) where {T<:Real, PrecisionMap<:LinearMaps.LinearMap{T}, PriorGMRF<:AbstractGMRF{T, PrecisionMap}}
+    )
         A = ensure_linearmap(A)
         Q_ϵ = ensure_linearmap(Q_ϵ)
         precision = precision_map(prior) + OuterProductMap(A, Q_ϵ)
@@ -60,14 +60,14 @@ struct LinearConditionalGMRF{
     end
 
     function LinearConditionalGMRF(
-        prior::PriorGMRF,
-        Q_cond::Union{AbstractMatrix{T}, LinearMap{T}},
-        A::Union{AbstractMatrix{T},LinearMap{T}},
-        Q_ϵ::Union{AbstractMatrix{T},LinearMap{T}},
-        y::AbstractVector{T},
-        b::AbstractVector{T} = spzeros(Base.size(A, 1)),
+        prior::AbstractGMRF{T},
+        Q_cond::Union{AbstractMatrix, LinearMap},
+        A::Union{AbstractMatrix,LinearMap},
+        Q_ϵ::Union{AbstractMatrix,LinearMap},
+        y::AbstractVector,
+        b::AbstractVector = zeros(size(A, 1)),
         solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
-    ) where {T<:Real, PrecisionMap<:LinearMaps.LinearMap{T}, PriorGMRF<:AbstractGMRF{T, PrecisionMap}}
+    ) where {T<:Real}
         Q_cond = ensure_linearmap(Q_cond)
         Base.size(Q_cond) == Base.size(precision_map(prior)) || throw(ArgumentError("size mismatch"))
         A = ensure_linearmap(A)
@@ -82,7 +82,7 @@ struct LinearConditionalGMRF{
             y,
             b
         )
-        result = new{PriorGMRF, T, typeof(Q_cond), typeof(A), typeof(Q_ϵ), typeof(solver)}(prior, Q_cond, A, Q_ϵ, y, b, solver)
+        result = new{typeof(prior), T, typeof(Q_cond), typeof(A), typeof(Q_ϵ), typeof(solver)}(prior, Q_cond, A, Q_ϵ, y, b, solver)
         postprocess!(solver, result)
         return result
     end

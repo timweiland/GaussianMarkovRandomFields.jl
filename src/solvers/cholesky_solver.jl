@@ -81,11 +81,11 @@ mutable struct LinearConditionalCholeskySolver{M, V<:AbstractVarianceStrategy, T
 
     function LinearConditionalCholeskySolver{M}(
         prior_mean::AbstractVector{Tv},
-        posterior_precision::LinearMaps.LinearMap{Tv},
-        A::LinearMaps.LinearMap{Tv},
-        Q_ϵ::LinearMaps.LinearMap{Tv},
-        y::AbstractVector{Tv},
-        b::AbstractVector{Tv},
+        posterior_precision::LinearMaps.LinearMap,
+        A::LinearMaps.LinearMap,
+        Q_ϵ::LinearMaps.LinearMap,
+        y::AbstractVector,
+        b::AbstractVector,
         var_strategy::V,
         perm::Union{Nothing,Vector{Int}} = nothing,
     ) where {M, V<:AbstractVarianceStrategy, Tv<:Real}

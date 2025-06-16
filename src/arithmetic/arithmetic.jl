@@ -81,17 +81,15 @@ A `LinearConditionalGMRF` object representing
 the conditional GMRF `x | (y = A * x + b + ϵ)`.
 """
 function condition_on_observations(
-    x::AbstractGMRF{Tv},
-    A::Union{AbstractMatrix{Tv},LinearMap{Tv}},
-    Q_ϵ::Union{AbstractMatrix{Tv},LinearMap{Tv},Real},
-    y::AbstractVector = spzeros(Base.size(A)[1]),
-    b::AbstractVector = spzeros(Base.size(A)[1]);
+    x::AbstractGMRF,
+    A::Union{AbstractMatrix,LinearMap},
+    Q_ϵ::Union{AbstractMatrix,LinearMap,Real},
+    y::AbstractVector = zeros(size(A, 1)),
+    b::AbstractVector = zeros(size(A, 1));
     solver_blueprint::Union{Nothing, AbstractSolverBlueprint} = nothing,
-) where {Tv<:Real}
-    y = convert(Vector{Tv}, y)
-    b = convert(Vector{Tv}, b)
+)
     if Q_ϵ isa Real
-        Q_ϵ = LinearMaps.UniformScalingMap(convert(Tv, Q_ϵ), Base.size(A)[1])
+        Q_ϵ = LinearMaps.UniformScalingMap(Q_ϵ, size(A, 1))
     end
     if solver_blueprint === nothing
         solver_blueprint = infer_solver_blueprint(x)
