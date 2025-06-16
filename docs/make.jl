@@ -14,6 +14,7 @@ makedocs(
             "tutorials/autoregressive_models.md",
             "tutorials/spatial_modelling_spdes.md",
             "tutorials/spatiotemporal_modelling.md",
+            "tutorials/autodiff_mcmc.md",
             "tutorials/boundary_conditions.md",
         ],
         "API Reference"=>[
