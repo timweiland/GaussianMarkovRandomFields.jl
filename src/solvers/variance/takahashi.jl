@@ -18,7 +18,7 @@ end
 
 function compute_variance(::TakahashiStrategy, solver::AbstractCholeskySolver)
     if solver.precision_chol isa SparseArrays.CHOLMOD.Factor
-        return diag(selinv(solver.precision_chol, depermute = true)[1])
+        return selinv_diag(solver.precision_chol)
     else
         return diag(inv(Array(to_matrix(solver.precision))))
     end
