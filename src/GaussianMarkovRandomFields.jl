@@ -12,5 +12,6 @@ include("spdes/spdes.jl")
 include("optim/optim.jl")
 include("plots/makie.jl")
 include("mesh/mesh.jl")
+include("autodiff/autodiff.jl")
 
 end

@@ -5,6 +5,7 @@ version = "0.3.1"
 
 [deps]
 AMD = "14f7f29c-3bd6-536c-9a0b-7339e30b5a3e"
+ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Ferrite = "c061ca5d-56c9-439f-9c0e-210fe06d3992"
 FerriteGmsh = "4f95f4f8-b27c-4ae5-9a39-ea55e634e36b"
@@ -41,6 +42,7 @@ GaussianMarkovRandomFieldsSparseJacobian = ["Symbolics", "SparseDiffTools"]
 [compat]
 AMD = "0.5"
 Aqua = "0.8"
+ChainRulesCore = "1"
 Distributions = "0.25"
 Ferrite = "~1.0"
 FerriteGmsh = "1.2"
