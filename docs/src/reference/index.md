@@ -12,5 +12,6 @@ Pages = [
     "linear_maps.md",
     "gn_optim.md",
     "preconditioners.md",
+    "autodiff.md",
 ]
 ```
