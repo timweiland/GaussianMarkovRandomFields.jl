@@ -26,7 +26,7 @@ end
 function construct_solver(
     sbp::DefaultSolverBlueprint,
     mean::AbstractVector,
-    Q::LinearMaps.LinearMap # precision
+    Q::Union{LinearMaps.LinearMap, AbstractMatrix} # precision
 )
     N = length(mean)
     var_strategy = default_var_strategy(N)

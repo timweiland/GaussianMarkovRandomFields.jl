@@ -42,14 +42,14 @@ a solver.
 compute_logdetcov(::AbstractSolver) = error("compute_logdetcov not implemented for Solver")
 
 """
-    construct_solver(blueprint::AbstractSolverBlueprint, mean::AbstractVector, precision::LinearMaps.LinearMap)
+    construct_solver(blueprint::AbstractSolverBlueprint, mean::AbstractVector, precision)
 
 Construct a solver for a GMRF using a blueprint.
 
 # Arguments
 - `blueprint::AbstractSolverBlueprint`: The solver blueprint specifying the solver type and configuration.
 - `mean::AbstractVector`: The mean vector of the GMRF.
-- `precision::LinearMaps.LinearMap`: The precision matrix (inverse covariance) of the GMRF.
+- `precision`: The precision matrix (inverse covariance) of the GMRF. Can be a LinearMap or AbstractMatrix.
 
 # Returns
 A solver instance that can compute means, variances, samples, and other GMRF quantities.
@@ -63,7 +63,7 @@ For conditional GMRFs, use `construct_conditional_solver` instead.
 function construct_solver(
     sbp::AbstractSolverBlueprint,
     ::AbstractVector, # mean
-    ::LinearMaps.LinearMap # precision
+    ::Union{LinearMaps.LinearMap, AbstractMatrix} # precision
 )
     error("construct_solver not implemented for $(typeof(sbp))")
 end

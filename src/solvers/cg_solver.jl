@@ -267,12 +267,14 @@ end
 function construct_solver(
     bp::CGSolverBlueprint,
     mean::AbstractVector,
-    Q::LinearMaps.LinearMap;
+    Q::Union{LinearMaps.LinearMap, AbstractMatrix};
     preconditioner::Union{Identity,AbstractPreconditioner} = Identity()
 )
+    # Convert AbstractMatrix to LinearMap if needed
+    Q_linmap = Q isa AbstractMatrix ? LinearMap(Q) : Q
     return CGSolver(
         mean,
-        Q,
+        Q_linmap,
         bp.reltol,
         bp.abstol,
         bp.maxiter,

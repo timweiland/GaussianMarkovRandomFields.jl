@@ -27,6 +27,14 @@ function linmap_cholesky(::Val{:autodiffable}, A::LinearMap; perm=nothing)
     return linmap_cholesky_ldl_factorizations(sparse(to_matrix(A)); perm=perm)
 end
 
+function linmap_cholesky(::Val{:default}, A::AbstractMatrix; perm=nothing)
+    return linmap_cholesky_default(A; perm=perm)
+end
+
+function linmap_cholesky(::Val{:autodiffable}, A::AbstractMatrix; perm=nothing)
+    return linmap_cholesky_ldl_factorizations(sparse(A); perm=perm)
+end
+
 function linmap_cholesky_default(A::AbstractMatrix; perm=nothing)
     if perm !== nothing
         return cholesky(to_matrix(A); perm=perm)

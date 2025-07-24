@@ -36,7 +36,7 @@ A [Gaussian Markov Random Field](https://en.wikipedia.org/wiki/Markov_random_fie
 (GMRF) is a special case of a multivariate normal distribution where the precision matrix
 is sparse. The zero entries in the precision correspond to conditional independencies.
 """
-abstract type AbstractGMRF{T<:Real, L<:LinearMaps.LinearMap{T}} <: AbstractMvNormal end
+abstract type AbstractGMRF{T<:Real, L<:Union{LinearMaps.LinearMap{T}, AbstractMatrix{T}}} <: AbstractMvNormal end
 
 solver(x::AbstractGMRF) = x.solver
 mean(s::AbstractGMRF) = compute_mean(solver(s))
@@ -53,7 +53,8 @@ precision_map(::AbstractGMRF) = error("precision_map not implemented for GMRF")
 
 Return the precision (inverse covariance) matrix of the GMRF.
 """
-precision_matrix(x::AbstractGMRF) = to_matrix(precision_map(x))
+precision_matrix(x::AbstractGMRF{T, <:LinearMaps.LinearMap}) where T = to_matrix(precision_map(x))
+precision_matrix(x::AbstractGMRF{T, <:AbstractMatrix}) where T = precision_map(x)
 
 length(d::AbstractGMRF) = Base.size(precision_map(d), 1)
 
@@ -104,7 +105,7 @@ A Gaussian Markov Random Field with mean `mean` and precision matrix `precision`
 The solver is constructed automatically using `construct_solver(solver_blueprint, mean, precision)`
 and is used to compute means, variances, samples, and other GMRF quantities efficiently.
 """
-struct GMRF{T<:Real, PrecisionMap<:LinearMap{T}, Solver<:AbstractSolver} <: AbstractGMRF{T, PrecisionMap}
+struct GMRF{T<:Real, PrecisionMap<:Union{LinearMap{T}, AbstractMatrix{T}}, Solver<:AbstractSolver} <: AbstractGMRF{T, PrecisionMap}
     mean::Vector{T}
     precision::PrecisionMap
     solver::Solver
@@ -114,7 +115,7 @@ struct GMRF{T<:Real, PrecisionMap<:LinearMap{T}, Solver<:AbstractSolver} <: Abst
         mean::AbstractVector,
         precision::PrecisionMap,
         solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
-    ) where {PrecisionMap <: LinearMap}
+    ) where {PrecisionMap <: Union{LinearMap, AbstractMatrix}}
         n = length(mean)
         n == size(precision, 1) == size(precision, 2) ||
             throw(ArgumentError("size mismatch"))
@@ -123,7 +124,11 @@ struct GMRF{T<:Real, PrecisionMap<:LinearMap{T}, Solver<:AbstractSolver} <: Abst
             mean = convert(AbstractVector{T}, mean)
         end
         if eltype(precision) != T
-            precision = LinearMap{T}(convert(AbstractMatrix{T}, to_matrix(precision)))
+            if precision isa LinearMap
+                precision = LinearMap{T}(convert(AbstractMatrix{T}, to_matrix(precision)))
+            else
+                precision = convert(AbstractMatrix{T}, precision)
+            end
         end
 
         #solver_ref = Base.RefValue{AbstractSolver}()
@@ -135,11 +140,6 @@ struct GMRF{T<:Real, PrecisionMap<:LinearMap{T}, Solver<:AbstractSolver} <: Abst
         #return self
     end
 
-    GMRF(
-        mean::AbstractVector,
-        precision::AbstractMatrix,
-        solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
-    ) = GMRF(mean, LinearMap(precision), solver_blueprint)
 end
 
 length(d::GMRF) = length(d.mean)

@@ -44,7 +44,7 @@ function compute_logdetcov(
     return s.computed_logdetcov
 end
 
-mutable struct CholeskySolver{M, V<:AbstractVarianceStrategy, Tv<:Real, L<:LinearMap{Tv}, C} <: AbstractCholeskySolver{M, V}
+mutable struct CholeskySolver{M, V<:AbstractVarianceStrategy, Tv<:Real, L, C} <: AbstractCholeskySolver{M, V}
     mean::Vector{Tv}
     precision::L
     precision_chol::C
@@ -58,7 +58,7 @@ mutable struct CholeskySolver{M, V<:AbstractVarianceStrategy, Tv<:Real, L<:Linea
         precision::L,
         var_strategy::V,
         perm::Union{Nothing,Vector{Int}} = nothing,
-    ) where {M, V<:AbstractVarianceStrategy, Tv<:Real, L<:LinearMaps.LinearMap{Tv}}
+    ) where {M, V<:AbstractVarianceStrategy, Tv<:Real, L<:Union{LinearMaps.LinearMap{Tv}, AbstractMatrix{Tv}}}
         precision_chol = linmap_cholesky(Val(M), precision; perm = perm)
         new{M, V, Tv, L, typeof(precision_chol)}(mean, precision, precision_chol, var_strategy, perm, nothing, nothing)
     end
@@ -169,7 +169,7 @@ end
 function construct_solver(
     bp::CholeskySolverBlueprint{M},
     mean::AbstractVector,
-    Q::LinearMaps.LinearMap
+    Q::Union{LinearMaps.LinearMap, AbstractMatrix}
     ) where {M}
     return CholeskySolver{M}(mean, Q, bp.var_strategy, bp.perm)
 end
