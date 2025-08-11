@@ -4,85 +4,82 @@ export ConstantMeshSTGMRF, ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMesh
 
 ################################################################################
 #
-#    ConstantMeshSTGMRF
+#    ConstantMeshSTGMRF - New forwarding design
 #
-#    A spatiotemporal GMRF with constant spatial discretization.
+#    Spatiotemporal GMRF types that forward operations to underlying GMRF
 #
 ################################################################################
-"""
-    ConstantMeshSTGMRF
-
-A spatiotemporal GMRF with constant spatial discretization.
-"""
-abstract type ConstantMeshSTGMRF{D, T, PrecisionMap<:LinearMap{T}} <: AbstractSpatiotemporalGMRF{T, PrecisionMap} end
-
-precision_map(x::ConstantMeshSTGMRF) = x.precision
-mean(x::ConstantMeshSTGMRF) = x.mean
 
 """
-    ImplicitEulerConstantMeshSTGMRF
+    ImplicitEulerConstantMeshSTGMRF{D}
 
 A spatiotemporal GMRF with constant spatial discretization and an implicit Euler
-discretization of the temporal dynamics.
+discretization of the temporal dynamics. Forwards all GMRF operations to the underlying GMRF.
 """
-struct ImplicitEulerConstantMeshSTGMRF{D, T, PrecisionMap<:LinearMap{T}, Solver<:AbstractSolver} <: ConstantMeshSTGMRF{D, T, PrecisionMap}
-    mean::AbstractVector{T}
-    precision::PrecisionMap
+struct ImplicitEulerConstantMeshSTGMRF{D, T, PrecisionMap, QSqrt, Cache}
+    gmrf::GMRF{T, PrecisionMap, QSqrt, Cache}
     discretization::FEMDiscretization{D}
     ssm::ImplicitEulerSSM
-    solver::Solver
+    N_spatial::Int
+    N_t::Int
 
     function ImplicitEulerConstantMeshSTGMRF(
-        mean::AbstractVector{T},
-        precision::LinearMap{T},
+        gmrf::GMRF{T, PrecisionMap, QSqrt, Cache},
         discretization::FEMDiscretization{D},
         ssm::ImplicitEulerSSM,
-        solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
-    ) where {D,T}
-        n = length(mean)
-        n == Base.size(precision, 1) == Base.size(precision, 2) ||
-            throw(ArgumentError("size mismatch"))
+    ) where {D, T, PrecisionMap, QSqrt, Cache}
+        n = length(gmrf)
         (n % ndofs(discretization)) == 0 || throw(ArgumentError("size mismatch"))
-
-        solver = construct_solver(solver_blueprint, mean, precision)
-        result = new{D,T,typeof(precision),typeof(solver)}(mean, precision, discretization, ssm, solver)
-        postprocess!(solver, result)
-        return result
+        N_spatial = ndofs(discretization)
+        N_t = n ÷ N_spatial
+        
+        return new{D, T, PrecisionMap, QSqrt, Cache}(
+            gmrf, discretization, ssm, N_spatial, N_t
+        )
     end
 end
 
 """
-    ConcreteConstantMeshSTGMRF
+    ConcreteConstantMeshSTGMRF{D}
 
 A concrete implementation of a spatiotemporal GMRF with constant spatial
-discretization.
+discretization. Forwards all GMRF operations to the underlying GMRF.
 """
-struct ConcreteConstantMeshSTGMRF{D, T, PrecisionMap<:LinearMap{T}, Solver<:AbstractSolver} <: ConstantMeshSTGMRF{D, T, PrecisionMap}
-    mean::AbstractVector{T}
-    precision::PrecisionMap
+struct ConcreteConstantMeshSTGMRF{D, T, PrecisionMap, QSqrt, Cache}
+    gmrf::GMRF{T, PrecisionMap, QSqrt, Cache}
     discretization::FEMDiscretization{D}
-    solver::Solver
+    N_spatial::Int
+    N_t::Int
 
     function ConcreteConstantMeshSTGMRF(
-        mean::AbstractVector{T},
-        precision::LinearMap{T},
+        gmrf::GMRF{T, PrecisionMap, QSqrt, Cache},
         discretization::FEMDiscretization{D},
-        solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
-    ) where {D,T}
-        n = length(mean)
-        n == Base.size(precision, 1) == Base.size(precision, 2) ||
-            throw(ArgumentError("size mismatch"))
+    ) where {D, T, PrecisionMap, QSqrt, Cache}
+        n = length(gmrf)
         (n % ndofs(discretization)) == 0 || throw(ArgumentError("size mismatch"))
-
-        solver = construct_solver(solver_blueprint, mean, precision)
-        result = new{D,T,typeof(precision),typeof(solver)}(mean, precision, discretization, solver)
-        postprocess!(solver, result)
-        return result
+        N_spatial = ndofs(discretization)
+        N_t = n ÷ N_spatial
+        
+        return new{D, T, PrecisionMap, QSqrt, Cache}(
+            gmrf, discretization, N_spatial, N_t
+        )
     end
 end
 
-N_spatial(x::ConstantMeshSTGMRF) = ndofs(x.discretization)
-N_t(x::ConstantMeshSTGMRF) = length(x) ÷ N_spatial(x)
+# Forward all core GMRF operations to the underlying GMRF
+@forward ImplicitEulerConstantMeshSTGMRF.gmrf (
+    length, mean, precision_map, var, std, rand, information_vector
+)
+@forward ConcreteConstantMeshSTGMRF.gmrf (
+    length, mean, precision_map, var, std, rand, information_vector
+)
+
+# Type aliases for backward compatibility
+const ConstantMeshSTGMRF = Union{ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMeshSTGMRF}
+
+# Spatiotemporal-specific operations that need the metadata
+N_spatial(x::ConstantMeshSTGMRF) = x.N_spatial
+N_t(x::ConstantMeshSTGMRF) = x.N_t
 
 time_means(x::ConstantMeshSTGMRF) = make_chunks(mean(x), N_t(x))
 time_vars(x::ConstantMeshSTGMRF) = make_chunks(var(x), N_t(x))
@@ -95,20 +92,21 @@ discretization_at_time(x::ConstantMeshSTGMRF, ::Int) = x.discretization
 # Linear conditional ConstantMeshSTGMRF
 #
 ################################################################################
-N_spatial(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}) = ndofs(x.prior.discretization)
-N_t(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}) = length(x) ÷ N_spatial(x)
+# LinearConditionalGMRF methods temporarily removed - will need updating for new linear_condition approach
+# N_spatial(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}) = ndofs(x.prior.discretization)
+# N_t(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}) = length(x) ÷ N_spatial(x)
 
-time_means(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}) = make_chunks(mean(x), N_t(x))
-time_vars(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}) = make_chunks(var(x), N_t(x))
-time_stds(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}) = make_chunks(std(x), N_t(x))
-time_rands(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}, rng::AbstractRNG) =
-    make_chunks(rand(rng, x), N_t(x))
-discretization_at_time(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}, ::Int) =
-    x.prior.discretization
+# time_means(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}) = make_chunks(mean(x), N_t(x))
+# time_vars(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}) = make_chunks(var(x), N_t(x))
+# time_stds(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}) = make_chunks(std(x), N_t(x))
+# time_rands(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}, rng::AbstractRNG) =
+#     make_chunks(rand(rng, x), N_t(x))
+# discretization_at_time(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}, ::Int) =
+#     x.prior.discretization
 
 
 function default_preconditioner_strategy(
-    x::Union{<:ConstantMeshSTGMRF,LinearConditionalGMRF{<:ConstantMeshSTGMRF}},
+    x::ConstantMeshSTGMRF,
 )
     block_size = N_spatial(x)
     Q = sparse(to_matrix(precision_map(x)))
