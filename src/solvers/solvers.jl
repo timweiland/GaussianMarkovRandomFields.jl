@@ -1,4 +1,4 @@
-include("linearsolve_dispatch.jl")
+include("linearsolve.jl")
 # Legacy solver system removed - now using LinearSolve.jl directly
 # include("solver.jl")
 # include("cholesky_solver.jl") 
