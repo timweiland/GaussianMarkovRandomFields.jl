@@ -115,7 +115,7 @@ function discretize(
     streamline_diffusion = false,
     mean_offset = 0.0,
     prescribed_noise = 1e-4,
-    solver_bp::AbstractSolverBlueprint = DefaultSolverBlueprint(),
+    algorithm = nothing,
 ) where {D}
     if norm(spde.γ) ≈ 0.0
         # SD changes nothing for zero advection
@@ -193,7 +193,7 @@ function discretize(
         X.precision,
         discretization,
         ssm,
-        solver_bp,
+        algorithm,
     )
     return X
 end

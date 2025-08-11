@@ -82,7 +82,7 @@ function assemble_C_G_matrices(
     G_assembler = start_assemble(G)
 
     for cell in CellIterator(dh)
-        reinit!(cellvalues, cell)
+        Ferrite.reinit!(cellvalues, cell)
         Ce = assemble_mass_matrix(Ce, cellvalues, interpolation; lumping = false)
         Ge = assemble_diffusion_matrix(Ge, cellvalues; diffusion_factor = diffusion_factor)
         assemble!(C_assembler, celldofs(cell), Ce)
@@ -91,14 +91,6 @@ function assemble_C_G_matrices(
     C = lump_matrix(C, interpolation)
 
     return C, G
-end
-
-function _inner_cholesky(A::LinearMap, ::AbstractSolverBlueprint)
-    return linmap_cholesky(Val{:default}(), A)
-end
-
-function _inner_cholesky(A::LinearMap, ::CholeskySolverBlueprint{:autodiffable})
-    return linmap_cholesky(Val{:autodiffable}(), A)
 end
 
 """
@@ -118,7 +110,7 @@ function matern_mean_precision(
     α::Integer,
     ch,
     constraint_noise,
-    solver_bp::AbstractSolverBlueprint,
+    algorithm,
     scaling_factor::Real = 1.0,
 ) where {Tv, Ti}
     if α < 1
@@ -156,21 +148,21 @@ function matern_mean_precision(
             K[dof, dof] = constraint_noise[constraint_idx]^(-2)
         end
 
-        Q_sym = LinearMap(Symmetric(scale_mat * K))
-        Q_cho_sqrt = CholeskySqrt(_inner_cholesky(Q_sym, solver_bp))
-        Q_alpha_1 = LinearMapWithSqrt(Q_sym, Q_cho_sqrt)
-        return μ, Q_alpha_1
+        Q_sym = Symmetric(scale_mat * K)
+        Q_cho = cholesky(Q_sym)
+        Q_sqrt = sparse(Q_cho.L)[invperm(Q_cho.p), :]
+        return μ, Q_sym, Q_sqrt
     elseif α == 2
         C_inv_sqrt = spdiagm(0 => sqrt.(diag(C_inv)))
         f_rhs = zeros(Tv, size(C, 1))
         Q_rhs = C_inv
         Q_rhs_sqrt = C_inv_sqrt
     else
-        f_inner, Q_inner =
-            matern_mean_precision(copy(C), copy(K), α - 2, ch, constraint_noise, solver_bp)
+        f_inner, Q_inner, Q_inner_sqrt =
+            matern_mean_precision(copy(C), copy(K), α - 2, ch, constraint_noise, algorithm)
         f_rhs = C * f_inner
-        Q_rhs::SparseMatrixCSC{Tv, Ti} = C_inv * sparse(to_matrix(Q_inner.A)) * C_inv
-        Q_rhs_sqrt::SparseMatrixCSC{Tv, Ti} = C_inv * to_matrix(Q_inner.A_sqrt)
+        Q_rhs::SparseMatrixCSC{Tv, Ti} = C_inv * sparse(Q_inner) * C_inv
+        Q_rhs_sqrt::SparseMatrixCSC{Tv, Ti} = C_inv * Q_inner_sqrt
     end
 
     apply_soft_constraints!(
@@ -186,9 +178,9 @@ function matern_mean_precision(
     else
         μ = zeros(Tv, length(f_rhs))
     end
-    Q = LinearMaps.WrappedMap{Tv}(Symmetric(K' * (scale_mat * Q_rhs) * K))
-    Q_sqrt = LinearMaps.WrappedMap{Tv}(K' * (scale_mat_sqrt * Q_rhs_sqrt))
-    return μ, LinearMapWithSqrt(Q, Q_sqrt)
+    Q = Symmetric(K' * (scale_mat * Q_rhs) * K)
+    Q_sqrt = K' * (scale_mat_sqrt * Q_rhs_sqrt)
+    return μ, Q, Q_sqrt
 end
 
 """
@@ -201,8 +193,8 @@ of the GMRF discretization.
 function discretize(
     𝒟::MaternSPDE{D},
     discretization::FEMDiscretization{D};
-    solver_blueprint::AbstractSolverBlueprint = DefaultSolverBlueprint(),
-)::AbstractGMRF where {D}
+    algorithm = nothing,
+)::GMRF where {D}
     cellvalues = CellValues(
         discretization.quadrature_rule,
         discretization.interpolation,
@@ -224,17 +216,17 @@ function discretize(
         ratio = σ²_natural / σ²_goal
     end
 
-    μ, Q = matern_mean_precision(
+    μ, Q, Q_sqrt = matern_mean_precision(
         C̃,
         K,
         Integer(α(𝒟)),
         discretization.constraint_handler,
         discretization.constraint_noise,
-        solver_blueprint,
+        algorithm,
         ratio,
     )
 
-    x = GMRF(μ, Q, solver_blueprint)
+    x = GMRF(μ, Q, algorithm; Q_sqrt=Q_sqrt)
     return x
 end
 
@@ -252,7 +244,7 @@ function product_matern(
     N_t::Int,
     matern_spatial::MaternSPDE,
     spatial_disc::FEMDiscretization;
-    solver_blueprint = DefaultSolverBlueprint(),
+    algorithm = LinearSolve.CholeskyFactorization(),
 )
     offset = N_t ÷ 10
     temporal_grid = generate_grid(Ferrite.Line, (N_t + 2 * offset - 1,))
@@ -262,14 +254,13 @@ function product_matern(
     x_t = discretize(matern_temporal, temporal_disc)
 
     Q_t = to_matrix(precision_map(x_t))[offset+1:end-offset, offset+1:end-offset]
-    Q_t = LinearMap(Q_t)
-    x_s = discretize(matern_spatial, spatial_disc)
+    x_s = discretize(matern_spatial, spatial_disc; algorithm=algorithm)
     Q_s = precision_map(x_s)
 
     return kronecker_product_spatiotemporal_model(
         Q_t,
         Q_s,
         spatial_disc;
-        solver_blueprint = solver_blueprint,
+        algorithm = algorithm,
     )
 end
