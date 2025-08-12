@@ -131,3 +131,14 @@ function linear_condition(gmrf::GMRF; A, Q_ϵ, y, b=zeros(size(A, 1)))
     # TODO: Compute Q_sqrt for conditioned GMRF - non-trivial, skipping for now
     return GMRF(InformationVector(info_posterior), Q_posterior, gmrf.linsolve_cache.alg; Q_sqrt=nothing)
 end
+
+# MetaGMRF conditioning - preserves wrapper type and metadata
+function linear_condition(mgmrf::MetaGMRF; kwargs...)
+    conditioned_gmrf = linear_condition(mgmrf.gmrf; kwargs...)
+    return MetaGMRF(conditioned_gmrf, mgmrf.metadata)
+end
+
+function condition_on_observations(mgmrf::MetaGMRF, args...; kwargs...)
+    conditioned_gmrf = condition_on_observations(mgmrf.gmrf, args...; kwargs...)
+    return MetaGMRF(conditioned_gmrf, mgmrf.metadata)
+end
