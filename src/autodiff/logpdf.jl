@@ -28,46 +28,47 @@ function ChainRulesCore.rrule(::typeof(logpdf), x::AbstractGMRF, z::AbstractVect
     Q = precision_matrix(x)
     r = z - μ
     
-    # Try to access Cholesky factorization - only works with Cholesky-based solvers
-    chol = try
-        x.solver.precision_chol
-    catch
-        error("Automatic differentiation through logpdf currently only supports Cholesky-based solvers " *
-              "(CholeskySolver, LinearConditionalCholeskySolver). " *
-              "Got solver type: $(typeof(x.solver)). " *
-              "Consider using CholeskySolverBlueprint() or CholeskySolverBlueprint{:autodiffable}().")
+    # Check if GMRF supports selected inversion for efficient gradients
+    if hasproperty(x, :linsolve_cache) && supports_selinv(x.linsolve_cache.alg) == Val{true}()
+        # Forward computation - use existing implementation
+        val = logpdf(x, z)
+        
+        function logpdf_pullback(ȳ)
+            # Compute selected inverse efficiently using our dispatch system
+            Qinv = selinv(x.linsolve_cache)
+            Qr = Q * r
+            
+            # Gradients
+            μ̄ = ȳ * Qr                    # ∂logpdf/∂μ = Q(z - μ) → chain rule
+            
+            # Compute sparse gradient w.r.t. precision matrix
+            # Only compute for nonzero structure of Q⁻¹
+            rows, cols, vals = findnz(Qinv)
+            rr_vals = r[rows] .* r[cols]
+            Q̄ = sparse(rows, cols, (0.5 * ȳ) .* (vals .- rr_vals), size(Q)...)
+            
+            # Tangent for GMRF - use new structure
+            x̄ = Tangent{typeof(x)}(
+                linsolve_cache = NoTangent(),  # LinearSolve cache is not differentiable
+                mean = μ̄,                     # ∂L/∂μ = Q(z - μ) → ∂L/∂mean = -Q(z - μ)  
+                precision = Q̄,                # ∂L/∂Q
+                information_vector = NoTangent(),
+                Q_sqrt = NoTangent(),
+                rbmc_strategy = NoTangent()
+            )
+            
+            # Tangent for observation vector z
+            z̄ = ȳ * (-Qr)                    # ∂logpdf/∂z = -Q(z - μ)
+            
+            return NoTangent(), x̄, z̄
+        end
+        
+        return val, logpdf_pullback
+    else
+        error("Automatic differentiation through logpdf requires an algorithm that supports selected inversion " *
+              "(CHOLMODFactorization, CholeskyFactorization). " *
+              "Got algorithm type: $(typeof(x.linsolve_cache.alg)). " *
+              "Consider using LinearSolve.CHOLMODFactorization() or LinearSolve.CholeskyFactorization().")
     end
-
-    # Forward computation - use existing implementation
-    val = logpdf(x, z)
-    
-    function logpdf_pullback(ȳ)
-        # Compute selected inverse efficiently
-        Qinv = selinv(chol; depermute=true).Z
-        Qr = Q * r
-        
-        # Gradients
-        μ̄ = ȳ * Qr                    # ∂logpdf/∂μ = Q(z - μ) → chain rule
-        
-        # Compute sparse gradient w.r.t. precision matrix
-        # Only compute for nonzero structure of Q⁻¹
-        rows, cols, vals = findnz(Qinv)
-        rr_vals = r[rows] .* r[cols]
-        Q̄ = sparse(rows, cols, (0.5 * ȳ) .* (vals .- rr_vals), size(Q)...)
-        
-        # Tangent for GMRF - only include differentiable fields
-        x̄ = Tangent{typeof(x)}(
-            solver = NoTangent(),          # Solver is not differentiable
-            mean = μ̄,                     # ∂L/∂μ = Q(z - μ) → ∂L/∂mean = -Q(z - μ)
-            precision = Q̄                  # ∂L/∂Q
-        )
-        
-        # Tangent for observation vector z
-        z̄ = ȳ * (-Qr)                    # ∂logpdf/∂z = -Q(z - μ)
-        
-        return NoTangent(), x̄, z̄
-    end
-    
-    return val, logpdf_pullback
 end
 

@@ -119,8 +119,12 @@ Uses information vector arithmetic for efficient conditioning without intermedia
 function linear_condition(gmrf::GMRF; A, Q_ϵ, y, b=zeros(size(A, 1)))
     # Ensure everything is compatible types
     A = A isa LinearMap ? A : LinearMap(A)
-    Q_ϵ = Q_ϵ isa LinearMap ? Q_ϵ : LinearMap(Q_ϵ)
-    
+    if Q_ϵ isa Real
+        Q_ϵ = LinearMaps.UniformScalingMap(Q_ϵ, size(A, 1))
+    elseif !(Q_ϵ isa LinearMap)
+        Q_ϵ = LinearMap(Q_ϵ)
+    end
+
     # Compute posterior precision: Q_posterior = Q_prior + A' * Q_ϵ * A
     Q_posterior = precision_map(gmrf) + A' * Q_ϵ * A
     

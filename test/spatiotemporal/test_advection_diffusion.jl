@@ -13,7 +13,7 @@ function _get_periodic_constraint(grid)
     add!(temp_dh, :u, Lagrange{RefLine,1}())
     close!(temp_dh)
     cc = CellCache(temp_dh)
-    get_dof(cell_idx, dof_idx) = (reinit!(cc, cell_idx); celldofs(cc)[dof_idx])
+    get_dof(cell_idx, dof_idx) = (Ferrite.reinit!(cc, cell_idx); celldofs(cc)[dof_idx])
     dof_left = get_dof(cellidx_left, dofidx_left)
     dof_right = get_dof(cellidx_right, dofidx_right)
 
@@ -99,10 +99,10 @@ end
         initial_spde = MaternSPDE{1}(κ = κₛ, smoothness = 2, diffusion_factor = H_slow),
         spatial_spde = MaternSPDE{1}(κ = κₛ, smoothness = 1, diffusion_factor = H_slow),
     )
-    x_prior_fast_right = discretize(spde_fast_right, disc, ts; streamline_diffusion = sd)
-    x_prior_fast_left = discretize(spde_fast_left, disc, ts; streamline_diffusion = sd)
-    x_prior_fast_static = discretize(spde_fast_static, disc, ts; streamline_diffusion = sd)
-    x_prior_slow_static = discretize(spde_slow_static, disc, ts; streamline_diffusion = sd)
+    x_prior_fast_right = GaussianMarkovRandomFields.discretize(spde_fast_right, disc, ts; streamline_diffusion = sd)
+    x_prior_fast_left = GaussianMarkovRandomFields.discretize(spde_fast_left, disc, ts; streamline_diffusion = sd)
+    x_prior_fast_static = GaussianMarkovRandomFields.discretize(spde_fast_static, disc, ts; streamline_diffusion = sd)
+    x_prior_slow_static = GaussianMarkovRandomFields.discretize(spde_slow_static, disc, ts; streamline_diffusion = sd)
 
     xs = range(-1.0, 1.0, length = 100)
     spread = 0.2
@@ -147,12 +147,12 @@ end
 
     @testset "Boundary conditions" begin
         x_prior_fast_right_periodic =
-            discretize(spde_fast_right, disc_periodic, ts; streamline_diffusion = sd)
+            GaussianMarkovRandomFields.discretize(spde_fast_right, disc_periodic, ts; streamline_diffusion = sd)
         x_cond_fast_right_periodic =
             condition_on_observations(x_prior_fast_right_periodic, A_ic, 1e8, ys)
 
         x_prior_fast_right_dirichlet =
-            discretize(spde_fast_right, disc_dirichlet, ts; streamline_diffusion = sd)
+            GaussianMarkovRandomFields.discretize(spde_fast_right, disc_dirichlet, ts; streamline_diffusion = sd)
         x_cond_fast_right_dirichlet =
             condition_on_observations(x_prior_fast_right_dirichlet, A_ic, 1e8, ys)
 

@@ -7,7 +7,7 @@ using GaussianMarkovRandomFields, Ferrite, Random, LinearAlgebra, SparseArrays
     qr = QuadratureRule{RefTriangle}(2)
     disc = FEMDiscretization(grid, ip, qr)
 
-    x = discretize(spde, disc)
+    x = GaussianMarkovRandomFields.discretize(spde, disc)
 
     rng = MersenneTwister(6598120)
     @testset "Mean addition" begin
