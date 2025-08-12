@@ -7,7 +7,7 @@ export kronecker_product_spatiotemporal_model
         Q_t::AbstractMatrix,
         Q_s::AbstractMatrix,
         spatial_disc::FEMDiscretization;
-        solver_blueprint = DefaultSolverBlueprint(),
+        algorithm = nothing,
     )
 
 Create a spatiotemporal GMRF through a Kronecker product of the temporal and
@@ -19,20 +19,19 @@ spatial precision matrices.
 - `spatial_disc::FEMDiscretization`: The spatial discretization.
 
 # Keyword arguments
-- `solver_blueprint::AbstractSolverBlueprint=DefaultSolverBlueprint()`:
-        The solver blueprint.
+- `algorithm`: The LinearSolve algorithm to use.
 """
 function kronecker_product_spatiotemporal_model(
     Q_t::LinearMap,
     Q_s::LinearMap,
     spatial_disc::FEMDiscretization;
-    solver_blueprint = DefaultSolverBlueprint(),
+    algorithm = nothing,
 )
     Q_st = kron(Q_t, Q_s)
     return ConcreteConstantMeshSTGMRF(
         zeros(Base.size(Q_st, 1)),
         Q_st,
         spatial_disc,
-        solver_blueprint,
+        algorithm,
     )
 end
