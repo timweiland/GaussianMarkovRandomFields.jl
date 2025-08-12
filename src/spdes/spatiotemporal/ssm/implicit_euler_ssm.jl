@@ -4,17 +4,17 @@ import Ferrite: ConstraintHandler
 export ImplicitEulerSSM, ImplicitEulerJointSSMMatrices
 
 """
-    ImplicitEulerSSM(
-        x₀::AbstractGMRF,
-        G::Function,
-        M::Function,
-        M⁻¹::Function,
-        β::Function,
-        β⁻¹::Function,
-        spatial_noise::AbstractGMRF,
-        ts::AbstractVector,
-        constraint_handler::ConstraintHandler,
-        constraint_noise::AbstractVector,
+    ImplicitEulerSSM{X,S,GF,MF,MIF,BF,BIF,TS,C,V}(
+        x₀::X,
+        G::GF,
+        M::MF,
+        M⁻¹::MIF,
+        β::BF,
+        β⁻¹::BIF,
+        spatial_noise::S,
+        ts::TS,
+        constraint_handler::C,
+        constraint_noise::V,
     )
 
 State-space model for the implicit Euler discretization of a stochastic
@@ -28,31 +28,31 @@ G(Δt) xₖ₊₁ = M(Δt) xₖ + M(Δt) β(Δt) zₛ
 
 where `zₛ` is (possibly colored) spatial noise. 
 """
-struct ImplicitEulerSSM
-    x₀::AbstractGMRF
-    G::Function
-    M::Function
-    M⁻¹::Function
-    β::Function
-    β⁻¹::Function
-    spatial_noise::AbstractGMRF
-    ts::AbstractVector
-    constraint_handler::ConstraintHandler
-    constraint_noise::AbstractVector
+struct ImplicitEulerSSM{X<:AbstractGMRF, S<:AbstractGMRF, GF<:Function, MF<:Function, MIF<:Function, BF<:Function, BIF<:Function, TS<:AbstractVector{<:Real}, C<:ConstraintHandler, V<:AbstractVector}
+    x₀::X
+    G::GF
+    M::MF
+    M⁻¹::MIF
+    β::BF
+    β⁻¹::BIF
+    spatial_noise::S
+    ts::TS
+    constraint_handler::C
+    constraint_noise::V
 
     function ImplicitEulerSSM(
-        x₀,
-        G,
-        M,
-        M⁻¹,
-        β,
-        β⁻¹,
-        spatial_noise,
-        ts::AbstractVector,
-        constraint_handler,
-        constraint_noise,
-    )
-        new(
+        x₀::X,
+        G::GF,
+        M::MF,
+        M⁻¹::MIF,
+        β::BF,
+        β⁻¹::BIF,
+        spatial_noise::S,
+        ts::TS,
+        constraint_handler::C,
+        constraint_noise::V,
+    ) where {X<:AbstractGMRF, S<:AbstractGMRF, GF<:Function, MF<:Function, MIF<:Function, BF<:Function, BIF<:Function, TS<:AbstractVector{<:Real}, C<:ConstraintHandler, V<:AbstractVector}
+        new{X,S,GF,MF,MIF,BF,BIF,TS,C,V}(
             x₀,
             G,
             M,
@@ -60,7 +60,7 @@ struct ImplicitEulerSSM
             β,
             β⁻¹,
             spatial_noise,
-            ts::AbstractVector,
+            ts,
             constraint_handler,
             constraint_noise,
         )
@@ -68,7 +68,7 @@ struct ImplicitEulerSSM
 end
 
 """
-    ImplicitEulerJointSSMMatrices(
+    ImplicitEulerJointSSMMatrices{T,GM,MM,SM,SQRT,C,V}(
         ssm::ImplicitEulerSSM,
         Δt::Real
     )
@@ -80,14 +80,14 @@ discretization scheme.
 - `ssm::ImplicitEulerSSM`: The implicit Euler state-space model.
 - `Δt::Real`: The time step.
 """
-struct ImplicitEulerJointSSMMatrices <: JointSSMMatrices
-    Δt::Real
-    G::AbstractMatrix
-    M::AbstractMatrix
-    Σ⁻¹::AbstractMatrix
-    Σ⁻¹_sqrt::AbstractMatrix
-    constraint_handler::ConstraintHandler
-    constraint_noise::AbstractVector
+struct ImplicitEulerJointSSMMatrices{T<:Real, GM<:AbstractMatrix, MM<:AbstractMatrix, SM<:AbstractMatrix, SQRT<:Union{Nothing,AbstractMatrix}, C<:ConstraintHandler, V<:AbstractVector} <: JointSSMMatrices
+    Δt::T
+    G::GM
+    M::MM
+    Σ⁻¹::SM
+    Σ⁻¹_sqrt::SQRT
+    constraint_handler::C
+    constraint_noise::V
 
     function ImplicitEulerJointSSMMatrices(ssm::ImplicitEulerSSM, Δt::Real)
         G = sparse(ssm.G(Δt))
@@ -95,13 +95,25 @@ struct ImplicitEulerJointSSMMatrices <: JointSSMMatrices
         M = sparse(ssm.M(Δt))
         β⁻¹ = ssm.β⁻¹(Δt)
         Q_s = precision_map(ssm.spatial_noise)
-        Q_s_sqrt = to_matrix(linmap_sqrt(Q_s))
         Q_s = to_matrix(Q_s)
+        
+        # Use Q_sqrt from spatial_noise if available, otherwise pass nothing
+        Q_s_sqrt = if ssm.spatial_noise.Q_sqrt !== nothing
+            to_matrix(ssm.spatial_noise.Q_sqrt)
+        else
+            nothing
+        end
 
         Σ⁻¹ = M⁻¹' * β⁻¹' * Q_s * β⁻¹ * M⁻¹
-        Σ⁻¹_sqrt = M⁻¹' * β⁻¹' * Q_s_sqrt
+        Σ⁻¹_sqrt = if Q_s_sqrt !== nothing
+            M⁻¹' * β⁻¹' * Q_s_sqrt
+        else
+            nothing
+        end
 
-        return new(Δt, G, M, Σ⁻¹, Σ⁻¹_sqrt, ssm.constraint_handler, ssm.constraint_noise)
+        return new{typeof(Δt), typeof(G), typeof(M), typeof(Σ⁻¹), typeof(Σ⁻¹_sqrt), typeof(ssm.constraint_handler), typeof(ssm.constraint_noise)}(
+            Δt, G, M, Σ⁻¹, Σ⁻¹_sqrt, ssm.constraint_handler, ssm.constraint_noise
+        )
     end
 end
 
