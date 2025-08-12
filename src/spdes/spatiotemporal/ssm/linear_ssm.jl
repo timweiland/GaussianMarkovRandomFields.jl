@@ -112,9 +112,7 @@ function joint_ssm(x₀::GMRF, ssm_mats::JointSSMMatrices, ts::AbstractRange)
 
     GᵀΣ⁻¹ = G' * Σ⁻¹
     F⁻¹ = GᵀΣ⁻¹ * G
-    F⁻¹_sqrt = G' * Σ⁻¹_sqrt
     AᵀF⁻¹A = M' * Σ⁻¹ * M
-    AᵀF⁻¹_sqrt = M' * Σ⁻¹_sqrt
     F⁻¹A = GᵀΣ⁻¹ * M
 
     Nₜ = length(ts)
@@ -125,12 +123,19 @@ function joint_ssm(x₀::GMRF, ssm_mats::JointSSMMatrices, ts::AbstractRange)
     off_diagonal_blocks = Tuple(LinearMap(block) for block in off_diagonal_blocks)
 
     precision = SymmetricBlockTridiagonalMap(diagonal_blocks, off_diagonal_blocks)
-    Q_s_sqrt = linmap_sqrt(precision_map(x₀))
-    A = hcat(Q_s_sqrt, AᵀF⁻¹_sqrt)
-    B = hcat(ZeroMap{Float64}(size(Q_s_sqrt)...), -F⁻¹_sqrt)
-    C = hcat(ZeroMap{Float64}(size(Q_s_sqrt)...), AᵀF⁻¹_sqrt)
-    precision_sqrt = SSMBidiagonalMap(A, B, C, Nₜ)
-    precision = LinearMapWithSqrt(precision, precision_sqrt)
+    
+    # Only construct square root if x₀ has Q_sqrt available
+    precision_sqrt = if x₀.Q_sqrt !== nothing
+        Q_s_sqrt = LinearMap(x₀.Q_sqrt)
+        F⁻¹_sqrt = LinearMap(G' * Σ⁻¹_sqrt)
+        AᵀF⁻¹_sqrt = LinearMap(M' * Σ⁻¹_sqrt)
+        A = hcat(Q_s_sqrt, AᵀF⁻¹_sqrt)
+        B = hcat(ZeroMap{Float64}(size(Q_s_sqrt)...), -F⁻¹_sqrt)
+        C = hcat(ZeroMap{Float64}(size(Q_s_sqrt)...), AᵀF⁻¹_sqrt)
+        SSMBidiagonalMap(A, B, C, Nₜ)
+    else
+        nothing
+    end
 
-    return GMRF(vcat(means...), precision)
+    return GMRF(vcat(means...), precision, precision_sqrt)
 end
