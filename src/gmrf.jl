@@ -183,7 +183,7 @@ struct GMRF{T<:Real, PrecisionMap<:Union{LinearMap{T}, AbstractMatrix{T}}, QSqrt
         # For LinearMaps, we need to convert to matrix for LinearSolve
         precision_matrix = precision isa LinearMap ? to_matrix(precision) : precision
         # Use appropriate symmetric wrapper for different matrix types
-        prob = LinearProblem(symmetrize(precision_matrix), mean)
+        prob = LinearProblem(symmetrize(precision_matrix), copy(mean))
         linsolve_cache = init(prob, alg)
         
         return new{T, typeof(precision), typeof(Q_sqrt), typeof(linsolve_cache), typeof(rbmc_strategy)}(mean, nothing, precision, Q_sqrt, linsolve_cache, rbmc_strategy)
@@ -203,7 +203,7 @@ struct GMRF{T<:Real, PrecisionMap<:Union{LinearMap{T}, AbstractMatrix{T}}, QSqrt
 
         # Set up LinearSolve cache and solve for mean
         precision_matrix = precision isa LinearMap ? to_matrix(precision) : precision
-        prob = LinearProblem(symmetrize(precision_matrix), information.data)
+        prob = LinearProblem(symmetrize(precision_matrix), copy(information.data))
         linsolve_cache = init(prob, alg)
         mean = solve!(linsolve_cache).u
         

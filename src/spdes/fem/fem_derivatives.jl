@@ -149,7 +149,7 @@ function derivative_matrices(
     Js = [Int64[] for _ in derivative_idcs]
     Vs = [Float64[] for _ in derivative_idcs]
     for i in eachindex(peh.cells)
-        reinit!(cc, peh.cells[i])
+        Ferrite.reinit!(cc, peh.cells[i])
         dof_coords = getcoordinates(cc)
         dofs = celldofs(cc)[dof_idcs]
         ξ = peh.local_coords[i]
@@ -207,7 +207,7 @@ function second_derivative_matrices(
     Js = [Int64[] for _ in derivative_idcs]
     Vs = [Float64[] for _ in derivative_idcs]
     for i in eachindex(peh.cells)
-        reinit!(cc, peh.cells[i])
+        Ferrite.reinit!(cc, peh.cells[i])
         dof_coords = getcoordinates(cc)
         dofs = celldofs(cc)[dof_idcs]
         J⁻¹ = inv(geom_jacobian(f, dof_coords, peh.local_coords[i]))

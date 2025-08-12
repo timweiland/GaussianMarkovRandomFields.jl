@@ -44,7 +44,7 @@ using Random
     disc = FEMDiscretization(grid, ip, qr)
 
     spde = MaternSPDE{2}(range = 0.7, smoothness = 2)
-    u_matern = discretize(spde, disc)
+    u_matern = GaussianMarkovRandomFields.discretize(spde, disc)
 
     Λ_obs = 10.0
     A_train = evaluation_matrix(disc, [Tensors.Vec(x...) for x in X_train])

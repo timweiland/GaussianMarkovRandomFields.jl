@@ -2,7 +2,7 @@ using LinearSolve
 using LinearAlgebra
 using SelectedInversion
 
-export supports_selinv, selinv_diag
+export supports_selinv, selinv_diag, selinv
 
 """
     supports_selinv(alg)
@@ -44,6 +44,24 @@ Convenience function that dispatches to selinv_diag(linsolve, linsolve.alg).
 """
 selinv_diag(linsolve) = selinv_diag(linsolve, linsolve.alg)
 
+"""
+    selinv(linsolve, alg)
+
+Compute the full selected inverse matrix using selected inversion.
+Dispatches on the algorithm type.
+"""
+function selinv(linsolve::LinearSolve.LinearCache, alg)
+    ensure_factorization!(linsolve)
+    return _selinv_impl(linsolve, alg)
+end
+
+"""
+    selinv(linsolve)
+
+Convenience function that dispatches to selinv(linsolve, linsolve.alg).
+"""
+selinv(linsolve::LinearSolve.LinearCache) = selinv(linsolve, linsolve.alg)
+
 # Implementation methods (after factorization is ensured)
 _selinv_diag_impl(linsolve, alg) = error("Selected inversion not implemented for algorithm $(typeof(alg))")
 
@@ -72,4 +90,33 @@ end
 function _selinv_diag_impl(linsolve, alg::LinearSolve.DefaultLinearSolver)
     actual_alg = LinearSolve.algchoice_to_alg(Symbol(alg.alg))
     return _selinv_diag_impl(linsolve, actual_alg)
+end
+
+# Implementation methods for full selected inverse
+_selinv_impl(linsolve, alg) = error("Full selected inversion not implemented for algorithm $(typeof(alg))")
+
+function _selinv_impl(linsolve, ::LinearSolve.CHOLMODFactorization)
+    factorization = LinearSolve.@get_cacheval(linsolve, :CHOLMODFactorization)
+    return SelectedInversion.selinv(factorization; depermute=true).Z
+end
+
+function _selinv_impl(linsolve, ::LinearSolve.CholeskyFactorization)
+    factorization = LinearSolve.@get_cacheval(linsolve, :CholeskyFactorization)
+    return SelectedInversion.selinv(factorization; depermute=true).Z
+end
+
+function _selinv_impl(linsolve, ::LinearSolve.DiagonalFactorization)
+    # For diagonal matrices, full selected inverse is just the diagonal inverse
+    return spdiagm(0 => 1 ./ diag(linsolve.A))
+end
+
+function _selinv_impl(linsolve, ::LinearSolve.PardisoJL)
+    # Pardiso selected inversion - will be implemented in extension
+    error("Pardiso full selinv implementation requires the Pardiso extension")
+end
+
+# Handle DefaultLinearSolver by dispatching on the nested algorithm
+function _selinv_impl(linsolve, alg::LinearSolve.DefaultLinearSolver)
+    actual_alg = LinearSolve.algchoice_to_alg(Symbol(alg.alg))
+    return _selinv_impl(linsolve, actual_alg)
 end

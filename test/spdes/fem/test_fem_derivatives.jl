@@ -29,7 +29,7 @@ using GaussianMarkovRandomFields, Ferrite, SparseArrays, Tensors
 
         @testset "Global shape function derivatives" begin
             for i = 1:getnbasefunctions(ip), j = 1:length(X)
-                reinit!(cc, peh.cells[j])
+                Ferrite.reinit!(cc, peh.cells[j])
                 ξ = peh.local_coords[j]
                 dof_coords = getcoordinates(cc)
                 ∇ϕᵢ = GaussianMarkovRandomFields.shape_gradient_global(f, dof_coords, i, ξ)

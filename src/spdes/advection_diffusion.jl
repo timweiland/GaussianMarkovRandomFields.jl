@@ -74,7 +74,7 @@ function assemble_M_G_B_matrices(
     end
 
     for cell in CellIterator(dh)
-        reinit!(cellvalues, cell)
+        Ferrite.reinit!(cellvalues, cell)
         Me = assemble_mass_matrix(Me, cellvalues, interpolation; lumping = true)
         Ge = assemble_diffusion_matrix(Ge, cellvalues; diffusion_factor = H)
         Be = assemble_advection_matrix(Be, cellvalues; advection_velocity = γ)
@@ -188,12 +188,11 @@ function discretize(
         discretization.constraint_noise,
     )
     X = joint_ssm(ssm)
+    X = X + mean_offset
     X = ImplicitEulerConstantMeshSTGMRF(
-        X.mean .+ mean_offset,
-        X.precision,
+        X,
         discretization,
-        ssm,
-        algorithm,
+        ssm
     )
     return X
 end

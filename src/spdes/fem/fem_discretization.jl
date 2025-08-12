@@ -149,7 +149,7 @@ function evaluation_matrix(f::FEMDiscretization, X; field = :default)
     Js = Int64[]
     Vs = Float64[]
     for i in eachindex(peh.cells)
-        reinit!(cc, peh.cells[i])
+        Ferrite.reinit!(cc, peh.cells[i])
         dofs = celldofs(cc)[dof_idcs]
         append!(Is, repeat([i], length(dofs)))
         append!(Js, dofs)
@@ -180,7 +180,7 @@ function node_selection_matrix(f::FEMDiscretization, node_ids; field = :default)
     Js = Int64[]
     Vs = Float64[]
     for i in eachindex(peh.cells)
-        reinit!(cc, peh.cells[i])
+        Ferrite.reinit!(cc, peh.cells[i])
         dofs = celldofs(cc)[dof_idcs]
         coords = getcoordinates(cc)
         for j = 1:length(dofs)

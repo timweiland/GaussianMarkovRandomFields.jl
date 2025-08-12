@@ -12,7 +12,7 @@ function _get_periodic_constraint(grid)
     add!(temp_dh, :u, Lagrange{RefLine,1}())
     close!(temp_dh)
     cc = CellCache(temp_dh)
-    get_dof(cell_idx, dof_idx) = (reinit!(cc, cell_idx); celldofs(cc)[dof_idx])
+    get_dof(cell_idx, dof_idx) = (Ferrite.reinit!(cc, cell_idx); celldofs(cc)[dof_idx])
     dof_left = get_dof(cellidx_left, dofidx_left)
     dof_right = get_dof(cellidx_right, dofidx_right)
 
@@ -61,7 +61,7 @@ end
             spde_smoothness = MaternSPDE{d}(κ = κ, smoothness = smoothness_idx - 1)
             @test spde_smoothness.ν ≈ spde.ν
 
-            x = discretize(spde, disc)
+            x = GaussianMarkovRandomFields.discretize(spde, disc)
             Q = to_matrix(precision_map(x))
             @test size(Q) == (ndofs(disc), ndofs(disc))
             @test cholesky(Q) isa Union{Cholesky,SparseArrays.CHOLMOD.Factor}
@@ -71,8 +71,8 @@ end
             spde_high_range = MaternSPDE{d}(range = 1.0, smoothness = smoothness_idx - 1)
             spde_low_range = MaternSPDE{d}(range = 0.1, smoothness = smoothness_idx - 1)
 
-            x_high_range = discretize(spde_high_range, disc)
-            x_low_range = discretize(spde_low_range, disc)
+            x_high_range = GaussianMarkovRandomFields.discretize(spde_high_range, disc)
+            x_low_range = GaussianMarkovRandomFields.discretize(spde_low_range, disc)
 
             A_eval = evaluation_matrix(disc, [Tensors.Vec(fill(0.0, d)...)])
             y = [1.0]
@@ -99,7 +99,7 @@ end
 
         for smoothness ∈ [1, 3]
             spde = MaternSPDE{1}(range = 0.3, smoothness = smoothness, σ² = 0.3)
-            x = discretize(spde, disc_pbc)
+            x = GaussianMarkovRandomFields.discretize(spde, disc_pbc)
 
             @test (mean(x)[1] ≈ 0.0) && (mean(x)[end] ≈ 0.0)
 
@@ -111,7 +111,7 @@ end
 
         for smoothness ∈ [0, 1, 2]
             spde = MaternSPDE{1}(range = 0.3, smoothness = smoothness, σ² = 0.3)
-            x = discretize(spde, disc_dbc)
+            x = GaussianMarkovRandomFields.discretize(spde, disc_dbc)
 
             @test (mean(x)[1] ≈ left_val) && (mean(x)[end] ≈ right_val)
 

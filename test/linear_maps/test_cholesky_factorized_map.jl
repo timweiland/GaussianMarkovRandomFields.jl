@@ -12,7 +12,8 @@ using GaussianMarkovRandomFields, LinearAlgebra, LinearMaps, Random, SparseArray
 
     x = rand(N)
 
-    @test linmap_cholesky(Val(:default), A_cho_map) == A_cho # Yes, they should be equal!
+    # Test that we can recover the original factorization
+    @test A_cho_map.cho == A_cho
     @test size(A_cho_map) == size(A_cho) == (N, N)
     @test A_cho_map * x ≈ A * x
     @test A_cho_map' == A_cho_map
