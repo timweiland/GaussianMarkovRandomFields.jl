@@ -1,91 +1,98 @@
 using LinearMaps, LinearAlgebra, SparseArrays
 
-export ConstantMeshSTGMRF, ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMeshSTGMRF
+export ConstantMeshSTGMRF, ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMeshSTGMRF,
+       ImplicitEulerMetadata, ConcreteSTMetadata
 
 ################################################################################
 #
-#    ConstantMeshSTGMRF - New forwarding design
+#    ConstantMeshSTGMRF - MetaGMRF-based design
 #
-#    Spatiotemporal GMRF types that forward operations to underlying GMRF
+#    Spatiotemporal GMRF metadata types and constructors
 #
 ################################################################################
 
 """
-    ImplicitEulerConstantMeshSTGMRF{D}
+    ImplicitEulerMetadata{D, SSM} <: GMRFMetadata
+
+Metadata for implicit Euler spatiotemporal GMRFs with constant spatial mesh.
+"""
+struct ImplicitEulerMetadata{D, SSM} <: GMRFMetadata
+    discretization::FEMDiscretization{D}
+    ssm::SSM
+    N_spatial::Int
+    N_t::Int
+end
+
+"""
+    ConcreteSTMetadata{D} <: GMRFMetadata
+
+Metadata for concrete spatiotemporal GMRFs with constant spatial mesh.
+"""
+struct ConcreteSTMetadata{D} <: GMRFMetadata
+    discretization::FEMDiscretization{D}
+    N_spatial::Int
+    N_t::Int
+end
+
+"""
+    ImplicitEulerConstantMeshSTGMRF
 
 A spatiotemporal GMRF with constant spatial discretization and an implicit Euler
-discretization of the temporal dynamics. Forwards all GMRF operations to the underlying GMRF.
+discretization of the temporal dynamics. Uses MetaGMRF for clean type structure.
 """
-struct ImplicitEulerConstantMeshSTGMRF{D, T, PrecisionMap, QSqrt, Cache}
-    gmrf::GMRF{T, PrecisionMap, QSqrt, Cache}
-    discretization::FEMDiscretization{D}
-    ssm::ImplicitEulerSSM
-    N_spatial::Int
-    N_t::Int
-
-    function ImplicitEulerConstantMeshSTGMRF(
-        gmrf::GMRF{T, PrecisionMap, QSqrt, Cache},
-        discretization::FEMDiscretization{D},
-        ssm::ImplicitEulerSSM,
-    ) where {D, T, PrecisionMap, QSqrt, Cache}
-        n = length(gmrf)
-        (n % ndofs(discretization)) == 0 || throw(ArgumentError("size mismatch"))
-        N_spatial = ndofs(discretization)
-        N_t = n ÷ N_spatial
-        
-        return new{D, T, PrecisionMap, QSqrt, Cache}(
-            gmrf, discretization, ssm, N_spatial, N_t
-        )
-    end
-end
+const ImplicitEulerConstantMeshSTGMRF{D, SSM, T, P, G} = MetaGMRF{ImplicitEulerMetadata{D, SSM}, T, P, G}
 
 """
-    ConcreteConstantMeshSTGMRF{D}
+    ConcreteConstantMeshSTGMRF
 
 A concrete implementation of a spatiotemporal GMRF with constant spatial
-discretization. Forwards all GMRF operations to the underlying GMRF.
+discretization. Uses MetaGMRF for clean type structure.
 """
-struct ConcreteConstantMeshSTGMRF{D, T, PrecisionMap, QSqrt, Cache}
-    gmrf::GMRF{T, PrecisionMap, QSqrt, Cache}
-    discretization::FEMDiscretization{D}
-    N_spatial::Int
-    N_t::Int
-
-    function ConcreteConstantMeshSTGMRF(
-        gmrf::GMRF{T, PrecisionMap, QSqrt, Cache},
-        discretization::FEMDiscretization{D},
-    ) where {D, T, PrecisionMap, QSqrt, Cache}
-        n = length(gmrf)
-        (n % ndofs(discretization)) == 0 || throw(ArgumentError("size mismatch"))
-        N_spatial = ndofs(discretization)
-        N_t = n ÷ N_spatial
-        
-        return new{D, T, PrecisionMap, QSqrt, Cache}(
-            gmrf, discretization, N_spatial, N_t
-        )
-    end
-end
-
-# Forward all core GMRF operations to the underlying GMRF
-@forward ImplicitEulerConstantMeshSTGMRF.gmrf (
-    length, mean, precision_map, var, std, rand, information_vector
-)
-@forward ConcreteConstantMeshSTGMRF.gmrf (
-    length, mean, precision_map, var, std, rand, information_vector
-)
+const ConcreteConstantMeshSTGMRF{D, T, P, G} = MetaGMRF{ConcreteSTMetadata{D}, T, P, G}
 
 # Type aliases for backward compatibility
 const ConstantMeshSTGMRF = Union{ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMeshSTGMRF}
 
-# Spatiotemporal-specific operations that need the metadata
-N_spatial(x::ConstantMeshSTGMRF) = x.N_spatial
-N_t(x::ConstantMeshSTGMRF) = x.N_t
+# Constructors
+function ImplicitEulerConstantMeshSTGMRF(
+    gmrf::AbstractGMRF,
+    discretization::FEMDiscretization{D},
+    ssm::SSM,
+) where {D, SSM}
+    n = length(gmrf)
+    (n % ndofs(discretization)) == 0 || throw(ArgumentError("size mismatch"))
+    N_spatial = ndofs(discretization)
+    N_t = n ÷ N_spatial
+    
+    metadata = ImplicitEulerMetadata(discretization, ssm, N_spatial, N_t)
+    return MetaGMRF(gmrf, metadata)
+end
+
+function ConcreteConstantMeshSTGMRF(
+    gmrf::AbstractGMRF,
+    discretization::FEMDiscretization{D},
+) where {D}
+    n = length(gmrf)
+    (n % ndofs(discretization)) == 0 || throw(ArgumentError("size mismatch"))
+    N_spatial = ndofs(discretization)
+    N_t = n ÷ N_spatial
+    
+    metadata = ConcreteSTMetadata(discretization, N_spatial, N_t)
+    return MetaGMRF(gmrf, metadata)
+end
+
+# Spatiotemporal-specific operations that access metadata
+N_spatial(x::ConstantMeshSTGMRF) = x.metadata.N_spatial
+N_t(x::ConstantMeshSTGMRF) = x.metadata.N_t
 
 time_means(x::ConstantMeshSTGMRF) = make_chunks(mean(x), N_t(x))
 time_vars(x::ConstantMeshSTGMRF) = make_chunks(var(x), N_t(x))
 time_stds(x::ConstantMeshSTGMRF) = make_chunks(std(x), N_t(x))
 time_rands(x::ConstantMeshSTGMRF, rng::AbstractRNG) = make_chunks(rand(rng, x), N_t(x))
-discretization_at_time(x::ConstantMeshSTGMRF, ::Int) = x.discretization
+discretization_at_time(x::ConstantMeshSTGMRF, ::Int) = x.metadata.discretization
+
+# Access SSM for ImplicitEuler types
+ssm(x::ImplicitEulerConstantMeshSTGMRF) = x.metadata.ssm
 
 ################################################################################
 #
