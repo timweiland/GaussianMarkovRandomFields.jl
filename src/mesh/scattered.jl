@@ -61,6 +61,9 @@ function generate_mesh(
     outer_boundary_gb = GeoInterface.convert(GeometryBasics, outer_boundary)
 
     Gmsh.initialize()
+    
+    # Disable verbose output
+    gmsh.option.setNumber("General.Verbosity", 0)
 
     gmsh.model.add("Scattered mesh")
 

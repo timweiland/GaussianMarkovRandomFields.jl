@@ -43,6 +43,9 @@ function create_inflated_rectangle(
     end
     Gmsh.initialize()
 
+    # Disable verbose output
+    gmsh.option.setNumber("General.Verbosity", 0)
+
     gmsh.model.add("t1")
 
     p_int_1 = gmsh.model.geo.addPoint(x0, y0, 0, interior_mesh_size)
