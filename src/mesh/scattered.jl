@@ -135,14 +135,14 @@ function generate_mesh(
     elements = elements[collect(domaincellset)]
 
     boundarydict = toboundary(facedim)
-    facesets = tofacetsets(boundarydict, elements)
+    facetsets = tofacetsets(boundarydict, elements)
 
     if save_path !== nothing
         gmsh.write(save_path)
     end
     gmsh.finalize()
 
-    return Ferrite.Grid(elements, nodes, facesets = facesets, cellsets = cellsets)
+    return Ferrite.Grid(elements, nodes, facetsets = facetsets, cellsets = cellsets)
 end
 
 @doc raw"""
