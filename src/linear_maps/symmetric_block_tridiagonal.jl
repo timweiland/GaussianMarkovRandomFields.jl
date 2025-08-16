@@ -22,9 +22,9 @@ struct SymmetricBlockTridiagonalMap{T} <: LinearMap{T}
     size::Dims{2}
 
     function SymmetricBlockTridiagonalMap(
-        diagonal_blocks::Tuple{LinearMap{T},Vararg{LinearMap{T},ND}},
-        off_diagonal_blocks::Tuple{LinearMap{T},Vararg{LinearMap{T},NOD}},
-    ) where {T,ND,NOD}
+            diagonal_blocks::Tuple{LinearMap{T}, Vararg{LinearMap{T}, ND}},
+            off_diagonal_blocks::Tuple{LinearMap{T}, Vararg{LinearMap{T}, NOD}},
+        ) where {T, ND, NOD}
         N = sum(map(x -> Base.size(x, 1), diagonal_blocks))
         sz = Dims((N, N))
         if NOD != ND - 1
@@ -33,19 +33,19 @@ struct SymmetricBlockTridiagonalMap{T} <: LinearMap{T}
         # Size checks
         for (i, block) in enumerate(diagonal_blocks)
             if i > 1
-                size(block, 1) == Base.size(off_diagonal_blocks[i-1], 1) ||
+                size(block, 1) == Base.size(off_diagonal_blocks[i - 1], 1) ||
                     throw(ArgumentError("size mismatch"))
             end
         end
-        new{T}(diagonal_blocks, off_diagonal_blocks, sz)
+        return new{T}(diagonal_blocks, off_diagonal_blocks, sz)
     end
 
     function SymmetricBlockTridiagonalMap(
-        diagonal_blocks::Tuple{LinearMap{T}},
-        off_diagonal_blocks::Tuple{},
-    ) where {T}
+            diagonal_blocks::Tuple{LinearMap{T}},
+            off_diagonal_blocks::Tuple{},
+        ) where {T}
         sz = Dims(Base.size(diagonal_blocks[1]))
-        new{T}(diagonal_blocks, off_diagonal_blocks, sz)
+        return new{T}(diagonal_blocks, off_diagonal_blocks, sz)
     end
 end
 
@@ -60,14 +60,14 @@ function LinearMaps._unsafe_mul!(y, A::SymmetricBlockTridiagonalMap, x::Abstract
         stop += Base.size(block, 1)
         y[start:stop] .= block * x[start:stop]
         if i > 1
-            off_block = A.off_diagonal_blocks[i-1]
+            off_block = A.off_diagonal_blocks[i - 1]
             off_block_size = Base.size(off_block, 2)
-            y[start:stop] .+= off_block * x[start-off_block_size:start-1]
+            y[start:stop] .+= off_block * x[(start - off_block_size):(start - 1)]
         end
         if i < length(A.diagonal_blocks)
             off_block = A.off_diagonal_blocks[i]
             off_block_size = Base.size(off_block', 2)
-            y[start:stop] .+= off_block' * x[stop+1:stop+off_block_size]
+            y[start:stop] .+= off_block' * x[(stop + 1):(stop + off_block_size)]
         end
         start = stop + 1
     end
@@ -90,7 +90,7 @@ function sparse(A::SymmetricBlockTridiagonalMap)
         push!(Js, diag_J)
         push!(Vs, diag_V)
         if i > 1
-            off_block = to_matrix(A.off_diagonal_blocks[i-1])
+            off_block = to_matrix(A.off_diagonal_blocks[i - 1])
             off_block_size = Base.size(off_block, 2)
             off_diag_I, off_diag_J, off_diag_V = findnz(sparse(off_block))
             off_diag_I .+= start - 1

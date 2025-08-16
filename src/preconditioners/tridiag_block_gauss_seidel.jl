@@ -45,34 +45,34 @@ struct TridiagonalBlockGaussSeidelPreconditioner{T} <: AbstractPreconditioner{T}
     L_blocks::Tuple{Vararg{AbstractMatrix{T}}}
 
     function TridiagonalBlockGaussSeidelPreconditioner(
-        D_blocks::Tuple{AbstractMatrix{T},Vararg{AbstractMatrix{T},ND}},
-        L_blocks::Tuple{AbstractMatrix{T},Vararg{AbstractMatrix{T},NOD}},
-    ) where {T,ND,NOD}
+            D_blocks::Tuple{AbstractMatrix{T}, Vararg{AbstractMatrix{T}, ND}},
+            L_blocks::Tuple{AbstractMatrix{T}, Vararg{AbstractMatrix{T}, NOD}},
+        ) where {T, ND, NOD}
         NOD == ND - 1 || throw(ArgumentError("size mismatch"))
         D⁻¹_blocks = FullCholeskyPreconditioner.(D_blocks)
-        new{T}(D⁻¹_blocks, L_blocks)
+        return new{T}(D⁻¹_blocks, L_blocks)
     end
 
     function TridiagonalBlockGaussSeidelPreconditioner(
-        D_blocks::Tuple{AbstractMatrix{T}},
-        L_blocks::Tuple{},
-    ) where {T}
-        new{T}(FullCholeskyPreconditioner.(D_blocks), L_blocks)
+            D_blocks::Tuple{AbstractMatrix{T}},
+            L_blocks::Tuple{},
+        ) where {T}
+        return new{T}(FullCholeskyPreconditioner.(D_blocks), L_blocks)
     end
 
     function TridiagonalBlockGaussSeidelPreconditioner(
-        D⁻¹_blocks::Tuple{AbstractPreconditioner{T},Vararg{AbstractPreconditioner{T},ND}},
-        L_blocks::Tuple{AbstractMatrix{T},Vararg{AbstractMatrix{T},NOD}},
-    ) where {T,ND,NOD}
+            D⁻¹_blocks::Tuple{AbstractPreconditioner{T}, Vararg{AbstractPreconditioner{T}, ND}},
+            L_blocks::Tuple{AbstractMatrix{T}, Vararg{AbstractMatrix{T}, NOD}},
+        ) where {T, ND, NOD}
         NOD == ND - 1 || throw(ArgumentError("size mismatch"))
-        new{T}(D⁻¹_blocks, L_blocks)
+        return new{T}(D⁻¹_blocks, L_blocks)
     end
 
     function TridiagonalBlockGaussSeidelPreconditioner(
-        D⁻¹_blocks::Tuple{AbstractPreconditioner{T}},
-        L_blocks::Tuple{},
-    ) where {T}
-        new{T}(D⁻¹_blocks, L_blocks)
+            D⁻¹_blocks::Tuple{AbstractPreconditioner{T}},
+            L_blocks::Tuple{},
+        ) where {T}
+        return new{T}(D⁻¹_blocks, L_blocks)
     end
 end
 
@@ -85,7 +85,7 @@ function ldiv!(y, P::TridiagonalBlockGaussSeidelPreconditioner, x::AbstractVecto
         prev_start = start
         start = stop + 1
         stop = start + size(D⁻¹, 1) - 1
-        y[start:stop] .= D⁻¹ \ (x[start:stop] - L * y[prev_start:start-1])
+        y[start:stop] .= D⁻¹ \ (x[start:stop] - L * y[prev_start:(start - 1)])
     end
     return y
 end
@@ -124,34 +124,34 @@ struct TridiagSymmetricBlockGaussSeidelPreconditioner{T} <: AbstractPrecondition
     L_blocks::Tuple{Vararg{AbstractMatrix{T}}}
 
     function TridiagSymmetricBlockGaussSeidelPreconditioner(
-        D_blocks::Tuple{AbstractMatrix{T},Vararg{AbstractMatrix{T},ND}},
-        L_blocks::Tuple{AbstractMatrix{T},Vararg{AbstractMatrix{T},NOD}},
-    ) where {T,ND,NOD}
+            D_blocks::Tuple{AbstractMatrix{T}, Vararg{AbstractMatrix{T}, ND}},
+            L_blocks::Tuple{AbstractMatrix{T}, Vararg{AbstractMatrix{T}, NOD}},
+        ) where {T, ND, NOD}
         NOD == ND - 1 || throw(ArgumentError("size mismatch"))
         D⁻¹_blocks = FullCholeskyPreconditioner.(D_blocks)
-        new{T}(D⁻¹_blocks, L_blocks)
+        return new{T}(D⁻¹_blocks, L_blocks)
     end
 
     function TridiagSymmetricBlockGaussSeidelPreconditioner(
-        D_blocks::Tuple{AbstractMatrix{T}},
-        L_blocks::Tuple{},
-    ) where {T}
-        new{T}(FullCholeskyPreconditioner.(D_blocks), L_blocks)
+            D_blocks::Tuple{AbstractMatrix{T}},
+            L_blocks::Tuple{},
+        ) where {T}
+        return new{T}(FullCholeskyPreconditioner.(D_blocks), L_blocks)
     end
 
     function TridiagSymmetricBlockGaussSeidelPreconditioner(
-        D⁻¹_blocks::Tuple{AbstractPreconditioner{T},Vararg{AbstractPreconditioner{T},ND}},
-        L_blocks::Tuple{AbstractMatrix{T},Vararg{AbstractMatrix{T},NOD}},
-    ) where {T,ND,NOD}
+            D⁻¹_blocks::Tuple{AbstractPreconditioner{T}, Vararg{AbstractPreconditioner{T}, ND}},
+            L_blocks::Tuple{AbstractMatrix{T}, Vararg{AbstractMatrix{T}, NOD}},
+        ) where {T, ND, NOD}
         NOD == ND - 1 || throw(ArgumentError("size mismatch"))
-        new{T}(D⁻¹_blocks, L_blocks)
+        return new{T}(D⁻¹_blocks, L_blocks)
     end
 
     function TridiagSymmetricBlockGaussSeidelPreconditioner(
-        D⁻¹_blocks::Tuple{AbstractPreconditioner{T}},
-        L_blocks::Tuple{},
-    ) where {T}
-        new{T}(D⁻¹_blocks, L_blocks)
+            D⁻¹_blocks::Tuple{AbstractPreconditioner{T}},
+            L_blocks::Tuple{},
+        ) where {T}
+        return new{T}(D⁻¹_blocks, L_blocks)
     end
 end
 
@@ -166,15 +166,15 @@ function ldiv!(y, P::TridiagSymmetricBlockGaussSeidelPreconditioner, x::Abstract
         prev_start = start
         start = stop + 1
         stop = start + Base.size(D⁻¹, 1) - 1
-        y[start:stop] .= D⁻¹ \ (x[start:stop] - L * y[prev_start:start-1])
+        y[start:stop] .= D⁻¹ \ (x[start:stop] - L * y[prev_start:(start - 1)])
     end
 
     # Backward solve
-    for (L, D⁻¹) in zip(reverse(L_blocks), reverse(D⁻¹_blocks[1:end-1]))
+    for (L, D⁻¹) in zip(reverse(L_blocks), reverse(D⁻¹_blocks[1:(end - 1)]))
         prev_stop = stop
         stop = start - 1
         start = stop - Base.size(D⁻¹, 1) + 1
-        y[start:stop] .= y[start:stop] - D⁻¹ \ (L' * y[stop+1:prev_stop])
+        y[start:stop] .= y[start:stop] - D⁻¹ \ (L' * y[(stop + 1):prev_stop])
     end
 
     return y
@@ -192,14 +192,14 @@ Base.size(P::TridiagSymmetricBlockGaussSeidelPreconditioner) =
 
 # COV_EXCL_START
 function show(io::IO, P::TridiagonalBlockGaussSeidelPreconditioner)
-    print(
+    return print(
         io,
         "TridiagonalBlockGaussSeidelPreconditioner with $(length(P.D⁻¹_blocks)) blocks",
     )
 end
 
 function show(io::IO, P::TridiagSymmetricBlockGaussSeidelPreconditioner)
-    print(
+    return print(
         io,
         "TridiagSymmetricBlockGaussSeidelPreconditioner with $(length(P.D⁻¹_blocks)) blocks",
     )

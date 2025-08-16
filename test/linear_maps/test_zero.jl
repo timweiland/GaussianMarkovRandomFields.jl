@@ -3,7 +3,7 @@ using GaussianMarkovRandomFields, SparseArrays
 @testset "Zero map" begin
     Ns, Ms = [10, 20], [10, 15]
 
-    for (N, M) ∈ zip(Ns, Ms)
+    for (N, M) in zip(Ns, Ms)
         Z = ZeroMap{Float64}(N, M)
         @test size(Z) == (N, M)
         Zᵀ = transpose(Z)

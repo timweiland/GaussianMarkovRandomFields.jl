@@ -14,7 +14,7 @@ example_problem = NonlinearOptimProblem(
     rng = MersenneTwister(6692340)
 
     grid = generate_grid(Line, (200,))
-    ip = Lagrange{RefLine,1}()
+    ip = Lagrange{RefLine, 1}()
     qr = QuadratureRule{RefLine}(2)
     disc = FEMDiscretization(grid, ip, qr)
     spde = MaternSPDE{1}(range = 0.3, smoothness = 1)
@@ -27,7 +27,7 @@ example_problem = NonlinearOptimProblem(
         rand(rng, length(mean(x_prior))),
         precision_map(x_prior),
         u -> example_problem.f_and_Jf(sparse(xs), A, u),
-        1e7, # Note: Optim result is very dependent on noise without line search
+        1.0e7, # Note: Optim result is very dependent on noise without line search
         spzeros(length(xs)),
     )
     solvers = [

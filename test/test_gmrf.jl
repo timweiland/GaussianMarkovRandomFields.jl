@@ -11,7 +11,7 @@ using Random
     Q_diag = spdiagm(0 => [1.0, 2.0, 3.0, 4.0])
     d_standard = GMRF(μ_standard, Q_standard)
     d_diag = GMRF(μ_diag, Q_diag)
-    d_diag_low_noise = GMRF(μ_diag, 1e10 * Q_diag)
+    d_diag_low_noise = GMRF(μ_diag, 1.0e10 * Q_diag)
 
     rng = Random.MersenneTwister(2359025)
 
@@ -39,7 +39,7 @@ using Random
     @testset "Sampling" begin
         low_noise_samples = rand(d_diag_low_noise, (10,))
         for sample in low_noise_samples
-            @test all(abs.(sample .- μ_diag) .< 1e-4)
+            @test all(abs.(sample .- μ_diag) .< 1.0e-4)
             @test sample != μ_diag
         end
     end
@@ -63,7 +63,7 @@ using Random
 
     @testset "Variance and standard deviation" begin
         N = 100
-        for i = 1:5
+        for i in 1:5
             Q = sprand(N, N, 0.2)
             Q = (Q + Q') / 2 + N * I
             Q⁻¹ = inv(Array(Q))

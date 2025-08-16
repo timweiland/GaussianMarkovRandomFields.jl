@@ -3,10 +3,10 @@ using GaussianMarkovRandomFields, Ferrite, SparseArrays, Tensors
 @testset "FEM Derivatives" begin
     N_xy = 20
 
-    @testset "Order $d" for d ∈ [1, 2]
+    @testset "Order $d" for d in [1, 2]
         element = (d == 1) ? Triangle : QuadraticTriangle
         grid = generate_grid(element, (N_xy, N_xy))
-        ip = Lagrange{RefTriangle,d}()
+        ip = Lagrange{RefTriangle, d}()
         qr = QuadratureRule{RefTriangle}(3)
         f = FEMDiscretization(grid, ip, qr)
 
@@ -15,7 +15,7 @@ using GaussianMarkovRandomFields, Ferrite, SparseArrays, Tensors
         cc = CellCache(f.dof_handler)
 
         @testset "Local shape function derivatives" begin
-            for i = 1:getnbasefunctions(ip), j = 1:length(X)
+            for i in 1:getnbasefunctions(ip), j in 1:length(X)
                 ξ = peh.local_coords[j]
                 ∇ϕᵢ = GaussianMarkovRandomFields.shape_gradient_local(f, i, ξ)
                 Hϕᵢ = GaussianMarkovRandomFields.shape_hessian_local(f, i, ξ)
@@ -28,7 +28,7 @@ using GaussianMarkovRandomFields, Ferrite, SparseArrays, Tensors
         end
 
         @testset "Global shape function derivatives" begin
-            for i = 1:getnbasefunctions(ip), j = 1:length(X)
+            for i in 1:getnbasefunctions(ip), j in 1:length(X)
                 Ferrite.reinit!(cc, peh.cells[j])
                 ξ = peh.local_coords[j]
                 dof_coords = getcoordinates(cc)

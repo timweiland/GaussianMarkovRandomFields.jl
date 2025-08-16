@@ -13,17 +13,17 @@ Does not make sense to use on its own, but can be used as a building block
 for more complex preconditioners.
 """
 struct FullCholeskyPreconditioner{T} <: AbstractPreconditioner{T}
-    cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}}
+    cho::Union{Cholesky{T}, SparseArrays.CHOLMOD.Factor{T}}
 
     function FullCholeskyPreconditioner(A::AbstractMatrix{T}) where {T}
         cho = cholesky(Symmetric(A))
-        new{T}(cho)
+        return new{T}(cho)
     end
 
     function FullCholeskyPreconditioner(
-        cho::Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}},
-    ) where {T}
-        new{T}(cho)
+            cho::Union{Cholesky{T}, SparseArrays.CHOLMOD.Factor{T}},
+        ) where {T}
+        return new{T}(cho)
     end
 end
 

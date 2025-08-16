@@ -17,7 +17,7 @@ struct ZeroMap{T} <: LinearMaps.LinearMap{T}
 end
 
 function LinearMaps._unsafe_mul!(y, L::ZeroMap, x::AbstractVector)
-    y .= 0
+    return y .= 0
 end
 
 function LinearMaps.size(L::ZeroMap)

@@ -21,7 +21,7 @@ import Random: MersenneTwister
     x = rand(rng, N₁ + N₂)
     y = rand(rng, N₁ + N₂)
 
-    direct_res = [P₁ \ x[1:N₁]; P₂ \ x[N₁+1:end]]
+    direct_res = [P₁ \ x[1:N₁]; P₂ \ x[(N₁ + 1):end]]
     @test ldiv!(y, P, x) ≈ direct_res
     @test y ≈ direct_res
     @test P \ x ≈ direct_res

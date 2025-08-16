@@ -10,7 +10,7 @@ function _get_periodic_constraint(grid)
     cellidx_right, dofidx_right = collect(grid.facetsets["right"])[1]
 
     temp_dh = DofHandler(grid)
-    add!(temp_dh, :u, Lagrange{RefLine,1}())
+    add!(temp_dh, :u, Lagrange{RefLine, 1}())
     close!(temp_dh)
     cc = CellCache(temp_dh)
     get_dof(cell_idx, dof_idx) = (Ferrite.reinit!(cc, cell_idx); celldofs(cc)[dof_idx])

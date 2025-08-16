@@ -24,27 +24,28 @@ end
 Makie.plottype(::AbstractGMRF, ::FEMDiscretization{1}) = GMRF_FEM_1D_Plot
 
 function _plot_1d_gaussian!(
-    plot_into,
-    plot_points,
-    means,
-    lower,
-    upper,
-    samples;
-    mean_color = :blue,
-    conf_band_color = (:blue, 0.3),
-    sample_color = (:gray, 0.3),
-)
+        plot_into,
+        plot_points,
+        means,
+        lower,
+        upper,
+        samples;
+        mean_color = :blue,
+        conf_band_color = (:blue, 0.3),
+        sample_color = (:gray, 0.3),
+    )
     lines!(plot_into, plot_points, means, color = mean_color)
     band!(plot_into, plot_points, lower, upper, color = conf_band_color)
     for samp in samples
         lines!(plot_into, plot_points, samp, color = sample_color)
     end
+    return
 end
 
 
 function Makie.plot!(
-    gmrf_fem_plot::GMRF_FEM_1D_Plot{<:Tuple{<:AbstractGMRF,<:FEMDiscretization{1}}},
-)
+        gmrf_fem_plot::GMRF_FEM_1D_Plot{<:Tuple{<:AbstractGMRF, <:FEMDiscretization{1}}},
+    )
     gmrf = gmrf_fem_plot[1]
     disc = gmrf_fem_plot[2]
 
@@ -55,7 +56,7 @@ function Makie.plot!(
     confs = @lift(1.96 * $stds)
     upper = Observable(zeros(size(means[])))
     lower = Observable(zeros(size(means[])))
-    samples = [Observable(Float64[]) for _ = 1:gmrf_fem_plot.N_samples[]]
+    samples = [Observable(Float64[]) for _ in 1:gmrf_fem_plot.N_samples[]]
 
     function update_plot(gmrf, disc)
         node_coords = map(n -> n.x[1], disc.grid.nodes)
@@ -80,6 +81,7 @@ function Makie.plot!(
         for i in eachindex(samples)
             samples[i][] = eval_mat * rand(gmrf_fem_plot.rng[], gmrf)
         end
+        return
     end
     Makie.Observables.onany(update_plot, gmrf, disc)
     update_plot(gmrf[], disc[])
@@ -110,11 +112,11 @@ end
     )
 end
 
-ST_GMRF_1D = Union{ConstantMeshSTGMRF{1},LinearConditionalGMRF{<:ConstantMeshSTGMRF{1}}}
+ST_GMRF_1D = Union{ConstantMeshSTGMRF{1}, LinearConditionalGMRF{<:ConstantMeshSTGMRF{1}}}
 
 function Makie.plot!(
-    gmrf_fem_st_plot::GMRF_FEM_1D_Spatiotemporal_Plot{<:Tuple{<:ST_GMRF_1D,<:Int}},
-)
+        gmrf_fem_st_plot::GMRF_FEM_1D_Spatiotemporal_Plot{<:Tuple{<:ST_GMRF_1D, <:Int}},
+    )
     gmrf = gmrf_fem_st_plot[1]
     t_idx = gmrf_fem_st_plot[2]
 
@@ -122,12 +124,12 @@ function Makie.plot!(
     stds_t = Observable(time_stds(gmrf[]))
     samples_t = [
         Observable(time_rands(gmrf[], gmrf_fem_st_plot.rng[])) for
-        _ = 1:gmrf_fem_st_plot.N_samples[]
+            _ in 1:gmrf_fem_st_plot.N_samples[]
     ]
 
     means = Observable(Float64[])
     stds = Observable(Float64[])
-    samples = [Observable(Float64[]) for _ = 1:gmrf_fem_st_plot.N_samples[]]
+    samples = [Observable(Float64[]) for _ in 1:gmrf_fem_st_plot.N_samples[]]
 
     plot_points = Observable(Float64[])
     confs = @lift(1.96 * $stds)
@@ -140,7 +142,7 @@ function Makie.plot!(
         for i in eachindex(samples)
             samples_t[i][] = time_rands(gmrf, gmrf_fem_st_plot.rng[])
         end
-        update_plot(t_idx[])
+        return update_plot(t_idx[])
     end
 
     function update_plot(t_idx)
@@ -167,6 +169,7 @@ function Makie.plot!(
         for i in eachindex(samples)
             samples[i][] = eval_mat * samples_t[i][][t_idx]
         end
+        return
     end
     Makie.Observables.on(update_plot, t_idx)
 

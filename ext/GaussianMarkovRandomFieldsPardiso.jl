@@ -12,14 +12,14 @@ abstract type AbstractPardisoGMRFSolver <: AbstractSolver end
 
 _has_factorization(s::AbstractPardisoGMRFSolver) = s.ps.iparm[18] > 0
 function _factorize_if_necessary(s::AbstractPardisoGMRFSolver)
-    if !_has_factorization(s)
+    return if !_has_factorization(s)
         Pardiso.set_phase!(s.ps, Pardiso.ANALYSIS_NUM_FACT)
         x = Array{Float64}(undef, size(s.Q_tril, 1))
         Pardiso.pardiso(s.ps, x, s.Q_tril, x)
     end
 end
 function _prepare_for_solve(s::AbstractPardisoGMRFSolver)
-    if !_has_factorization(s)
+    return if !_has_factorization(s)
         Pardiso.set_phase!(s.ps, Pardiso.ANALYSIS_NUM_FACT_SOLVE_REFINE)
     else
         Pardiso.set_phase!(s.ps, Pardiso.SOLVE_ITERATIVE_REFINE)
@@ -45,10 +45,10 @@ function GaussianMarkovRandomFields.compute_variance(s::AbstractPardisoGMRFSolve
 end
 
 function GaussianMarkovRandomFields.compute_rand!(
-    s::AbstractPardisoGMRFSolver,
-    rng::Random.AbstractRNG,
-    x::AbstractVector,
-)
+        s::AbstractPardisoGMRFSolver,
+        rng::Random.AbstractRNG,
+        x::AbstractVector,
+    )
     M = linmap_sqrt(s.precision)
     z = randn(rng, size(M, 2))
     x .= linmap_sqrt(s.precision) * z # Centered sample with covariance Q
@@ -65,7 +65,7 @@ mutable struct PardisoGMRFSolver <: AbstractPardisoGMRFSolver
     mean::AbstractVector
     precision::LinearMap
     Q_tril::SparseMatrixCSC
-    computed_var::Union{Nothing,AbstractVector}
+    computed_var::Union{Nothing, AbstractVector}
 
     function PardisoGMRFSolver(gmrf::AbstractGMRF)
         ps = PardisoSolver()
@@ -74,7 +74,7 @@ mutable struct PardisoGMRFSolver <: AbstractPardisoGMRFSolver
         ps.msglvl = Pardiso.MESSAGE_LEVEL_ON
 
         Q_tril = tril(to_matrix(precision_map(gmrf)))
-        new(ps, mean(gmrf), precision_map(gmrf), Q_tril, nothing)
+        return new(ps, mean(gmrf), precision_map(gmrf), Q_tril, nothing)
     end
 end
 
@@ -87,8 +87,8 @@ mutable struct LinearConditionalPardisoGMRFSolver <: AbstractPardisoGMRFSolver
     Q_ϵ::LinearMap
     y::AbstractVector
     b::AbstractVector
-    computed_posterior_mean::Union{Nothing,AbstractVector}
-    computed_var::Union{Nothing,AbstractVector}
+    computed_posterior_mean::Union{Nothing, AbstractVector}
+    computed_var::Union{Nothing, AbstractVector}
 
     function LinearConditionalPardisoGMRFSolver(gmrf::LinearConditionalGMRF)
         ps = PardisoSolver()
@@ -97,7 +97,7 @@ mutable struct LinearConditionalPardisoGMRFSolver <: AbstractPardisoGMRFSolver
         ps.msglvl = Pardiso.MESSAGE_LEVEL_ON
 
         Q_tril = tril(to_matrix(precision_map(gmrf)))
-        new(
+        return new(
             ps,
             mean(gmrf.prior),
             precision_map(gmrf),
@@ -128,21 +128,21 @@ function GaussianMarkovRandomFields.compute_mean(s::LinearConditionalPardisoGMRF
 end
 
 function GaussianMarkovRandomFields.construct_solver(
-    _::PardisoGMRFSolverBlueprint,
-    gmrf::AbstractGMRF,
-)
+        _::PardisoGMRFSolverBlueprint,
+        gmrf::AbstractGMRF,
+    )
     return PardisoGMRFSolver(gmrf)
 end
 
 function GaussianMarkovRandomFields.construct_solver(
-    _::PardisoGMRFSolverBlueprint,
-    gmrf::LinearConditionalGMRF,
-)
+        _::PardisoGMRFSolverBlueprint,
+        gmrf::LinearConditionalGMRF,
+    )
     return LinearConditionalPardisoGMRFSolver(gmrf)
 end
 
 function infer_solver_blueprint(
-    ::Union{PardisoGMRFSolver, LinearConditionalPardisoGMRFSolver}
+        ::Union{PardisoGMRFSolver, LinearConditionalPardisoGMRFSolver}
     )
     return PardisoGMRFSolverBlueprint()
 end

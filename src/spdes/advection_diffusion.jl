@@ -26,37 +26,37 @@ struct AdvectionDiffusionSPDE{D} <: SPDE
     initial_spde::SPDE
 
     function AdvectionDiffusionSPDE{D}(;
-        κ::Real = 1.0,
-        α::Rational = 1 // 1,
-        H::AbstractMatrix = sparse(I, (D, D)),
-        γ::AbstractVector,
-        c::Real = 1.0,
-        τ::Real = 1.0,
-        spatial_spde = MaternSPDE{D}(κ = κ, smoothness = 1, diffusion_factor = H),
-        initial_spde = MaternSPDE{D}(κ = κ, smoothness = 2, diffusion_factor = H),
-    ) where {D}
+            κ::Real = 1.0,
+            α::Rational = 1 // 1,
+            H::AbstractMatrix = sparse(I, (D, D)),
+            γ::AbstractVector,
+            c::Real = 1.0,
+            τ::Real = 1.0,
+            spatial_spde = MaternSPDE{D}(κ = κ, smoothness = 1, diffusion_factor = H),
+            initial_spde = MaternSPDE{D}(κ = κ, smoothness = 2, diffusion_factor = H),
+        ) where {D}
         κ >= 0 || throw(ArgumentError("κ must be non-negative"))
         α >= 0 || throw(ArgumentError("α must be non-negative"))
         τ > 0 || throw(ArgumentError("τ must be positive"))
         # νₛ > 0 || throw(ArgumentError("νₛ must be positive"))
         (D >= 1 && isinteger(D)) || throw(ArgumentError("D must be a positive integer"))
-        new{D}(κ, α, H, γ, c, τ, spatial_spde, initial_spde)
+        return new{D}(κ, α, H, γ, c, τ, spatial_spde, initial_spde)
     end
 end
 
 function assemble_M_G_B_matrices(
-    cellvalues::CellValues,
-    dh::DofHandler,
-    ch,
-    interpolation,
-    H,
-    γ;
-    streamline_diffusion = false,
-)
+        cellvalues::CellValues,
+        dh::DofHandler,
+        ch,
+        interpolation,
+        H,
+        γ;
+        streamline_diffusion = false,
+    )
     M, G, B, S = allocate_matrix(dh, ch),
-    allocate_matrix(dh, ch),
-    allocate_matrix(dh, ch),
-    allocate_matrix(dh, ch)
+        allocate_matrix(dh, ch),
+        allocate_matrix(dh, ch),
+        allocate_matrix(dh, ch)
 
     n_basefuncs = getnbasefunctions(cellvalues)
     Me = spzeros(n_basefuncs, n_basefuncs)
@@ -80,7 +80,7 @@ function assemble_M_G_B_matrices(
         Be = assemble_advection_matrix(Be, cellvalues; advection_velocity = γ)
         if streamline_diffusion
             cell_volume = 0.0
-            for qp = 1:getnquadpoints(cellvalues)
+            for qp in 1:getnquadpoints(cellvalues)
                 dΩ = getdetJdV(cellvalues, qp)
                 cell_volume += dΩ
             end
@@ -109,14 +109,14 @@ When using streamline diffusion, `h` may be passed to specify the
 mesh element size.
 """
 function discretize(
-    spde::AdvectionDiffusionSPDE{D},
-    discretization::FEMDiscretization{D},
-    ts::AbstractVector{Float64};
-    streamline_diffusion = false,
-    mean_offset = 0.0,
-    prescribed_noise = 1e-4,
-    algorithm = nothing,
-) where {D}
+        spde::AdvectionDiffusionSPDE{D},
+        discretization::FEMDiscretization{D},
+        ts::AbstractVector{Float64};
+        streamline_diffusion = false,
+        mean_offset = 0.0,
+        prescribed_noise = 1.0e-4,
+        algorithm = nothing,
+    ) where {D}
     if norm(spde.γ) ≈ 0.0
         # SD changes nothing for zero advection
         streamline_diffusion = false

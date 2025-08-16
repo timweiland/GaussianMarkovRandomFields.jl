@@ -29,7 +29,7 @@ using LinearAlgebra, LinearMaps, Random, SparseArrays
         @test size(P_from_precs) == size(P_vanilla_mat)
 
         P_mat_inv = inv(Array(P_vanilla_mat))
-        for i = 1:5
+        for i in 1:5
             x = rand(rng, size(P_vanilla_mat, 2))
             gt = P_mat_inv * x
             @test P_from_mat \ x ≈ gt
@@ -55,7 +55,7 @@ using LinearAlgebra, LinearMaps, Random, SparseArrays
         @test size(P_from_precs) == size(P_mat)
 
         P_mat_inv = inv(Array(P_mat))
-        for i = 1:5
+        for i in 1:5
             x = rand(rng, size(P_mat, 2))
             gt = P_mat_inv * x
             @test P_from_mat \ x ≈ gt

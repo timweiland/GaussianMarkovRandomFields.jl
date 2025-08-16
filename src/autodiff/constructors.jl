@@ -23,15 +23,15 @@ treated as non-differentiable (NoTangent).
 function ChainRulesCore.rrule(::Type{GMRF}, μ::AbstractVector, Q::Union{AbstractMatrix, LinearMaps.LinearMap}, algorithm)
     # Forward computation - construct GMRF using existing implementation
     x = GMRF(μ, Q, algorithm)
-    
+
     function GMRF_pullback(x̄)
         # Extract tangents from the GMRF tangent
         μ̄ = x̄.mean
         Q̄ = x̄.precision
-        
+
         return NoTangent(), μ̄, Q̄, NoTangent()
     end
-    
+
     return x, GMRF_pullback
 end
 
@@ -45,15 +45,14 @@ This handles the case where no LinearSolve algorithm is provided (uses default C
 function ChainRulesCore.rrule(::Type{GMRF}, μ::AbstractVector, Q::Union{AbstractMatrix, LinearMaps.LinearMap})
     # Forward computation - construct GMRF using existing implementation
     x = GMRF(μ, Q)
-    
+
     function GMRF_pullback(x̄)
         # Extract tangents from the GMRF tangent
         μ̄ = x̄.mean
         Q̄ = x̄.precision
-        
+
         return NoTangent(), μ̄, Q̄
     end
-    
+
     return x, GMRF_pullback
 end
-

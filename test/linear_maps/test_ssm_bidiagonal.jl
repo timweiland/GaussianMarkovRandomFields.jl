@@ -19,7 +19,7 @@ using LinearAlgebra, LinearMaps, Random, SparseArrays
     A_map, B_map, C_map = (LinearMap(X) for X in (A, B, C))
     L = SSMBidiagonalMap(A_map, B_map, C_map, N_t)
     @test size(L) == size(L_mat)
-    for i = 1:5
+    for i in 1:5
         x = rand(rng, size(L, 2))
         y = rand(rng, size(L, 1))
         @test L * x ≈ L_mat * x

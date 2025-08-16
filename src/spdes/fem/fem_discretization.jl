@@ -29,15 +29,15 @@ an (S)PDE using the Finite Element Method.
         condition and the noise standard deviation.
 """
 struct FEMDiscretization{
-    D,
-    S,
-    G<:Grid{D},
-    I<:Interpolation{S},
-    Q<:QuadratureRule{S},
-    GI<:Interpolation{S},
-    H<:DofHandler{D,G},
-    CH<:Union{ConstraintHandler{H},Nothing},
-}
+        D,
+        S,
+        G <: Grid{D},
+        I <: Interpolation{S},
+        Q <: QuadratureRule{S},
+        GI <: Interpolation{S},
+        H <: DofHandler{D, G},
+        CH <: Union{ConstraintHandler{H}, Nothing},
+    }
     grid::G
     interpolation::I
     quadrature_rule::Q
@@ -47,12 +47,12 @@ struct FEMDiscretization{
     constraint_noise::Vector{Float64} # Noise std
 
     function FEMDiscretization(
-        grid::G,
-        interpolation::I,
-        quadrature_rule::Q,
-        fields = ((:u, nothing),),
-        boundary_conditions = (),
-    ) where {D,S,G<:Grid{D},I<:Interpolation{S},Q<:QuadratureRule{S}}
+            grid::G,
+            interpolation::I,
+            quadrature_rule::Q,
+            fields = ((:u, nothing),),
+            boundary_conditions = (),
+        ) where {D, S, G <: Grid{D}, I <: Interpolation{S}, Q <: QuadratureRule{S}}
         default_geom_interpolation = interpolation
         dh = DofHandler(grid)
         for (field, geom_interpolation) in fields
@@ -85,7 +85,7 @@ struct FEMDiscretization{
             add!(ch, bc)
         end
         close!(ch)
-        new{D,S,G,I,Q,I,DofHandler{D,G},typeof(ch)}(
+        return new{D, S, G, I, Q, I, DofHandler{D, G}, typeof(ch)}(
             grid,
             interpolation,
             quadrature_rule,
@@ -97,15 +97,15 @@ struct FEMDiscretization{
     end
 
     function FEMDiscretization(
-        grid::G,
-        interpolation::I,
-        quadrature_rule::Q,
-        geom_interpolation::GI,
-    ) where {D,S,G<:Grid{D},I<:Interpolation{S},Q<:QuadratureRule{S},GI<:Interpolation{S}}
+            grid::G,
+            interpolation::I,
+            quadrature_rule::Q,
+            geom_interpolation::GI,
+        ) where {D, S, G <: Grid{D}, I <: Interpolation{S}, Q <: QuadratureRule{S}, GI <: Interpolation{S}}
         dh = DofHandler(grid)
         add!(dh, :u, geom_interpolation)
         close!(dh)
-        new{D,S,G,I,Q,GI,DofHandler{D,G},Nothing}(
+        return new{D, S, G, I, Q, GI, DofHandler{D, G}, Nothing}(
             grid,
             interpolation,
             quadrature_rule,
@@ -155,7 +155,7 @@ function evaluation_matrix(f::FEMDiscretization, X; field = :default)
         append!(Js, dofs)
         vals = [
             Ferrite.reference_shape_value(f.interpolation, peh.local_coords[i], j) for
-            j = 1:getnbasefunctions(f.interpolation)
+                j in 1:getnbasefunctions(f.interpolation)
         ]
         append!(Vs, vals)
     end
@@ -183,7 +183,7 @@ function node_selection_matrix(f::FEMDiscretization, node_ids; field = :default)
         Ferrite.reinit!(cc, peh.cells[i])
         dofs = celldofs(cc)[dof_idcs]
         coords = getcoordinates(cc)
-        for j = 1:length(dofs)
+        for j in 1:length(dofs)
             if coords[j] ≈ node_coords[i]
                 push!(Is, i)
                 push!(Js, dofs[j])
@@ -200,7 +200,7 @@ function Base.show(io::IO, discretization::FEMDiscretization)
     println(io, "  grid: ", repr(MIME("text/plain"), discretization.grid))
     println(io, "  interpolation: ", discretization.interpolation)
     println(io, "  quadrature_rule: ", typeof(discretization.quadrature_rule))
-    println(
+    return println(
         io,
         "  # constraints: ",
         length(discretization.constraint_handler.prescribed_dofs),

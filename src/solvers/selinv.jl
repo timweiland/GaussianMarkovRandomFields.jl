@@ -97,12 +97,12 @@ _selinv_impl(linsolve, alg) = error("Full selected inversion not implemented for
 
 function _selinv_impl(linsolve, ::LinearSolve.CHOLMODFactorization)
     factorization = LinearSolve.@get_cacheval(linsolve, :CHOLMODFactorization)
-    return SelectedInversion.selinv(factorization; depermute=true).Z
+    return SelectedInversion.selinv(factorization; depermute = true).Z
 end
 
 function _selinv_impl(linsolve, ::LinearSolve.CholeskyFactorization)
     factorization = LinearSolve.@get_cacheval(linsolve, :CholeskyFactorization)
-    return SelectedInversion.selinv(factorization; depermute=true).Z
+    return SelectedInversion.selinv(factorization; depermute = true).Z
 end
 
 function _selinv_impl(linsolve, ::LinearSolve.DiagonalFactorization)

@@ -27,48 +27,49 @@ function ChainRulesCore.rrule(::typeof(logpdf), x::AbstractGMRF, z::AbstractVect
     μ = mean(x)
     Q = precision_matrix(x)
     r = z - μ
-    
+
     # Check if GMRF supports selected inversion for efficient gradients
     if hasproperty(x, :linsolve_cache) && supports_selinv(x.linsolve_cache.alg) == Val{true}()
         # Forward computation - use existing implementation
         val = logpdf(x, z)
-        
+
         function logpdf_pullback(ȳ)
             # Compute selected inverse efficiently using our dispatch system
             Qinv = selinv(x.linsolve_cache)
             Qr = Q * r
-            
+
             # Gradients
             μ̄ = ȳ * Qr                    # ∂logpdf/∂μ = Q(z - μ) → chain rule
-            
+
             # Compute sparse gradient w.r.t. precision matrix
             # Only compute for nonzero structure of Q⁻¹
             rows, cols, vals = findnz(Qinv)
             rr_vals = r[rows] .* r[cols]
             Q̄ = sparse(rows, cols, (0.5 * ȳ) .* (vals .- rr_vals), size(Q)...)
-            
+
             # Tangent for GMRF - use new structure
             x̄ = Tangent{typeof(x)}(
                 linsolve_cache = NoTangent(),  # LinearSolve cache is not differentiable
-                mean = μ̄,                     # ∂L/∂μ = Q(z - μ) → ∂L/∂mean = -Q(z - μ)  
+                mean = μ̄,                     # ∂L/∂μ = Q(z - μ) → ∂L/∂mean = -Q(z - μ)
                 precision = Q̄,                # ∂L/∂Q
                 information_vector = NoTangent(),
                 Q_sqrt = NoTangent(),
                 rbmc_strategy = NoTangent()
             )
-            
+
             # Tangent for observation vector z
             z̄ = ȳ * (-Qr)                    # ∂logpdf/∂z = -Q(z - μ)
-            
+
             return NoTangent(), x̄, z̄
         end
-        
+
         return val, logpdf_pullback
     else
-        error("Automatic differentiation through logpdf requires an algorithm that supports selected inversion " *
-              "(CHOLMODFactorization, CholeskyFactorization). " *
-              "Got algorithm type: $(typeof(x.linsolve_cache.alg)). " *
-              "Consider using LinearSolve.CHOLMODFactorization() or LinearSolve.CholeskyFactorization().")
+        error(
+            "Automatic differentiation through logpdf requires an algorithm that supports selected inversion " *
+                "(CHOLMODFactorization, CholeskyFactorization). " *
+                "Got algorithm type: $(typeof(x.linsolve_cache.alg)). " *
+                "Consider using LinearSolve.CHOLMODFactorization() or LinearSolve.CholeskyFactorization()."
+        )
     end
 end
-

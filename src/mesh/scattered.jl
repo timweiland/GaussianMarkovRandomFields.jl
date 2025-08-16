@@ -8,7 +8,7 @@ function _add_poly_to_gmsh(poly, mesh_size)
     p_last = p_initial
 
     lines = []
-    for i in eachindex(poly.exterior[1:(end-1)])
+    for i in eachindex(poly.exterior[1:(end - 1)])
         cur_line = poly.exterior[i]
         p_cur = gmsh.model.geo.addPoint(poly.exterior[i][2]..., 0, mesh_size)
         push!(lines, gmsh.model.geo.addLine(p_last, p_cur))
@@ -48,20 +48,20 @@ A `Ferrite.Grid` object
 4. Transfer the Gmsh information to Ferrite
 """
 function generate_mesh(
-    mp::GeometryBasics.MultiPoint,
-    buffer_width::Real,
-    interior_mesh_size::Real;
-    exterior_mesh_size::Real = 2 * interior_mesh_size,
-    element_order::Int = 1,
-    save_path = nothing,
-)
+        mp::GeometryBasics.MultiPoint,
+        buffer_width::Real,
+        interior_mesh_size::Real;
+        exterior_mesh_size::Real = 2 * interior_mesh_size,
+        element_order::Int = 1,
+        save_path = nothing,
+    )
     ch = LibGEOS.convexhull(mp)
     ch_gb = GeoInterface.convert(GeometryBasics, ch)
     outer_boundary = buffer(ch, buffer_width)
     outer_boundary_gb = GeoInterface.convert(GeometryBasics, outer_boundary)
 
     Gmsh.initialize()
-    
+
     # Disable verbose output
     gmsh.option.setNumber("General.Verbosity", 0)
 
@@ -166,16 +166,18 @@ Generate a mesh from a list of points using Gmsh.
 A Ferrite.Grid object
 """
 function generate_mesh(
-    points,
-    buffer_width::Real,
-    interior_mesh_size::Real;
-    exterior_mesh_size::Real = 2 * interior_mesh_size,
-    element_order::Int = 1,
-    save_path = nothing,
-)
-    mp = GeometryBasics.MultiPoint([
-        GeometryBasics.Point(cur_x, cur_y) for (cur_x, cur_y) in points
-    ])
+        points,
+        buffer_width::Real,
+        interior_mesh_size::Real;
+        exterior_mesh_size::Real = 2 * interior_mesh_size,
+        element_order::Int = 1,
+        save_path = nothing,
+    )
+    mp = GeometryBasics.MultiPoint(
+        [
+            GeometryBasics.Point(cur_x, cur_y) for (cur_x, cur_y) in points
+        ]
+    )
     return generate_mesh(
         mp,
         buffer_width,

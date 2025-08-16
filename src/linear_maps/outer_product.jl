@@ -16,19 +16,19 @@ Represents the outer product A' Q A, without actually forming it in memory.
 mutable struct OuterProductMap{T} <: LinearMaps.LinearMap{T}
     A::LinearMap{T}
     Q::LinearMap{T}
-    to_mat_cache::Union{Nothing,AbstractMatrix{T}}
+    to_mat_cache::Union{Nothing, AbstractMatrix{T}}
 
     function OuterProductMap(A::LinearMap{T}, Q::LinearMap{T}) where {T}
         Base.size(Q, 1) == Base.size(Q, 2) || throw(ArgumentError("Q must be square"))
         Base.size(A, 1) == Base.size(Q, 1) || throw(ArgumentError("size mismatch"))
-        new{T}(A, Q, nothing)
+        return new{T}(A, Q, nothing)
     end
 end
 
 size(d::OuterProductMap) = Base.size(d.A, 2), Base.size(d.A, 2)
 
 function LinearMaps._unsafe_mul!(y, L::OuterProductMap, x::AbstractVector)
-    y .= L.A' * (L.Q * (L.A * x))
+    return y .= L.A' * (L.Q * (L.A * x))
 end
 
 LinearAlgebra.adjoint(L::OuterProductMap) = OuterProductMap(L.A, L.Q')

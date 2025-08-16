@@ -28,12 +28,12 @@ Construct a linear map representing the sparse Jacobian of `f!` at `x₀`.
                              Jacobian.
 """
 function GaussianMarkovRandomFields.sparse_jacobian_map(
-    f!::Function,
-    x₀::AbstractVector{T},
-    N_outputs::Int;
-    colors::AbstractVector{Int64} = nothing,
-    jac::SparseMatrixCSC{T} = nothing,
-) where {T}
+        f!::Function,
+        x₀::AbstractVector{T},
+        N_outputs::Int;
+        colors::AbstractVector{Int64} = nothing,
+        jac::SparseMatrixCSC{T} = nothing,
+    ) where {T}
     N_outputs > 0 || throw(ArgumentError("N_outputs must be positive"))
 
     output = rand(N_outputs)

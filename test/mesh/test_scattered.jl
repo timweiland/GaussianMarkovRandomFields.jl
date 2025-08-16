@@ -39,7 +39,7 @@ using Random
     grid_smaller_cells = generate_mesh(X_all, 0.3, 0.02)
     @test length(grid_smaller_cells.cells) > length(grid.cells)
 
-    ip = Lagrange{RefTriangle,1}()
+    ip = Lagrange{RefTriangle, 1}()
     qr = QuadratureRule{RefTriangle}(2)
     disc = FEMDiscretization(grid, ip, qr)
 

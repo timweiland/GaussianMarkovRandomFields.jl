@@ -1,7 +1,7 @@
 using LinearMaps, LinearAlgebra, SparseArrays
 
 export ConstantMeshSTGMRF, ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMeshSTGMRF,
-       ImplicitEulerMetadata, ConcreteSTMetadata
+    ImplicitEulerMetadata, ConcreteSTMetadata
 
 ################################################################################
 #
@@ -55,28 +55,28 @@ const ConstantMeshSTGMRF = Union{ImplicitEulerConstantMeshSTGMRF, ConcreteConsta
 
 # Constructors
 function ImplicitEulerConstantMeshSTGMRF(
-    gmrf::AbstractGMRF,
-    discretization::FEMDiscretization{D},
-    ssm::SSM,
-) where {D, SSM}
+        gmrf::AbstractGMRF,
+        discretization::FEMDiscretization{D},
+        ssm::SSM,
+    ) where {D, SSM}
     n = length(gmrf)
     (n % ndofs(discretization)) == 0 || throw(ArgumentError("size mismatch"))
     N_spatial = ndofs(discretization)
     N_t = n ÷ N_spatial
-    
+
     metadata = ImplicitEulerMetadata(discretization, ssm, N_spatial, N_t)
     return MetaGMRF(gmrf, metadata)
 end
 
 function ConcreteConstantMeshSTGMRF(
-    gmrf::AbstractGMRF,
-    discretization::FEMDiscretization{D},
-) where {D}
+        gmrf::AbstractGMRF,
+        discretization::FEMDiscretization{D},
+    ) where {D}
     n = length(gmrf)
     (n % ndofs(discretization)) == 0 || throw(ArgumentError("size mismatch"))
     N_spatial = ndofs(discretization)
     N_t = n ÷ N_spatial
-    
+
     metadata = ConcreteSTMetadata(discretization, N_spatial, N_t)
     return MetaGMRF(gmrf, metadata)
 end
@@ -113,8 +113,8 @@ ssm(x::ImplicitEulerConstantMeshSTGMRF) = x.metadata.ssm
 
 
 function default_preconditioner_strategy(
-    x::ConstantMeshSTGMRF,
-)
+        x::ConstantMeshSTGMRF,
+    )
     block_size = N_spatial(x)
     Q = sparse(to_matrix(precision_map(x)))
     return temporal_block_gauss_seidel(Q, block_size)

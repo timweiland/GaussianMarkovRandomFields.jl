@@ -5,10 +5,10 @@ using GaussianMarkovRandomFields
 using LinearAlgebra
 using SparseArrays
 
-@testset "Advection-Diffusion Prior (streamline diffusion: $sd)" for sd ∈ [false, true]
+@testset "Advection-Diffusion Prior (streamline diffusion: $sd)" for sd in [false, true]
     rng = MersenneTwister(364802394)
     grid = generate_grid(Line, (50,))
-    ip = Lagrange{RefLine,1}()
+    ip = Lagrange{RefLine, 1}()
     qr = QuadratureRule{RefLine}(2)
     disc = FEMDiscretization(grid, ip, qr)
     disc_periodic = FEMDiscretization(
@@ -16,14 +16,14 @@ using SparseArrays
         ip,
         qr,
         [(:u, nothing)],
-        [(_get_periodic_constraint(grid), 1e-4)],
+        [(_get_periodic_constraint(grid), 1.0e-4)],
     )
     disc_dirichlet = FEMDiscretization(
         grid,
         ip,
         qr,
         [(:u, nothing)],
-        [(_get_dirichlet_constraint(grid, 0.0, 0.0), 1e-4)],
+        [(_get_dirichlet_constraint(grid, 0.0, 0.0), 1.0e-4)],
     )
 
 
@@ -39,7 +39,6 @@ using SparseArrays
     γ_left = [0.25]
     γ_right = [-0.25]
     γ_static = [0.0]
-
 
 
     spde_fast_right = AdvectionDiffusionSPDE{1}(
@@ -92,9 +91,9 @@ using SparseArrays
     get_peak_final = x_posterior -> xs[argmax(A_last * mean(x_posterior))]
 
     @testset "Advection" begin
-        x_cond_fast_right = condition_on_observations(x_prior_fast_right, A_ic, 1e8, ys)
-        x_cond_fast_left = condition_on_observations(x_prior_fast_left, A_ic, 1e8, ys)
-        x_cond_fast_static = condition_on_observations(x_prior_fast_static, A_ic, 1e8, ys)
+        x_cond_fast_right = condition_on_observations(x_prior_fast_right, A_ic, 1.0e8, ys)
+        x_cond_fast_left = condition_on_observations(x_prior_fast_left, A_ic, 1.0e8, ys)
+        x_cond_fast_static = condition_on_observations(x_prior_fast_static, A_ic, 1.0e8, ys)
 
         peak_right_initial = get_peak_initial(x_cond_fast_right)
         peak_right_final = get_peak_final(x_cond_fast_right)
@@ -111,8 +110,8 @@ using SparseArrays
     end
 
     @testset "Diffusion" begin
-        x_cond_slow_static = condition_on_observations(x_prior_slow_static, A_ic, 1e8, ys)
-        x_cond_fast_static = condition_on_observations(x_prior_fast_static, A_ic, 1e8, ys)
+        x_cond_slow_static = condition_on_observations(x_prior_slow_static, A_ic, 1.0e8, ys)
+        x_cond_fast_static = condition_on_observations(x_prior_fast_static, A_ic, 1.0e8, ys)
 
         final_vals_slow = A_last * mean(x_cond_slow_static)
         final_vals_fast = A_last * mean(x_cond_fast_static)
@@ -124,23 +123,23 @@ using SparseArrays
         x_prior_fast_right_periodic =
             GaussianMarkovRandomFields.discretize(spde_fast_right, disc_periodic, ts; streamline_diffusion = sd)
         x_cond_fast_right_periodic =
-            condition_on_observations(x_prior_fast_right_periodic, A_ic, 1e8, ys)
+            condition_on_observations(x_prior_fast_right_periodic, A_ic, 1.0e8, ys)
 
         x_prior_fast_right_dirichlet =
             GaussianMarkovRandomFields.discretize(spde_fast_right, disc_dirichlet, ts; streamline_diffusion = sd)
         x_cond_fast_right_dirichlet =
-            condition_on_observations(x_prior_fast_right_dirichlet, A_ic, 1e8, ys)
+            condition_on_observations(x_prior_fast_right_dirichlet, A_ic, 1.0e8, ys)
 
         N_samples = 3
-        samples_periodic = [time_rands(x_cond_fast_right_periodic, rng) for _ = 1:N_samples]
+        samples_periodic = [time_rands(x_cond_fast_right_periodic, rng) for _ in 1:N_samples]
         samples_dirichlet =
-            [time_rands(x_cond_fast_right_dirichlet, rng) for _ = 1:N_samples]
-        for samp_idx = 1:N_samples
+            [time_rands(x_cond_fast_right_dirichlet, rng) for _ in 1:N_samples]
+        for samp_idx in 1:N_samples
             for t in eachindex(ts)
                 @test samples_periodic[samp_idx][t][1] ≈ samples_periodic[samp_idx][t][end] atol =
-                    1e-1
-                @test samples_dirichlet[samp_idx][t][1] ≈ 0.0 atol = 1e-1
-                @test samples_dirichlet[samp_idx][t][end] ≈ 0.0 atol = 1e-1
+                    1.0e-1
+                @test samples_dirichlet[samp_idx][t][1] ≈ 0.0 atol = 1.0e-1
+                @test samples_dirichlet[samp_idx][t][end] ≈ 0.0 atol = 1.0e-1
             end
         end
     end

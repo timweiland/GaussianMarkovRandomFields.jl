@@ -17,8 +17,8 @@ Stops the optimization procedure when
 struct NewtonDecrementCriterion <: AbstractStoppingCriterion
     threshold::Real
 
-    function NewtonDecrementCriterion(threshold::Real = 1e-6)
-        new(threshold)
+    function NewtonDecrementCriterion(threshold::Real = 1.0e-6)
+        return new(threshold)
     end
 end
 
@@ -32,7 +32,7 @@ struct StepNumberCriterion <: AbstractStoppingCriterion
     max_steps::Int
 
     function StepNumberCriterion(max_steps::Int = 20)
-        new(max_steps)
+        return new(max_steps)
     end
 end
 
@@ -46,6 +46,6 @@ struct OrCriterion <: AbstractStoppingCriterion
     criteria::Vector{<:AbstractStoppingCriterion}
 
     function OrCriterion(criteria::Vector{<:AbstractStoppingCriterion})
-        new(criteria)
+        return new(criteria)
     end
 end

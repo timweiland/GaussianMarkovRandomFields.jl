@@ -21,10 +21,10 @@ avoid unnecessary computational overhead. If `perm` is not passed, it will be
 computed during the Cholesky decomposition.
 """
 struct GNCholeskySolverBlueprint <: GNLinearSolverBlueprint
-    perm::Union{Nothing,Vector{Int}}
+    perm::Union{Nothing, Vector{Int}}
 
-    function GNCholeskySolverBlueprint(perm::Union{Nothing,Vector{Int}} = nothing)
-        new(perm)
+    function GNCholeskySolverBlueprint(perm::Union{Nothing, Vector{Int}} = nothing)
+        return new(perm)
     end
 end
 
@@ -42,12 +42,12 @@ struct GNCGSolverBlueprint <: GNLinearSolverBlueprint
     verbose::Bool
 
     function GNCGSolverBlueprint(;
-        maxiter::Int = 100,
-        reltol::Real = 1e-6,
-        abstol::Real = 1e-6,
-        preconditioner_fn::Function = A -> IterativeSolvers.Identity(),
-        verbose = false,
-    )
-        new(maxiter, reltol, abstol, preconditioner_fn, verbose)
+            maxiter::Int = 100,
+            reltol::Real = 1.0e-6,
+            abstol::Real = 1.0e-6,
+            preconditioner_fn::Function = A -> IterativeSolvers.Identity(),
+            verbose = false,
+        )
+        return new(maxiter, reltol, abstol, preconditioner_fn, verbose)
     end
 end

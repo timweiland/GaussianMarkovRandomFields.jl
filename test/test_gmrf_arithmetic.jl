@@ -3,7 +3,7 @@ using GaussianMarkovRandomFields, Ferrite, Random, LinearAlgebra, SparseArrays
 @testset "GMRF arithmetic" begin
     spde = MaternSPDE{2}(κ = 1.0, ν = 1)
     grid = generate_grid(Triangle, (20, 20))
-    ip = Lagrange{RefTriangle,1}()
+    ip = Lagrange{RefTriangle, 1}()
     qr = QuadratureRule{RefTriangle}(2)
     disc = FEMDiscretization(grid, ip, qr)
 
@@ -25,20 +25,20 @@ using GaussianMarkovRandomFields, Ferrite, Random, LinearAlgebra, SparseArrays
 
     @testset "Joint GMRF" begin
         A = sprand(rng, 5, length(x.mean), 0.3)
-        Q_ϵ = sparse(1e8 * I, 5, 5)
+        Q_ϵ = sparse(1.0e8 * I, 5, 5)
         b = randn(rng, 5)
         x1 = x
         x2 = joint_gmrf(x1, A, Q_ϵ, b)
         @test x2.mean ≈ [x1.mean; A * x1.mean + b]
         @test sparse(x2.precision) ≈ [
-            sparse(x1.precision)+A'*Q_ϵ*A -A'*Q_ϵ
-            -Q_ϵ*A Q_ϵ
+            sparse(x1.precision) + A' * Q_ϵ * A -A' * Q_ϵ
+            -Q_ϵ * A Q_ϵ
         ]
     end
 
     @testset "GMRF posterior" begin
         A = sprand(rng, 5, length(x.mean), 0.3)
-        Q_ϵ = sparse(1e12 * I, 5, 5)
+        Q_ϵ = sparse(1.0e12 * I, 5, 5)
         y = randn(rng, 5)
         b = randn(rng, 5)
         x1 = x
