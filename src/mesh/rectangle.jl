@@ -137,9 +137,9 @@ function create_inflated_rectangle(
     elements = elements[collect(domaincellset)]
 
     boundarydict = toboundary(facedim)
-    facesets = tofacetsets(boundarydict, elements)
+    facetsets = tofacetsets(boundarydict, elements)
 
     gmsh.finalize()
 
-    return Ferrite.Grid(elements, nodes, facesets = facesets, cellsets = cellsets)
+    return Ferrite.Grid(elements, nodes, facetsets = facetsets, cellsets = cellsets)
 end
