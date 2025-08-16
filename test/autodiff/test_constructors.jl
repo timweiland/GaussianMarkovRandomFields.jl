@@ -1,4 +1,3 @@
-using Test
 using GaussianMarkovRandomFields
 using SparseArrays
 using LinearAlgebra
