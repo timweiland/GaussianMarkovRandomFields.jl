@@ -11,7 +11,7 @@ Efficient reverse-mode automatic differentiation rule for GMRF logpdf computatio
 
 This implementation uses selected inverses via SelectedInversion.jl to compute gradients
 efficiently without materializing the full covariance matrix. Works with any Cholesky
-factorization backend (CHOLMOD, LDLFactorizations, Pardiso).
+factorization backend (CHOLMOD, Pardiso).
 
 # Forward computation
 Uses the existing logpdf implementation from Distributions.jl

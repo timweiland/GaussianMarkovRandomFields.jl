@@ -28,7 +28,7 @@ mutable struct CholeskyFactorizedMap{T,C} <: LinearMap{T}
         new{T,C}(cho, nothing)
     end
     
-    # Constructor for LDLFactorization (from LDLFactorizations.jl extension)
+    # Generic constructor for any Cholesky factorization type
     function CholeskyFactorizedMap{T}(cho::C) where {T,C}
         new{T,C}(cho, nothing)
     end

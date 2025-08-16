@@ -18,7 +18,7 @@
 # of the default sparse Cholesky factorization. This enables ForwardDiff.jl
 # to track derivatives through the linear algebra operations.
 
-using LDLFactorizations, Distributions
+using Distributions
 using GaussianMarkovRandomFields
 using Random, LinearAlgebra, SparseArrays
 using Plots
