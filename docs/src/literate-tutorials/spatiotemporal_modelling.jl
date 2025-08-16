@@ -49,7 +49,7 @@ using GaussianMarkovRandomFields
 using Ferrite
 
 grid = generate_grid(Line, (Nₓ - 1,), Tensors.Vec(x_left), Tensors.Vec(x_right))
-interpolation = Lagrange{RefLine,1}()
+interpolation = Lagrange{RefLine, 1}()
 quadrature_rule = QuadratureRule{RefLine}(2)
 disc = FEMDiscretization(grid, interpolation, quadrature_rule)
 

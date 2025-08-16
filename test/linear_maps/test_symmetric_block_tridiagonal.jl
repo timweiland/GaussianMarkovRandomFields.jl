@@ -15,7 +15,7 @@ using LinearAlgebra, LinearMaps, Random, SparseArrays
         @test parent(L_tomat) isa SparseMatrixCSC
         @test L_tomat ≈ L_mat
 
-        for i = 1:5
+        for i in 1:5
             x = rand(rng, N)
             @test L * x ≈ L_mat * x
         end
@@ -47,7 +47,7 @@ using LinearAlgebra, LinearMaps, Random, SparseArrays
         @test parent(L_tomat) isa SparseMatrixCSC
         @test L_tomat ≈ L_mat
 
-        for i = 1:5
+        for i in 1:5
             x = rand(rng, N_total)
             @test L * x ≈ L_mat * x
         end

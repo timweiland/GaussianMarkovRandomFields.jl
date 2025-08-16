@@ -23,7 +23,7 @@ struct ADJacobianMap{T} <: LinearMaps.LinearMap{T}
 
     function ADJacobianMap(f::Function, x₀::AbstractVector{T}, N_outputs::Int) where {T}
         N_outputs > 0 || throw(ArgumentError("N_outputs must be positive"))
-        new{T}(f, x₀, N_outputs)
+        return new{T}(f, x₀, N_outputs)
     end
 end
 
@@ -52,7 +52,7 @@ struct ADJacobianAdjointMap{T} <: LinearMaps.LinearMap{T}
     f::Function
     x₀::AbstractVector{T}
     N_outputs::Int
-    f_val::Union{Real,AbstractVector}
+    f_val::Union{Real, AbstractVector}
     f_pullback::Function
 end
 

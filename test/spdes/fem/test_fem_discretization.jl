@@ -3,7 +3,7 @@ using GaussianMarkovRandomFields, Ferrite, SparseArrays
 @testset "FEMDiscretization" begin
     N_xy = 20
     grid = generate_grid(Triangle, (N_xy, N_xy))
-    ip = Lagrange{RefTriangle,1}()
+    ip = Lagrange{RefTriangle, 1}()
     qr = QuadratureRule{RefTriangle}(2)
 
     f = FEMDiscretization(grid, ip, qr)

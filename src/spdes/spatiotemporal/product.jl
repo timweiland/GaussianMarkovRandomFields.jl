@@ -22,11 +22,11 @@ spatial precision matrices.
 - `algorithm`: The LinearSolve algorithm to use.
 """
 function kronecker_product_spatiotemporal_model(
-    Q_t::LinearMap,
-    Q_s::LinearMap,
-    spatial_disc::FEMDiscretization;
-    algorithm = nothing,
-)
+        Q_t::LinearMap,
+        Q_s::LinearMap,
+        spatial_disc::FEMDiscretization;
+        algorithm = nothing,
+    )
     Q_st = kron(Q_t, Q_s)
     return ConcreteConstantMeshSTGMRF(
         zeros(Base.size(Q_st, 1)),

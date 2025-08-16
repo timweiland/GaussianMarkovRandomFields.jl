@@ -31,16 +31,16 @@ Return the joint GMRF of `x1` and `x2 = A * x1 + b + ϵ` where `ϵ ~ N(0, Q_ϵ�
 A `GMRF` object representing the joint GMRF of `x1` and `x2 = A * x1 + b + ϵ`.
 """
 function joint_gmrf(
-    x1::AbstractGMRF,
-    A::AbstractMatrix,
-    Q_ϵ::AbstractMatrix,
-    b::AbstractVector = spzeros(size(A)[1]),
-)
+        x1::AbstractGMRF,
+        A::AbstractMatrix,
+        Q_ϵ::AbstractMatrix,
+        b::AbstractVector = spzeros(size(A)[1]),
+    )
     # TODO: Think about using LinearMap implementation here
     x1_mean, x1_precision = mean(x1), sparse(precision_map(x1))
     off_diagonal = -Q_ϵ * A
     Q_joint = [
-        x1_precision+A'*Q_ϵ*A off_diagonal'
+        x1_precision + A' * Q_ϵ * A off_diagonal'
         off_diagonal Q_ϵ
     ]
     x2_mean = A * x1_mean
@@ -82,19 +82,19 @@ A `GMRF` object representing the conditional GMRF `x | (y = A * x + b + ϵ)`.
 This function now delegates to `linear_condition` for improved efficiency.
 """
 function condition_on_observations(
-    x::GMRF,
-    A::Union{AbstractMatrix,LinearMap},
-    Q_ϵ::Union{AbstractMatrix,LinearMap,Real},
-    y::AbstractVector = zeros(size(A, 1)),
-    b::AbstractVector = zeros(size(A, 1));
-    # solver_blueprint parameter removed - no longer needed with LinearSolve
-)
+        x::GMRF,
+        A::Union{AbstractMatrix, LinearMap},
+        Q_ϵ::Union{AbstractMatrix, LinearMap, Real},
+        y::AbstractVector = zeros(size(A, 1)),
+        b::AbstractVector = zeros(size(A, 1))
+        # solver_blueprint parameter removed - no longer needed with LinearSolve
+    )
     # Convert scalar Q_ϵ to UniformScalingMap for compatibility
     if Q_ϵ isa Real
         Q_ϵ = LinearMaps.UniformScalingMap(Q_ϵ, size(A, 1))
     end
     # Delegate to new linear_condition function
-    return linear_condition(x; A=A, Q_ϵ=Q_ϵ, y=y, b=b)
+    return linear_condition(x; A = A, Q_ϵ = Q_ϵ, y = y, b = b)
 end
 
 """
@@ -116,7 +116,7 @@ A new `GMRF` representing the posterior distribution with updated mean and preci
 This replaces the deprecated `LinearConditionalGMRF` type with a functional approach.
 Uses information vector arithmetic for efficient conditioning without intermediate solves.
 """
-function linear_condition(gmrf::GMRF; A, Q_ϵ, y, b=zeros(size(A, 1)))
+function linear_condition(gmrf::GMRF; A, Q_ϵ, y, b = zeros(size(A, 1)))
     # Ensure everything is compatible types
     A = A isa LinearMap ? A : LinearMap(A)
     if Q_ϵ isa Real
@@ -127,13 +127,13 @@ function linear_condition(gmrf::GMRF; A, Q_ϵ, y, b=zeros(size(A, 1)))
 
     # Compute posterior precision: Q_posterior = Q_prior + A' * Q_ϵ * A
     Q_posterior = precision_map(gmrf) + A' * Q_ϵ * A
-    
+
     # Update information: info_posterior = info_prior + A' * Q_ϵ * (y - b)
     info_posterior = information_vector(gmrf) + A' * (Q_ϵ * (y - b))
-    
+
     # Create new GMRF from information vector
     # TODO: Compute Q_sqrt for conditioned GMRF - non-trivial, skipping for now
-    return GMRF(InformationVector(info_posterior), Q_posterior, gmrf.linsolve_cache.alg; Q_sqrt=nothing)
+    return GMRF(InformationVector(info_posterior), Q_posterior, gmrf.linsolve_cache.alg; Q_sqrt = nothing)
 end
 
 # MetaGMRF conditioning - preserves wrapper type and metadata

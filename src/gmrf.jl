@@ -26,7 +26,7 @@ Apply appropriate symmetric wrapper to matrix types.
 - Others: Wrap in `Symmetric`
 """
 symmetrize(A::Diagonal) = A
-symmetrize(A::Tridiagonal) = SymTridiagonal(A)  
+symmetrize(A::Tridiagonal) = SymTridiagonal(A)
 symmetrize(A::AbstractMatrix) = Symmetric(A)
 
 export AbstractGMRF, GMRF, precision_map, precision_matrix, InformationVector, information_vector
@@ -49,12 +49,12 @@ vs information vectors.
 """
 struct InformationVector{T}
     data::Vector{T}
-    
-    InformationVector(data::AbstractVector{T}) where T = new{T}(Vector{T}(data))
+
+    InformationVector(data::AbstractVector{T}) where {T} = new{T}(Vector{T}(data))
 end
 
 Base.length(iv::InformationVector) = length(iv.data)
-Base.eltype(::InformationVector{T}) where T = T
+Base.eltype(::InformationVector{T}) where {T} = T
 
 ########################################################
 #
@@ -74,7 +74,7 @@ A [Gaussian Markov Random Field](https://en.wikipedia.org/wiki/Markov_random_fie
 (GMRF) is a special case of a multivariate normal distribution where the precision matrix
 is sparse. The zero entries in the precision correspond to conditional independencies.
 """
-abstract type AbstractGMRF{T<:Real, L<:Union{LinearMaps.LinearMap{T}, AbstractMatrix{T}}} <: AbstractMvNormal end
+abstract type AbstractGMRF{T <: Real, L <: Union{LinearMaps.LinearMap{T}, AbstractMatrix{T}}} <: AbstractMvNormal end
 
 linsolve_cache(x::AbstractGMRF) = x.linsolve_cache
 mean(s::AbstractGMRF) = s.mean
@@ -91,8 +91,8 @@ precision_map(::AbstractGMRF) = error("precision_map not implemented for GMRF")
 
 Return the precision (inverse covariance) matrix of the GMRF.
 """
-precision_matrix(x::AbstractGMRF{T, <:LinearMaps.LinearMap}) where T = to_matrix(precision_map(x))
-precision_matrix(x::AbstractGMRF{T, <:AbstractMatrix}) where T = precision_map(x)
+precision_matrix(x::AbstractGMRF{T, <:LinearMaps.LinearMap}) where {T} = to_matrix(precision_map(x))
+precision_matrix(x::AbstractGMRF{T, <:AbstractMatrix}) where {T} = precision_map(x)
 
 length(d::AbstractGMRF) = Base.size(precision_map(d), 1)
 
@@ -102,8 +102,10 @@ cov(::AbstractGMRF) = error("Prevented forming dense covariance matrix in memory
 
 logdetcov(d::AbstractGMRF) = error("logdetcov not implemented for $(typeof(d))")
 
-sqmahal(d::AbstractGMRF, x::AbstractVector) = (Δ = x - mean(d);
-dot(Δ, precision_map(d) * Δ))
+sqmahal(d::AbstractGMRF, x::AbstractVector) = (
+    Δ = x - mean(d);
+    dot(Δ, precision_map(d) * Δ)
+)
 sqmahal!(r::AbstractVector, d::AbstractGMRF, x::AbstractVector) = (r .= sqmahal(d, x))
 
 gradlogpdf(d::AbstractGMRF, x::AbstractVector) = -precision_map(d) * (x .- mean(d))
@@ -148,7 +150,7 @@ samples, and other GMRF quantities efficiently. The algorithm choice determines 
 optimization strategies (selected inversion, backward solve) are available. When selected
 inversion is not supported, marginal variances are computed using the configured RBMC strategy.
 """
-struct GMRF{T<:Real, PrecisionMap<:Union{LinearMap{T}, AbstractMatrix{T}}, QSqrt, Cache<:LinearSolve.LinearCache, RBMCStrat} <: AbstractGMRF{T, PrecisionMap}
+struct GMRF{T <: Real, PrecisionMap <: Union{LinearMap{T}, AbstractMatrix{T}}, QSqrt, Cache <: LinearSolve.LinearCache, RBMCStrat} <: AbstractGMRF{T, PrecisionMap}
     mean::Vector{T}
     information_vector::Union{Nothing, Vector{T}}
     precision::PrecisionMap
@@ -158,12 +160,12 @@ struct GMRF{T<:Real, PrecisionMap<:Union{LinearMap{T}, AbstractMatrix{T}}, QSqrt
 
     # Constructor 1: From mean vector
     function GMRF(
-        mean::AbstractVector,
-        precision::PrecisionMap,
-        alg = nothing; 
-        Q_sqrt = nothing,
-        rbmc_strategy = RBMCStrategy(1000)
-    ) where {PrecisionMap <: Union{LinearMap, AbstractMatrix}}
+            mean::AbstractVector,
+            precision::PrecisionMap,
+            alg = nothing;
+            Q_sqrt = nothing,
+            rbmc_strategy = RBMCStrategy(1000)
+        ) where {PrecisionMap <: Union{LinearMap, AbstractMatrix}}
         n = length(mean)
         n == size(precision, 1) == size(precision, 2) ||
             throw(ArgumentError("size mismatch"))
@@ -185,18 +187,18 @@ struct GMRF{T<:Real, PrecisionMap<:Union{LinearMap{T}, AbstractMatrix{T}}, QSqrt
         # Use appropriate symmetric wrapper for different matrix types
         prob = LinearProblem(symmetrize(precision_matrix), copy(mean))
         linsolve_cache = init(prob, alg)
-        
+
         return new{T, typeof(precision), typeof(Q_sqrt), typeof(linsolve_cache), typeof(rbmc_strategy)}(mean, nothing, precision, Q_sqrt, linsolve_cache, rbmc_strategy)
     end
 
     # Constructor 2: From information vector
     function GMRF(
-        information::InformationVector{T},
-        precision::PrecisionMap,
-        alg = nothing; 
-        Q_sqrt = nothing,
-        rbmc_strategy = RBMCStrategy(1000)
-    ) where {T<:Real, PrecisionMap <: Union{LinearMap{T}, AbstractMatrix{T}}}
+            information::InformationVector{T},
+            precision::PrecisionMap,
+            alg = nothing;
+            Q_sqrt = nothing,
+            rbmc_strategy = RBMCStrategy(1000)
+        ) where {T <: Real, PrecisionMap <: Union{LinearMap{T}, AbstractMatrix{T}}}
         n = length(information)
         n == size(precision, 1) == size(precision, 2) ||
             throw(ArgumentError("size mismatch"))
@@ -206,7 +208,7 @@ struct GMRF{T<:Real, PrecisionMap<:Union{LinearMap{T}, AbstractMatrix{T}}, QSqrt
         prob = LinearProblem(symmetrize(precision_matrix), copy(information.data))
         linsolve_cache = init(prob, alg)
         mean = solve!(linsolve_cache).u
-        
+
         return new{T, typeof(precision), typeof(Q_sqrt), typeof(linsolve_cache), typeof(rbmc_strategy)}(mean, information.data, precision, Q_sqrt, linsolve_cache, rbmc_strategy)
     end
 
@@ -216,15 +218,15 @@ length(d::GMRF) = length(d.mean)
 mean(d::GMRF) = d.mean
 precision_map(d::GMRF) = d.precision
 
-function Base.show(io::IO, d::GMRF{T}) where T
-    print(io, "GMRF{$T}(n=$(length(d)), alg=$(typeof(d.linsolve_cache.alg)))")
+function Base.show(io::IO, d::GMRF{T}) where {T}
+    return print(io, "GMRF{$T}(n=$(length(d)), alg=$(typeof(d.linsolve_cache.alg)))")
 end
 
-function Base.show(io::IO, ::MIME"text/plain", d::GMRF{T}) where T
+function Base.show(io::IO, ::MIME"text/plain", d::GMRF{T}) where {T}
     println(io, "GMRF{$T} with $(length(d)) variables")
     println(io, "  Algorithm: $(typeof(d.linsolve_cache.alg))")
     println(io, "  Mean: $(mean(d))")
-    if d.Q_sqrt !== nothing
+    return if d.Q_sqrt !== nothing
         print(io, "  Q_sqrt: available")
     else
         print(io, "  Q_sqrt: not available")
@@ -290,4 +292,3 @@ function _var_impl(d::GMRF, ::Val{false})
     # Fallback to RBMC
     return var(d, d.rbmc_strategy)
 end
-

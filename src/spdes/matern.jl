@@ -23,7 +23,7 @@ where Δ is the Laplacian operator, $κ > 0$, $ν > 0$.
 
 The stationary solutions to this SPDE are Matérn processes.
 """
-struct MaternSPDE{D, Tv<:Real, Ti<:Integer} <: SPDE
+struct MaternSPDE{D, Tv <: Real, Ti <: Integer} <: SPDE
     κ::Tv
     ν::Rational{Ti}
     σ²::Tv
@@ -31,13 +31,13 @@ struct MaternSPDE{D, Tv<:Real, Ti<:Integer} <: SPDE
 end
 
 function MaternSPDE{D}(;
-    κ::Union{Real, Nothing} = nothing,
-    ν::Union{Integer, Rational, Nothing} = nothing,
-    range::Union{Real, Nothing} = nothing,
-    smoothness::Union{Integer, Nothing} = nothing,
-    σ²::Real = 1.0,
-    diffusion_factor::Union{AbstractMatrix, Nothing} = nothing,
-) where {D}
+        κ::Union{Real, Nothing} = nothing,
+        ν::Union{Integer, Rational, Nothing} = nothing,
+        range::Union{Real, Nothing} = nothing,
+        smoothness::Union{Integer, Nothing} = nothing,
+        σ²::Real = 1.0,
+        diffusion_factor::Union{AbstractMatrix, Nothing} = nothing,
+    ) where {D}
     # Same logic as before, but D is fixed from the type
     ((κ === nothing) ⊻ (range === nothing)) || throw(ArgumentError("Either κ or range must be specified"))
     ((ν === nothing) ⊻ (smoothness === nothing)) || throw(ArgumentError("Either ν or smoothness must be specified"))
@@ -67,11 +67,11 @@ end
 ndim(::MaternSPDE{D}) where {D} = D
 
 function assemble_C_G_matrices(
-    cellvalues::CellValues,
-    dh::DofHandler,
-    interpolation,
-    diffusion_factor::Matrix{Tv},
-) where {Tv}
+        cellvalues::CellValues,
+        dh::DofHandler,
+        interpolation,
+        diffusion_factor::Matrix{Tv},
+    ) where {Tv}
     C, G = allocate_matrix(SparseMatrixCSC{Tv, Int}, dh), allocate_matrix(SparseMatrixCSC{Tv, Int}, dh)
 
     n_basefuncs = getnbasefunctions(cellvalues)
@@ -105,19 +105,19 @@ Implements the recursion described in [Lindgren2011](@cite).
 - `α::Integer`: The parameter α = ν + d/2 of the Matérn SPDE.
 """
 function matern_mean_precision(
-    C::SparseMatrixCSC{Tv, Ti},
-    K::SparseMatrixCSC{Tv, Ti},
-    α::Integer,
-    ch,
-    constraint_noise,
-    algorithm,
-    scaling_factor::Real = 1.0,
-) where {Tv, Ti}
+        C::SparseMatrixCSC{Tv, Ti},
+        K::SparseMatrixCSC{Tv, Ti},
+        α::Integer,
+        ch,
+        constraint_noise,
+        algorithm,
+        scaling_factor::Real = 1.0,
+    ) where {Tv, Ti}
     if α < 1
         throw(ArgumentError("α must be positive and non-zero"))
     end
     C_inv = spdiagm(0 => 1 ./ diag(C))
-    scale_mat = scaling_factor * sparse(Tv, 1.0*I, size(K)...)
+    scale_mat = scaling_factor * sparse(Tv, 1.0 * I, size(K)...)
     scale_mat_sqrt = sqrt(scaling_factor) * sparse(Tv, I, size(K)...)
     for dof in ch.prescribed_dofs
         scale_mat[dof, dof] = 1.0
@@ -173,7 +173,7 @@ function matern_mean_precision(
         Q_rhs = Q_rhs,
         Q_rhs_sqrt = Q_rhs_sqrt,
     )
-    if any(f_rhs .> 0.)
+    if any(f_rhs .> 0.0)
         μ = lu(K) \ f_rhs
     else
         μ = zeros(Tv, length(f_rhs))
@@ -191,10 +191,10 @@ Computes the stiffness and (lumped) mass matrix, and then forms the precision ma
 of the GMRF discretization.
 """
 function discretize(
-    𝒟::MaternSPDE{D},
-    discretization::FEMDiscretization{D};
-    algorithm = nothing,
-)::GMRF where {D}
+        𝒟::MaternSPDE{D},
+        discretization::FEMDiscretization{D};
+        algorithm = nothing,
+    )::GMRF where {D}
     cellvalues = CellValues(
         discretization.quadrature_rule,
         discretization.interpolation,
@@ -226,7 +226,7 @@ function discretize(
         ratio,
     )
 
-    x = GMRF(μ, Q, algorithm; Q_sqrt=Q_sqrt)
+    x = GMRF(μ, Q, algorithm; Q_sqrt = Q_sqrt)
     return x
 end
 
@@ -240,21 +240,21 @@ function smoothness_to_ν(smoothness::Int, D::Int)
 end
 
 function product_matern(
-    matern_temporal::MaternSPDE,
-    N_t::Int,
-    matern_spatial::MaternSPDE,
-    spatial_disc::FEMDiscretization;
-    algorithm = LinearSolve.CholeskyFactorization(),
-)
+        matern_temporal::MaternSPDE,
+        N_t::Int,
+        matern_spatial::MaternSPDE,
+        spatial_disc::FEMDiscretization;
+        algorithm = LinearSolve.CholeskyFactorization(),
+    )
     offset = N_t ÷ 10
     temporal_grid = generate_grid(Ferrite.Line, (N_t + 2 * offset - 1,))
-    temporal_ip = Lagrange{RefLine,1}()
+    temporal_ip = Lagrange{RefLine, 1}()
     temporal_qr = QuadratureRule{RefLine}(2)
     temporal_disc = FEMDiscretization(temporal_grid, temporal_ip, temporal_qr)
     x_t = discretize(matern_temporal, temporal_disc)
 
-    Q_t = to_matrix(precision_map(x_t))[offset+1:end-offset, offset+1:end-offset]
-    x_s = discretize(matern_spatial, spatial_disc; algorithm=algorithm)
+    Q_t = to_matrix(precision_map(x_t))[(offset + 1):(end - offset), (offset + 1):(end - offset)]
+    x_s = discretize(matern_spatial, spatial_disc; algorithm = algorithm)
     Q_s = precision_map(x_s)
 
     return kronecker_product_spatiotemporal_model(

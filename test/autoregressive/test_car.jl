@@ -5,7 +5,7 @@ using SparseArrays
 @testset "Conditional Autoregressive Models (CARs)" begin
     N = 300
     W = spzeros(N, N)
-    for i = 1:N
+    for i in 1:N
         for k in [-2, -1, 1, 2]
             j = i + k
             if 1 <= j <= N

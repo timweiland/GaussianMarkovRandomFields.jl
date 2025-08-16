@@ -8,8 +8,8 @@ bib = CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"))
 makedocs(
     sitename = "GaussianMarkovRandomFields.jl",
     pages = Any[
-        "Home"=>"index.md",
-        "Tutorials"=>[
+        "Home" => "index.md",
+        "Tutorials" => [
             "Overview" => "tutorials/index.md",
             "tutorials/autoregressive_models.md",
             "tutorials/spatial_modelling_spdes.md",
@@ -17,7 +17,7 @@ makedocs(
             "tutorials/autodiff_mcmc.md",
             "tutorials/boundary_conditions.md",
         ],
-        "API Reference"=>[
+        "API Reference" => [
             "Overview" => "reference/index.md",
             "GMRFs" => "reference/gmrfs.md",
             "SPDEs" => "reference/spdes.md",
@@ -30,8 +30,8 @@ makedocs(
             "Gauss-Newton optimization" => "reference/gn_optim.md",
             "Preconditioners" => "reference/preconditioners.md",
         ],
-        "Bibliography"=>"bibliography.md",
-        "Developer Documentation"=>[
+        "Bibliography" => "bibliography.md",
+        "Developer Documentation" => [
             "Overview" => "dev-docs/index.md",
             "Solvers" => "dev-docs/solvers.md",
             "SPDEs" => "dev-docs/spdes.md",

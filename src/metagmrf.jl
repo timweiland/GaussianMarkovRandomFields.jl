@@ -43,9 +43,9 @@ end
 struct MetaGMRF{M <: GMRFMetadata, T, P, G <: AbstractGMRF{T, P}} <: AbstractGMRF{T, P}
     gmrf::G
     metadata::M
-    
+
     function MetaGMRF(gmrf::G, metadata::M) where {M <: GMRFMetadata, T, P, G <: AbstractGMRF{T, P}}
-        new{M, T, P, G}(gmrf, metadata)
+        return new{M, T, P, G}(gmrf, metadata)
     end
 end
 
@@ -69,11 +69,11 @@ gradlogpdf(mgmrf::MetaGMRF, x::AbstractVector) = gradlogpdf(mgmrf.gmrf, x)
 
 # Show methods for better UX
 function Base.show(io::IO, mgmrf::MetaGMRF{M}) where {M}
-    print(io, "MetaGMRF{", nameof(M), "}(", mgmrf.gmrf, ")")
+    return print(io, "MetaGMRF{", nameof(M), "}(", mgmrf.gmrf, ")")
 end
 
 function Base.show(io::IO, ::MIME"text/plain", mgmrf::MetaGMRF{M}) where {M}
     println(io, "MetaGMRF{", nameof(M), "}")
     println(io, "  Inner GMRF: ", mgmrf.gmrf)
-    print(io, "  Metadata: ", mgmrf.metadata)
+    return print(io, "  Metadata: ", mgmrf.metadata)
 end

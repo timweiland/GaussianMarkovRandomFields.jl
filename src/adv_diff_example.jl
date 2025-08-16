@@ -1,8 +1,8 @@
 using GaussianMarkovRandomFields, Ferrite, LinearAlgebra, SparseArrays
 
 grid = generate_grid(Triangle, (30, 30))
-ip = Lagrange{2,RefTetrahedron,1}()
-qr = QuadratureRule{2,RefTetrahedron}(2)
+ip = Lagrange{2, RefTetrahedron, 1}()
+qr = QuadratureRule{2, RefTetrahedron}(2)
 disc = FEMDiscretization(grid, ip, qr)
 
 spde = AdvectionDiffusionSPDE{2}(1.0, 1 // 1, [1.0 0.0; 0.0 1.0], [0.0; 0.0], 1.0, 50.0)
@@ -12,23 +12,23 @@ X = discretize(spde, disc, ts; streamline_diffusion = false, κ_matern = 5.0)
 
 xs = -0.95:0.2:0.95
 ys = -0.95:0.2:0.95
-D = reshape([Tensors.Vec(x, y) for x ∈ xs, y ∈ ys], length(xs) * length(ys))
+D = reshape([Tensors.Vec(x, y) for x in xs, y in ys], length(xs) * length(ys))
 
 E_spatial = evaluation_matrix(disc, D)
 E = spatial_to_spatiotemporal(E_spatial, 1, length(ts))
-ic_vals = [10 * exp(-(x[1]^2 + x[2]^2) / 0.1) for x ∈ D]
+ic_vals = [10 * exp(-(x[1]^2 + x[2]^2) / 0.1) for x in D]
 N_ic = length(ic_vals)
-Q_ϵ = sparse(1e10 * I, (N_ic, N_ic))
+Q_ϵ = sparse(1.0e10 * I, (N_ic, N_ic))
 
 E₂ = spatial_to_spatiotemporal(E_spatial, 100, length(ts))
-ic_vals₂ = [10 * exp(-((x[1] - 0.3)^2 + (x[2] - 0.3)^2) / 0.1) for x ∈ D]
+ic_vals₂ = [10 * exp(-((x[1] - 0.3)^2 + (x[2] - 0.3)^2) / 0.1) for x in D]
 
 ic_vals_total = [ic_vals; ic_vals₂]
 E_total = [E; E₂]
 
 
 N_ic = length(ic_vals_total)
-Q_ϵ = sparse(1e10 * I, (N_ic, N_ic))
+Q_ϵ = sparse(1.0e10 * I, (N_ic, N_ic))
 X_cond = condition_on_observations(X, E_total, Q_ϵ, ic_vals_total)
 
 # X₀ = X.ssm.x₀

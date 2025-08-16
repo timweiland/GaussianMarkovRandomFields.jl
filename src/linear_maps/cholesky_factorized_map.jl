@@ -20,17 +20,17 @@ i.e. for `A = L * L'`, this map represents `A`.
 - `cho`: The Cholesky factorization of a symmetric positive definite matrix.
   Can be `Cholesky`, `SparseArrays.CHOLMOD.Factor`, or `LDLFactorization`.
 """
-mutable struct CholeskyFactorizedMap{T,C} <: LinearMap{T}
+mutable struct CholeskyFactorizedMap{T, C} <: LinearMap{T}
     cho::C
     _sqrt_map_cache::Union{Nothing, LinearMaps.WrappedMap{T}}
 
-    function CholeskyFactorizedMap(cho::C) where {T,C<:Union{Cholesky{T},SparseArrays.CHOLMOD.Factor{T}}}
-        new{T,C}(cho, nothing)
+    function CholeskyFactorizedMap(cho::C) where {T, C <: Union{Cholesky{T}, SparseArrays.CHOLMOD.Factor{T}}}
+        return new{T, C}(cho, nothing)
     end
-    
+
     # Generic constructor for any Cholesky factorization type
-    function CholeskyFactorizedMap{T}(cho::C) where {T,C}
-        new{T,C}(cho, nothing)
+    function CholeskyFactorizedMap{T}(cho::C) where {T, C}
+        return new{T, C}(cho, nothing)
     end
 end
 
@@ -48,7 +48,7 @@ end
 size(C::CholeskyFactorizedMap) = Base.size(C.cho)
 
 function LinearMaps._unsafe_mul!(y, C::CholeskyFactorizedMap, x::AbstractVector)
-    mul!(y, C.sqrt_map, C.sqrt_map' * x)
+    return mul!(y, C.sqrt_map, C.sqrt_map' * x)
 end
 
 LinearAlgebra.adjoint(C::CholeskyFactorizedMap) = C
@@ -65,7 +65,7 @@ end
 
 linmap_sqrt(C::CholeskyFactorizedMap) = C.sqrt_map
 
-function linmap_cholesky(::Val{:default}, C::CholeskyFactorizedMap{T,<:Union{Cholesky,SparseArrays.CHOLMOD.Factor}}; perm=nothing) where {T}
+function linmap_cholesky(::Val{:default}, C::CholeskyFactorizedMap{T, <:Union{Cholesky, SparseArrays.CHOLMOD.Factor}}; perm = nothing) where {T}
     if perm !== nothing
         @warn "User-specified permutation for Cholesky of CholeskyFactorizedMap!"
     end
@@ -77,5 +77,5 @@ function Base.show(io::IO, C::CholeskyFactorizedMap)
         io,
         "$(Base.size(C, 1))x$(Base.size(C, 2)) CholeskyFactorizedMap",
     )
-    print(io, C.cho)
+    return print(io, C.cho)
 end

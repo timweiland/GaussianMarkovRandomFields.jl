@@ -29,15 +29,15 @@ Mesh has physical groups "Domain", "Interior", "Interior boundary" and possibly
 
 """
 function create_inflated_rectangle(
-    x0,
-    y0,
-    dx,
-    dy,
-    boundary_width,
-    interior_mesh_size,
-    exterior_mesh_size = 2 * interior_mesh_size;
-    element_order = 1,
-)
+        x0,
+        y0,
+        dx,
+        dy,
+        boundary_width,
+        interior_mesh_size,
+        exterior_mesh_size = 2 * interior_mesh_size;
+        element_order = 1,
+    )
     if boundary_width < 0.0
         throw(ArgumentError("boundary_width must be non-negative"))
     end

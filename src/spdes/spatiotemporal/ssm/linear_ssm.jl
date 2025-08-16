@@ -44,7 +44,7 @@ G(Δtₖ) x_{k+1} ∣ xₖ ∼ 𝒩(M(Δtₖ) xₖ, Σ)
 
 at time points given by `ts` (from which the Δtₖ are computed).
 """
-joint_ssm(x₀::GMRF, ssm_matrices::Union{Function,JointSSMMatrices}, ts::AbstractVector) =
+joint_ssm(x₀::GMRF, ssm_matrices::Union{Function, JointSSMMatrices}, ts::AbstractVector) =
     error("joint_ssm not implemented for these argument types")
 
 """
@@ -98,8 +98,8 @@ function joint_ssm(x₀::GMRF, ssm_mats::JointSSMMatrices, ts::AbstractRange)
     apply_soft_constraints!(ch, constraint_noise; K = G, Q_rhs = Σ⁻¹, Q_rhs_sqrt = Σ⁻¹_sqrt)
 
     means = [mean(x₀)]
-    for i = 2:length(ts)
-        cur_mean = M * means[i-1]
+    for i in 2:length(ts)
+        cur_mean = M * means[i - 1]
         apply_soft_constraints!(
             ch,
             constraint_noise;
@@ -123,7 +123,7 @@ function joint_ssm(x₀::GMRF, ssm_mats::JointSSMMatrices, ts::AbstractRange)
     off_diagonal_blocks = Tuple(LinearMap(block) for block in off_diagonal_blocks)
 
     precision = SymmetricBlockTridiagonalMap(diagonal_blocks, off_diagonal_blocks)
-    
+
     # Only construct square root if x₀ has Q_sqrt available
     precision_sqrt = if x₀.Q_sqrt !== nothing
         Q_s_sqrt = LinearMap(x₀.Q_sqrt)

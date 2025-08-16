@@ -38,11 +38,11 @@ struct SSMBidiagonalMap{T} <: LinearMaps.LinearMap{T}
     off_diag::LinearMaps.LinearMap{T}
 
     function SSMBidiagonalMap(
-        A::LinearMaps.LinearMap{T},
-        B::LinearMaps.LinearMap{T},
-        C::LinearMaps.LinearMap{T},
-        N_t::Int,
-    ) where {T}
+            A::LinearMaps.LinearMap{T},
+            B::LinearMaps.LinearMap{T},
+            C::LinearMaps.LinearMap{T},
+            N_t::Int,
+        ) where {T}
         (N_t > 1) || throw(ArgumentError("N_t must be greater than 1"))
         size(B, 2) == size(A, 2) || throw(ArgumentError("size mismatch"))
         size(C) == size(B) || throw(ArgumentError("size mismatch"))
@@ -50,14 +50,14 @@ struct SSMBidiagonalMap{T} <: LinearMaps.LinearMap{T}
         M = (N_t - 1) * size(B, 2)
         main_diag = blockdiag(A, repeat([C], N_t - 2)...)
         off_diag = blockdiag(repeat([B], N_t - 1)...)
-        new{T}(A, B, C, N, M, N_t, main_diag, off_diag)
+        return new{T}(A, B, C, N, M, N_t, main_diag, off_diag)
     end
 end
 
 function LinearMaps._unsafe_mul!(y, L::SSMBidiagonalMap, x::AbstractVector)
     y .= 0
-    y[1:(end-Base.size(L.B, 1))] += L.main_diag * x
-    y[(Base.size(L.A, 1)+1):end] .+= L.off_diag * x
+    y[1:(end - Base.size(L.B, 1))] += L.main_diag * x
+    y[(Base.size(L.A, 1) + 1):end] .+= L.off_diag * x
     return y
 end
 
@@ -66,12 +66,12 @@ function LinearMaps.size(L::SSMBidiagonalMap)
 end
 
 function LinearMaps._unsafe_mul!(
-    y,
-    L::LinearMaps.TransposeMap{<:Any,<:SSMBidiagonalMap},
-    x::AbstractVector,
-)
+        y,
+        L::LinearMaps.TransposeMap{<:Any, <:SSMBidiagonalMap},
+        x::AbstractVector,
+    )
     y .= 0
-    y += L.lmap.main_diag' * x[1:(end-Base.size(L.lmap.B, 1))]
-    y .+= L.lmap.off_diag' * x[(Base.size(L.lmap.A, 1)+1):end]
+    y += L.lmap.main_diag' * x[1:(end - Base.size(L.lmap.B, 1))]
+    y .+= L.lmap.off_diag' * x[(Base.size(L.lmap.A, 1) + 1):end]
     return y
 end

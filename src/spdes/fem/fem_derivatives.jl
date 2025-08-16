@@ -40,10 +40,10 @@ physical element.
 function geom_jacobian(f::FEMDiscretization, dof_coords, ξ)
     derivs = [
         Ferrite.reference_shape_gradient(f.geom_interpolation, ξ, i) for
-        i = 1:getnbasefunctions(f.geom_interpolation)
+            i in 1:getnbasefunctions(f.geom_interpolation)
     ]
     # derivs = Ferrite.derivative(f.geom_interpolation, ξ)
-    return sum([n ⊗ d for (n, d) ∈ zip(dof_coords, derivs)])
+    return sum([n ⊗ d for (n, d) in zip(dof_coords, derivs)])
 end
 
 """
@@ -56,9 +56,9 @@ physical element.
 """
 function geom_hessian(f::FEMDiscretization, dof_coords, ξ)
     hessians = [
-        Ferrite.hessian(ξ -> Ferrite.reference_shape_value(f.geom_interpolation, ξ, b), ξ) for b = 1:getnbasefunctions(f.geom_interpolation)
+        Ferrite.hessian(ξ -> Ferrite.reference_shape_value(f.geom_interpolation, ξ, b), ξ) for b in 1:getnbasefunctions(f.geom_interpolation)
     ]
-    return sum([n ⊗ h for (n, h) ∈ zip(dof_coords, hessians)])
+    return sum([n ⊗ h for (n, h) in zip(dof_coords, hessians)])
 end
 
 """
@@ -69,12 +69,12 @@ Gradient of the shape function with index `shape_idx` in a cell with node coordi
 local coordinates `ξ`.
 """
 function shape_gradient_global(
-    f::FEMDiscretization,
-    dof_coords,
-    shape_idx::Int,
-    ξ;
-    J⁻¹ = nothing,
-)
+        f::FEMDiscretization,
+        dof_coords,
+        shape_idx::Int,
+        ξ;
+        J⁻¹ = nothing,
+    )
     if J⁻¹ === nothing
         J⁻¹ = inv(geom_jacobian(f, dof_coords, ξ))
     end
@@ -89,13 +89,13 @@ Hessian of the shape function with index `shape_idx` in a cell with node coordin
 local coordinates `ξ`.
 """
 function shape_hessian_global(
-    f::FEMDiscretization,
-    dof_coords,
-    shape_idx::Int,
-    ξ;
-    J⁻¹ = nothing,
-    geo_hessian = nothing,
-)
+        f::FEMDiscretization,
+        dof_coords,
+        shape_idx::Int,
+        ξ;
+        J⁻¹ = nothing,
+        geo_hessian = nothing,
+    )
     if J⁻¹ === nothing
         J⁻¹ = inv(geom_jacobian(f, dof_coords, ξ))
     end
@@ -134,11 +134,11 @@ mats = derivative_matrices(disc, X; derivative_idcs=[2])
 contains the derivative of all basis functions with respect to y at X[i].
 """
 function derivative_matrices(
-    f::FEMDiscretization,
-    X;
-    derivative_idcs = [1],
-    field = :default,
-)
+        f::FEMDiscretization,
+        X;
+        derivative_idcs = [1],
+        field = :default,
+    )
     if field == :default
         field = first(f.dof_handler.field_names)
     end
@@ -163,7 +163,7 @@ function derivative_matrices(
         end
     end
     mats =
-        [sparse(Is[k], Js[k], Vs[k], length(X), ndofs(f)) for k = 1:length(derivative_idcs)]
+        [sparse(Is[k], Js[k], Vs[k], length(X), ndofs(f)) for k in 1:length(derivative_idcs)]
     return mats
 end
 
@@ -192,11 +192,11 @@ laplacian = A + B
 ```
 """
 function second_derivative_matrices(
-    f::FEMDiscretization,
-    X;
-    derivative_idcs = [(1, 1)],
-    field = :default,
-)
+        f::FEMDiscretization,
+        X;
+        derivative_idcs = [(1, 1)],
+        field = :default,
+    )
     if field == :default
         field = first(f.dof_handler.field_names)
     end
@@ -215,13 +215,13 @@ function second_derivative_matrices(
         ξ = peh.local_coords[i]
         get_hessian =
             (b) -> shape_hessian_global(
-                f,
-                dof_coords,
-                b,
-                ξ;
-                J⁻¹ = J⁻¹,
-                geo_hessian = geo_hessian,
-            )
+            f,
+            dof_coords,
+            b,
+            ξ;
+            J⁻¹ = J⁻¹,
+            geo_hessian = geo_hessian,
+        )
         hessians = map(get_hessian, 1:getnbasefunctions(f.interpolation))
         for (k, idx) in enumerate(derivative_idcs)
             append!(Is[k], repeat([i], length(dofs)))
@@ -230,6 +230,6 @@ function second_derivative_matrices(
         end
     end
     mats =
-        [sparse(Is[k], Js[k], Vs[k], length(X), ndofs(f)) for k = 1:length(derivative_idcs)]
+        [sparse(Is[k], Js[k], Vs[k], length(X), ndofs(f)) for k in 1:length(derivative_idcs)]
     return mats
 end

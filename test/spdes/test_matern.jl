@@ -7,7 +7,7 @@ using LinearAlgebra
 @testset "MaternSPDE" begin
     rng = MersenneTwister(5930238)
     N = 20
-    @testset "$d-dimensional, element order $order" for d ∈ [1, 2, 3], order ∈ [1, 2]
+    @testset "$d-dimensional, element order $order" for d in [1, 2, 3], order in [1, 2]
         if d == 3 && order == 2
             continue # TODO: generate_grid does not support QuadraticTetrahedron (yet?)
         end
@@ -26,8 +26,8 @@ using LinearAlgebra
         end
         grid = generate_grid(grid_shape, Tuple(fill(N, d)))
         precisions = []
-        for (smoothness_idx, ν) ∈ enumerate(νs)
-            ip = Lagrange{ref_shape,order}()
+        for (smoothness_idx, ν) in enumerate(νs)
+            ip = Lagrange{ref_shape, order}()
             qr = QuadratureRule{ref_shape}(order + 1)
             disc = FEMDiscretization(grid, ip, qr)
 
@@ -39,7 +39,7 @@ using LinearAlgebra
             x = GaussianMarkovRandomFields.discretize(spde, disc)
             Q = to_matrix(precision_map(x))
             @test size(Q) == (ndofs(disc), ndofs(disc))
-            @test cholesky(Q) isa Union{Cholesky,SparseArrays.CHOLMOD.Factor}
+            @test cholesky(Q) isa Union{Cholesky, SparseArrays.CHOLMOD.Factor}
             push!(precisions, Q)
 
             # Test range parameter
@@ -52,8 +52,8 @@ using LinearAlgebra
             A_eval = evaluation_matrix(disc, [Tensors.Vec(fill(0.0, d)...)])
             y = [1.0]
 
-            x_high_cond = condition_on_observations(x_high_range, A_eval, 1e8, y)
-            x_low_cond = condition_on_observations(x_low_range, A_eval, 1e8, y)
+            x_high_cond = condition_on_observations(x_high_range, A_eval, 1.0e8, y)
+            x_low_cond = condition_on_observations(x_low_range, A_eval, 1.0e8, y)
 
             A_test = evaluation_matrix(disc, [Tensors.Vec(fill(0.5, d)...)])
             @test A_test * mean(x_high_cond) > A_test * mean(x_low_cond) .+ 0.1
@@ -64,40 +64,40 @@ using LinearAlgebra
 
     @testset "Boundary conditions" begin
         grid = generate_grid(Line, (50,))
-        ip = Lagrange{RefLine,1}()
+        ip = Lagrange{RefLine, 1}()
         qr = QuadratureRule{RefLine}(2)
         pbc = _get_periodic_constraint(grid)
         left_val, right_val = 2.0, -1.5
         dbc = _get_dirichlet_constraint(grid, left_val, right_val)
-        disc_pbc = FEMDiscretization(grid, ip, qr, ((:u, nothing),), [(pbc, 1e-4)])
-        disc_dbc = FEMDiscretization(grid, ip, qr, ((:u, nothing),), [(dbc, 1e-4)])
+        disc_pbc = FEMDiscretization(grid, ip, qr, ((:u, nothing),), [(pbc, 1.0e-4)])
+        disc_dbc = FEMDiscretization(grid, ip, qr, ((:u, nothing),), [(dbc, 1.0e-4)])
 
-        for smoothness ∈ [1, 3]
+        for smoothness in [1, 3]
             spde = MaternSPDE{1}(range = 0.3, smoothness = smoothness, σ² = 0.3)
             x = GaussianMarkovRandomFields.discretize(spde, disc_pbc)
 
             @test (mean(x)[1] ≈ 0.0) && (mean(x)[end] ≈ 0.0)
 
-            for i = 1:3
+            for i in 1:3
                 samp = rand(rng, x)
-                @test samp[1] ≈ samp[end] atol = 1e-3
+                @test samp[1] ≈ samp[end] atol = 1.0e-3
             end
         end
 
-        for smoothness ∈ [0, 1, 2]
+        for smoothness in [0, 1, 2]
             spde = MaternSPDE{1}(range = 0.3, smoothness = smoothness, σ² = 0.3)
             x = GaussianMarkovRandomFields.discretize(spde, disc_dbc)
 
             @test (mean(x)[1] ≈ left_val) && (mean(x)[end] ≈ right_val)
 
-            for i = 1:3
+            for i in 1:3
                 samp = rand(rng, x)
-                @test samp[1] ≈ left_val atol = 1e-3
-                @test samp[end] ≈ right_val atol = 1e-3
+                @test samp[1] ≈ left_val atol = 1.0e-3
+                @test samp[end] ≈ right_val atol = 1.0e-3
             end
 
-            @test std(x)[1] ≈ 1e-4
-            @test std(x)[end] ≈ 1e-4
+            @test std(x)[1] ≈ 1.0e-4
+            @test std(x)[end] ≈ 1.0e-4
         end
     end
 end

@@ -24,7 +24,7 @@ struct RBMCStrategy
     rng::Random.AbstractRNG
 
     function RBMCStrategy(n_samples::Int; rng::Random.AbstractRNG = Random.default_rng())
-        new(n_samples, rng)
+        return new(n_samples, rng)
     end
 end
 
@@ -55,11 +55,11 @@ struct BlockRBMCStrategy
     enclosure_size::Int
 
     function BlockRBMCStrategy(
-        n_samples::Int;
-        rng::Random.AbstractRNG = Random.default_rng(),
-        enclosure_size::Int = 1,
-    )
-        new(n_samples, rng, enclosure_size)
+            n_samples::Int;
+            rng::Random.AbstractRNG = Random.default_rng(),
+            enclosure_size::Int = 1,
+        )
+        return new(n_samples, rng, enclosure_size)
     end
 end
 
@@ -73,8 +73,8 @@ function var(gmrf::AbstractGMRF, strategy::RBMCStrategy)
     D = Array(diag(Q))
     D⁻¹ = 1 ./ D
 
-    samples = [zeros(size(Q, 1)) for _ = 1:strategy.n_samples]
-    for i = 1:strategy.n_samples
+    samples = [zeros(size(Q, 1)) for _ in 1:strategy.n_samples]
+    for i in 1:strategy.n_samples
         rand!(strategy.rng, gmrf, samples[i])
         # Remove mean to get centered samples
         samples[i] .-= mean(gmrf)
@@ -94,7 +94,7 @@ function _build_enclosure_idcs(Q, interior, enclosure_size = 1)
     enclosure_idcs = Int64[]
     new_idcs = copy(interior)
     explored = Set(interior)
-    for _ = 1:enclosure_size
+    for _ in 1:enclosure_size
         new_idcs = Set(_enclosure(Q, new_idcs))
         new_idcs = setdiff(new_idcs, explored)
         append!(enclosure_idcs, collect(new_idcs))
@@ -106,7 +106,7 @@ end
 function _build_disjoint_subsets(Q)
     visited = zeros(Bool, size(Q, 1))
     subsets = []
-    for i = 1:size(Q, 1)
+    for i in 1:size(Q, 1)
         if !visited[i]
             idcs = findnz(Q[i, :])[1]
             visited[idcs] .= true
@@ -125,10 +125,10 @@ function var(gmrf::AbstractGMRF, strategy::BlockRBMCStrategy)
     Q = precision_matrix(gmrf)
     var_estimate = zeros(size(Q, 1))
 
-    samples = [zeros(size(Q, 1)) for _ = 1:strategy.n_samples]
-    for i = 1:strategy.n_samples
+    samples = [zeros(size(Q, 1)) for _ in 1:strategy.n_samples]
+    for i in 1:strategy.n_samples
         rand!(strategy.rng, gmrf, samples[i])
-        # Remove mean to get centered samples  
+        # Remove mean to get centered samples
         samples[i] .-= mean(gmrf)
     end
     sample_mat = hcat(samples...)

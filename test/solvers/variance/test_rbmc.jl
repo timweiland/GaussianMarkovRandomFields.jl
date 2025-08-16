@@ -3,7 +3,7 @@ using LinearSolve
 
 function _generate_gmrf()
     grid = generate_grid(Triangle, (20, 20))
-    ip = Lagrange{RefTriangle,1}()
+    ip = Lagrange{RefTriangle, 1}()
     qr = QuadratureRule{RefTriangle}(2)
     disc = FEMDiscretization(grid, ip, qr)
     spde = MaternSPDE{2}(range = 0.2, smoothness = 1)
@@ -14,7 +14,7 @@ end
     rng = MersenneTwister(854289)
 
     x = _generate_gmrf()
-    
+
     # Get true variance using selected inversion
     var_true = var(x)
 
