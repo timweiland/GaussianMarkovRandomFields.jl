@@ -4,6 +4,7 @@ using GaussianMarkovRandomFields
 using ReTest
 using Aqua
 
+include("test_utils.jl")  # Shared test utilities
 include("test_gmrf.jl")
 include("test_metagmrf.jl")
 include("linear_maps/test_ad_jacobian.jl")

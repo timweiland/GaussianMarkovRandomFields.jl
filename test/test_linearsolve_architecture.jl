@@ -1,6 +1,5 @@
 using GaussianMarkovRandomFields
 using LinearAlgebra, SparseArrays, LinearSolve, Distributions
-using Test
 
 @testset "LinearSolve Architecture Tests" begin
     # Setup test GMRF - build Q from square root for RBMC testing

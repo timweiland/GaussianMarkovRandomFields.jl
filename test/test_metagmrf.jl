@@ -1,6 +1,5 @@
 using GaussianMarkovRandomFields
 using LinearAlgebra, SparseArrays, Random, Distributions
-using Test
 
 @testset "MetaGMRF Tests" begin
     # Setup base GMRF for testing
