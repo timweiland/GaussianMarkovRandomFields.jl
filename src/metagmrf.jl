@@ -60,3 +60,20 @@ std(mgmrf::MetaGMRF) = std(mgmrf.gmrf)
 function _rand!(rng::AbstractRNG, mgmrf::MetaGMRF, x::AbstractVector)
     return _rand!(rng, mgmrf.gmrf, x)
 end
+cov(mgmrf::MetaGMRF) = cov(mgmrf.gmrf)
+invcov(mgmrf::MetaGMRF) = invcov(mgmrf.gmrf)
+logdetcov(mgmrf::MetaGMRF) = logdetcov(mgmrf.gmrf)
+sqmahal(mgmrf::MetaGMRF, x::AbstractVector) = sqmahal(mgmrf.gmrf, x)
+sqmahal!(r::AbstractVector, mgmrf::MetaGMRF, x::AbstractVector) = sqmahal!(r, mgmrf.gmrf, x)
+gradlogpdf(mgmrf::MetaGMRF, x::AbstractVector) = gradlogpdf(mgmrf.gmrf, x)
+
+# Show methods for better UX
+function Base.show(io::IO, mgmrf::MetaGMRF{M}) where {M}
+    print(io, "MetaGMRF{", nameof(M), "}(", mgmrf.gmrf, ")")
+end
+
+function Base.show(io::IO, ::MIME"text/plain", mgmrf::MetaGMRF{M}) where {M}
+    println(io, "MetaGMRF{", nameof(M), "}")
+    println(io, "  Inner GMRF: ", mgmrf.gmrf)
+    print(io, "  Metadata: ", mgmrf.metadata)
+end
