@@ -1,2 +1,4 @@
 include("to_matrix.jl")
 include("linmap_sqrt.jl")
+include("symmetrize.jl")
+include("linsolve_utils.jl")
