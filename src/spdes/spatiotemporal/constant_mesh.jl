@@ -100,3 +100,28 @@ function default_preconditioner_strategy(
     Q = sparse(to_matrix(precision_map(x)))
     return temporal_block_gauss_seidel(Q, block_size)
 end
+
+function Base.show(io::IO, metadata::ImplicitEulerMetadata{D}) where {D}
+    return print(io, "ImplicitEulerMetadata{$D}($(metadata.N_spatial) spatial × $(metadata.N_t) time)")
+end
+
+function Base.show(io::IO, ::MIME"text/plain", metadata::ImplicitEulerMetadata{D}) where {D}
+    println(io, "ImplicitEulerMetadata{$D}")
+    println(io, "  Spatial dimension: $D")
+    println(io, "  Spatial DOFs: $(metadata.N_spatial)")
+    println(io, "  Time points: $(metadata.N_t)")
+    println(io, "  Total size: $(metadata.N_spatial * metadata.N_t)")
+    return print(io, "  SSM type: $(typeof(metadata.ssm))")
+end
+
+function Base.show(io::IO, metadata::ConcreteSTMetadata{D}) where {D}
+    return print(io, "ConcreteSTMetadata{$D}($(metadata.N_spatial) spatial × $(metadata.N_t) time)")
+end
+
+function Base.show(io::IO, ::MIME"text/plain", metadata::ConcreteSTMetadata{D}) where {D}
+    println(io, "ConcreteSTMetadata{$D}")
+    println(io, "  Spatial dimension: $D")
+    println(io, "  Spatial DOFs: $(metadata.N_spatial)")
+    println(io, "  Time points: $(metadata.N_t)")
+    return print(io, "  Total size: $(metadata.N_spatial * metadata.N_t)")
+end
