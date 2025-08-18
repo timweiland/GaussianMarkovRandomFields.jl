@@ -3,149 +3,81 @@ module GaussianMarkovRandomFieldsPardiso
 
 using GaussianMarkovRandomFields
 using Pardiso
-using Random, SparseArrays, LinearAlgebra, Distributions, LinearMaps
+using LinearSolve
+using LinearAlgebra
 
-_ensure_dense(x) = x
-_ensure_dense(x::SparseVector) = Array(x)
+# Selected inversion implementations for LinearSolve.jl integration
+function GaussianMarkovRandomFields._selinv_diag_impl(linsolve, ::LinearSolve.PardisoJL)
+    # Access PardisoSolver through cacheval
+    ps = LinearSolve.@get_cacheval(linsolve, :PardisoJL)
 
-abstract type AbstractPardisoGMRFSolver <: AbstractSolver end
+    # Set up for selected inversion
+    Pardiso.set_phase!(ps, Pardiso.SELECTED_INVERSION)
+    Pardiso.set_iparm!(ps, 36, 1)  # allocate new memory for selected inverse
 
-_has_factorization(s::AbstractPardisoGMRFSolver) = s.ps.iparm[18] > 0
-function _factorize_if_necessary(s::AbstractPardisoGMRFSolver)
-    return if !_has_factorization(s)
-        Pardiso.set_phase!(s.ps, Pardiso.ANALYSIS_NUM_FACT)
-        x = Array{Float64}(undef, size(s.Q_tril, 1))
-        Pardiso.pardiso(s.ps, x, s.Q_tril, x)
-    end
+    # Create output matrix (will contain selected inverse)
+    B = similar(linsolve.A)
+    x = Array{Float64}(undef, size(linsolve.A, 1))
+
+    # Perform selected inversion
+    Pardiso.pardiso(ps, x, B, x)
+
+    # Reset to solve phase for future operations
+    Pardiso.set_phase!(ps, Pardiso.SOLVE_ITERATIVE_REFINE)
+
+    return diag(B)
 end
-function _prepare_for_solve(s::AbstractPardisoGMRFSolver)
-    return if !_has_factorization(s)
-        Pardiso.set_phase!(s.ps, Pardiso.ANALYSIS_NUM_FACT_SOLVE_REFINE)
+
+function GaussianMarkovRandomFields._selinv_impl(linsolve, ::LinearSolve.PardisoJL)
+    # Access PardisoSolver through cacheval
+    ps = LinearSolve.@get_cacheval(linsolve, :PardisoJL)
+
+    # Set up for selected inversion
+    Pardiso.set_phase!(ps, Pardiso.SELECTED_INVERSION)
+    Pardiso.set_iparm!(ps, 36, 1)  # allocate new memory for selected inverse
+
+    # Create output matrix
+    B = similar(linsolve.A)
+    x = Array{Float64}(undef, size(linsolve.A, 1))
+
+    # Perform selected inversion
+    Pardiso.pardiso(ps, x, B, x)
+
+    # Reset to solve phase for future operations
+    Pardiso.set_phase!(ps, Pardiso.SOLVE_ITERATIVE_REFINE)
+
+    return B
+end
+
+# Log determinant implementation for LinearSolve.jl integration
+function GaussianMarkovRandomFields._logdet_cov_impl(linsolve, ::LinearSolve.PardisoJL)
+    # Access PardisoSolver through cacheval
+    ps = LinearSolve.@get_cacheval(linsolve, :PardisoJL)
+
+    # The log determinant of the precision matrix is stored in dparm[33]
+    # We want log det(Σ) = log det(Q^-1) = -log det(Q)
+    return -ps.dparm[33]
+end
+
+# Pardiso doesn't support backward solves due to LDL^T factorization complexity
+GaussianMarkovRandomFields.supports_backward_solve(::LinearSolve.PardisoJL) = Val{false}()
+
+# Configure Pardiso with optimal defaults for GMRF operations
+function GaussianMarkovRandomFields.configure_algorithm(alg::LinearSolve.PardisoJL)
+    # Set default matrix type if not specified
+    matrix_type = alg.matrix_type === nothing ? Pardiso.REAL_SYM_INDEF : alg.matrix_type
+
+    # Set default iparm for log determinant computation if not specified
+    iparm = if alg.iparm === nothing
+        [(33, 1)]  # Enable log determinant computation
     else
-        Pardiso.set_phase!(s.ps, Pardiso.SOLVE_ITERATIVE_REFINE)
-    end
-end
-
-GaussianMarkovRandomFields.compute_mean(s::AbstractPardisoGMRFSolver) = s.mean
-function GaussianMarkovRandomFields.compute_variance(s::AbstractPardisoGMRFSolver)
-    if s.computed_var !== nothing
-        return s.computed_var
-    end
-    _factorize_if_necessary(s)
-
-    Pardiso.set_phase!(s.ps, Pardiso.SELECTED_INVERSION)
-    Pardiso.set_iparm!(s.ps, 36, 1)
-    B = similar(s.Q_tril)
-    x = Array{Float64}(undef, size(s.Q_tril, 1))
-    Pardiso.pardiso(s.ps, x, B, x)
-
-    Pardiso.set_phase!(s.ps, Pardiso.SOLVE_ITERATIVE_REFINE)
-    s.computed_var = diag(B)
-    return s.computed_var
-end
-
-function GaussianMarkovRandomFields.compute_rand!(
-        s::AbstractPardisoGMRFSolver,
-        rng::Random.AbstractRNG,
-        x::AbstractVector,
-    )
-    M = linmap_sqrt(s.precision)
-    z = randn(rng, size(M, 2))
-    x .= linmap_sqrt(s.precision) * z # Centered sample with covariance Q
-
-    _prepare_for_solve(s)
-    # Centered sample with covariance Q^-1
-    Pardiso.pardiso(s.ps, x, s.Q_tril, copy(x))
-    x .+= _ensure_dense(compute_mean(s))
-    return x
-end
-
-mutable struct PardisoGMRFSolver <: AbstractPardisoGMRFSolver
-    ps::PardisoSolver
-    mean::AbstractVector
-    precision::LinearMap
-    Q_tril::SparseMatrixCSC
-    computed_var::Union{Nothing, AbstractVector}
-
-    function PardisoGMRFSolver(gmrf::AbstractGMRF)
-        ps = PardisoSolver()
-        Pardiso.set_matrixtype!(ps, Pardiso.REAL_SYM_INDEF)
-        Pardiso.ccall_pardisoinit(ps)
-        ps.msglvl = Pardiso.MESSAGE_LEVEL_ON
-
-        Q_tril = tril(to_matrix(precision_map(gmrf)))
-        return new(ps, mean(gmrf), precision_map(gmrf), Q_tril, nothing)
-    end
-end
-
-mutable struct LinearConditionalPardisoGMRFSolver <: AbstractPardisoGMRFSolver
-    ps::PardisoSolver
-    prior_mean::AbstractVector
-    precision::LinearMap
-    Q_tril::SparseMatrixCSC
-    A::LinearMap
-    Q_ϵ::LinearMap
-    y::AbstractVector
-    b::AbstractVector
-    computed_posterior_mean::Union{Nothing, AbstractVector}
-    computed_var::Union{Nothing, AbstractVector}
-
-    function LinearConditionalPardisoGMRFSolver(gmrf::LinearConditionalGMRF)
-        ps = PardisoSolver()
-        Pardiso.set_matrixtype!(ps, Pardiso.REAL_SYM_INDEF)
-        Pardiso.ccall_pardisoinit(ps)
-        ps.msglvl = Pardiso.MESSAGE_LEVEL_ON
-
-        Q_tril = tril(to_matrix(precision_map(gmrf)))
-        return new(
-            ps,
-            mean(gmrf.prior),
-            precision_map(gmrf),
-            Q_tril,
-            gmrf.A,
-            gmrf.Q_ϵ,
-            gmrf.y,
-            gmrf.b,
-            nothing,
-            nothing,
-        )
-    end
-end
-
-function GaussianMarkovRandomFields.compute_mean(s::LinearConditionalPardisoGMRFSolver)
-    if s.computed_posterior_mean !== nothing
-        return s.computed_posterior_mean
+        # Check if iparm[33] is already set, if not add it
+        has_logdet = any(pair -> pair[1] == 33, alg.iparm)
+        has_logdet ? alg.iparm : [alg.iparm..., (33, 1)]
     end
 
-    _prepare_for_solve(s)
-    μ = _ensure_dense(s.prior_mean)
-    residual = _ensure_dense(s.y - (s.A * μ + s.b))
-    rhs = _ensure_dense(s.A' * (s.Q_ϵ * residual))
-    x = similar(rhs)
-    Pardiso.pardiso(s.ps, x, s.Q_tril, rhs)
-    s.computed_posterior_mean = μ + x
-    return s.computed_posterior_mean
+    return LinearSolve.PardisoJL(matrix_type = matrix_type, iparm = iparm)
 end
 
-function GaussianMarkovRandomFields.construct_solver(
-        _::PardisoGMRFSolverBlueprint,
-        gmrf::AbstractGMRF,
-    )
-    return PardisoGMRFSolver(gmrf)
-end
-
-function GaussianMarkovRandomFields.construct_solver(
-        _::PardisoGMRFSolverBlueprint,
-        gmrf::LinearConditionalGMRF,
-    )
-    return LinearConditionalPardisoGMRFSolver(gmrf)
-end
-
-function infer_solver_blueprint(
-        ::Union{PardisoGMRFSolver, LinearConditionalPardisoGMRFSolver}
-    )
-    return PardisoGMRFSolverBlueprint()
-end
-
-end
+end # module
 # COV_EXCL_STOP
