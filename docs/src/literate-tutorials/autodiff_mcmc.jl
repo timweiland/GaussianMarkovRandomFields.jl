@@ -13,10 +13,9 @@
 # This tutorial demonstrates how to leverage AD with GMRFs for Bayesian parameter
 # inference using NUTS in Turing.jl.
 #
-# The key to AD support in GaussianMarkovRandomFields.jl is using the
-# `:autodiffable` solver backend, which uses LDLFactorizations.jl instead
-# of the default sparse Cholesky factorization. This enables ForwardDiff.jl
-# to track derivatives through the linear algebra operations.
+# AD support in GaussianMarkovRandomFields.jl works through custom chain rules
+# that enable automatic differentiation through the linear algebra operations
+# needed for GMRF computations.
 
 using Distributions
 using GaussianMarkovRandomFields
@@ -59,10 +58,7 @@ true_σ = 0.01  # True field variance
 μ = zeros(N)   # Zero mean
 
 # Generate true CAR model and sample from it
-true_car = generate_car_model(
-    W, true_ρ; μ = μ, σ = true_σ,
-    solver_blueprint = CholeskySolverBlueprint{:autodiffable}()
-)
+true_car = generate_car_model(W, true_ρ; μ = μ, σ = true_σ)
 
 # Our "observations" are just a sample from the true CAR
 observations = rand(true_car)
@@ -78,8 +74,6 @@ println("True variance parameter σ: $(true_σ)")
 # - ρ ~ Uniform(0.5, 0.99)
 # - σ ~ Uniform(0.001, 0.1)
 # - y = x (direct observation of the CAR process)
-#
-# Again, the crucial bit here is using the `:autodiffable` solver backend.
 
 @model function car_model(y, W, μ)
     ## Prior on CAR parameter
@@ -89,10 +83,7 @@ println("True variance parameter σ: $(true_σ)")
     σ ~ Uniform(0.001, 0.1)
 
     ## CAR process
-    car_dist = generate_car_model(
-        W, ρ; μ = μ, σ = σ,
-        solver_blueprint = CholeskySolverBlueprint{:autodiffable}()
-    )
+    car_dist = generate_car_model(W, ρ; μ = μ, σ = σ)
 
     ## Direct observation
     y ~ car_dist
@@ -103,7 +94,7 @@ model = car_model(observations, W, μ)
 
 # ### MCMC Sampling with NUTS
 #
-# NUTS requires gradients, which are automatically computed via ForwardDiff
+# NUTS requires gradients, which are automatically computed
 # thanks to our autodifferentiable GMRF implementation.
 
 println("Starting MCMC sampling...")

@@ -10,7 +10,7 @@ mkpath(TUTORIALS_DATA)
 
 for (IN, OUT) in [(TUTORIALS_IN, TUTORIALS_OUT)], program in readdir(IN; join = true)
     name = basename(program)
-    if endswith(program, ".jl")
+    if endswith(program, ".jl") && !contains(name, "autodiff_mcmc")
         println(name)
         Literate.script(program, OUT)
         Literate.markdown(program, OUT)

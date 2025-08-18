@@ -3,7 +3,6 @@
 Pages = [
     "spdes.md",
     "discretizations.md",
-    "solvers.md",
-    "utils.md"
+    "solvers.md"
 ]
 ```
