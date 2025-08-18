@@ -26,6 +26,7 @@ Apply appropriate symmetric wrapper to matrix types.
 - Others: Wrap in `Symmetric`
 """
 symmetrize(A::Diagonal) = A
+symmetrize(A::SymTridiagonal) = A
 symmetrize(A::Tridiagonal) = SymTridiagonal(A)
 symmetrize(A::AbstractMatrix) = Symmetric(A)
 
