@@ -112,7 +112,7 @@ end
     )
 end
 
-ST_GMRF_1D = Union{ConstantMeshSTGMRF{1}, LinearConditionalGMRF{<:ConstantMeshSTGMRF{1}}}
+const ST_GMRF_1D = ConstantMeshSTGMRF{1}
 
 function Makie.plot!(
         gmrf_fem_st_plot::GMRF_FEM_1D_Spatiotemporal_Plot{<:Tuple{<:ST_GMRF_1D, <:Int}},
