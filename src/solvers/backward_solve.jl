@@ -1,7 +1,7 @@
 using LinearSolve
 using LinearAlgebra
 
-export supports_backward_solve, backward_solve
+export backward_solve
 
 """
     supports_backward_solve(alg)

@@ -2,7 +2,7 @@ using LinearSolve
 using LinearAlgebra
 using SelectedInversion
 
-export supports_selinv, selinv_diag, selinv
+export selinv
 
 """
     supports_selinv(alg)
