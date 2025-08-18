@@ -171,11 +171,13 @@ struct GMRF{T <: Real, PrecisionMap <: Union{LinearMap{T}, AbstractMatrix{T}}, Q
         end
 
         # Set up LinearSolve cache
+        # Configure algorithm with optimal defaults for GMRF operations
+        configured_alg = configure_algorithm(alg)
         # For LinearMaps, we need to convert to matrix for LinearSolve
         precision_matrix = precision isa LinearMap ? to_matrix(precision) : precision
-        # Use appropriate symmetric wrapper for different matrix types
-        prob = LinearProblem(symmetrize(precision_matrix), copy(mean))
-        linsolve_cache = init(prob, alg)
+        # Prepare matrix for LinearSolve based on algorithm requirements
+        prob = LinearProblem(prepare_for_linsolve(precision_matrix, configured_alg), copy(mean))
+        linsolve_cache = init(prob, configured_alg)
 
         return new{T, typeof(precision), typeof(Q_sqrt), typeof(linsolve_cache), typeof(rbmc_strategy)}(mean, nothing, precision, Q_sqrt, linsolve_cache, rbmc_strategy)
     end
@@ -193,9 +195,11 @@ struct GMRF{T <: Real, PrecisionMap <: Union{LinearMap{T}, AbstractMatrix{T}}, Q
             throw(ArgumentError("size mismatch"))
 
         # Set up LinearSolve cache and solve for mean
+        # Configure algorithm with optimal defaults for GMRF operations
+        configured_alg = configure_algorithm(alg)
         precision_matrix = precision isa LinearMap ? to_matrix(precision) : precision
-        prob = LinearProblem(symmetrize(precision_matrix), copy(information.data))
-        linsolve_cache = init(prob, alg)
+        prob = LinearProblem(prepare_for_linsolve(precision_matrix, configured_alg), copy(information.data))
+        linsolve_cache = init(prob, configured_alg)
         mean = solve!(linsolve_cache).u
 
         return new{T, typeof(precision), typeof(Q_sqrt), typeof(linsolve_cache), typeof(rbmc_strategy)}(mean, information.data, precision, Q_sqrt, linsolve_cache, rbmc_strategy)
