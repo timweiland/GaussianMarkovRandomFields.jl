@@ -1,10 +1,1 @@
 include("linearsolve.jl")
-# Legacy solver system removed - now using LinearSolve.jl directly
-# include("solver.jl")
-# include("cholesky_solver.jl")
-# include("cg_solver.jl")
-# include("default_solver.jl")
-# include("pardiso_solver.jl")
-# include("variance/variance_strategy.jl")
-# include("variance/rbmc.jl")
-# include("variance/takahashi.jl")
