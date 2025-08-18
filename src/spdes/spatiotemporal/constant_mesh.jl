@@ -1,7 +1,6 @@
 using LinearMaps, LinearAlgebra, SparseArrays
 
-export ConstantMeshSTGMRF, ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMeshSTGMRF,
-    ImplicitEulerMetadata, ConcreteSTMetadata
+export ConstantMeshSTGMRF, ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMeshSTGMRF
 
 ################################################################################
 #
@@ -51,7 +50,7 @@ discretization. Uses MetaGMRF for clean type structure.
 const ConcreteConstantMeshSTGMRF{D, T, P, G} = MetaGMRF{ConcreteSTMetadata{D}, T, P, G}
 
 # Type aliases for backward compatibility
-const ConstantMeshSTGMRF = Union{ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMeshSTGMRF}
+const ConstantMeshSTGMRF{D} = Union{ImplicitEulerConstantMeshSTGMRF{D}, ConcreteConstantMeshSTGMRF}
 
 # Constructors
 function ImplicitEulerConstantMeshSTGMRF(
@@ -93,24 +92,6 @@ discretization_at_time(x::ConstantMeshSTGMRF, ::Int) = x.metadata.discretization
 
 # Access SSM for ImplicitEuler types
 ssm(x::ImplicitEulerConstantMeshSTGMRF) = x.metadata.ssm
-
-################################################################################
-#
-# Linear conditional ConstantMeshSTGMRF
-#
-################################################################################
-# LinearConditionalGMRF methods temporarily removed - will need updating for new linear_condition approach
-# N_spatial(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}) = ndofs(x.prior.discretization)
-# N_t(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}) = length(x) ÷ N_spatial(x)
-
-# time_means(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}) = make_chunks(mean(x), N_t(x))
-# time_vars(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}) = make_chunks(var(x), N_t(x))
-# time_stds(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}) = make_chunks(std(x), N_t(x))
-# time_rands(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}, rng::AbstractRNG) =
-#     make_chunks(rand(rng, x), N_t(x))
-# discretization_at_time(x::LinearConditionalGMRF{<:ConstantMeshSTGMRF}, ::Int) =
-#     x.prior.discretization
-
 
 function default_preconditioner_strategy(
         x::ConstantMeshSTGMRF,
