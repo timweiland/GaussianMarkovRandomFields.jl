@@ -49,7 +49,7 @@
 
 # ## Building an AR(1) model
 # We begin by loading `GaussianMarkovRandomFields` and `LinearAlgebra`.
-using GaussianMarkovRandomFields, LinearAlgebra
+using GaussianMarkovRandomFields, LinearAlgebra, SparseArrays
 
 # We define a discretization of the real interval $[0, 1]$, and specify
 # some example parameters for the AR(1) model:
@@ -65,9 +65,9 @@ N = length(xs)
 # which unlocks highly efficient linear algebra routines for the underlying
 # computations.
 μ = [ϕ^(i - 1) for i in eachindex(xs)]
-diag = [[Λ₀]; repeat([Λ + ϕ^2], N - 2); [Λ]]
+main_diag = [[Λ₀]; repeat([Λ + ϕ^2], N - 2); [Λ]]
 off_diag = repeat([-ϕ], N - 1)
-Q = SymTridiagonal(diag, off_diag)
+Q = sparse(SymTridiagonal(main_diag, off_diag))
 x = GMRF(μ, Q)
 
 # A GMRF is a multivariate Gaussian, and it's compatible with

@@ -13,7 +13,7 @@
 x_left, x_right = -1.0, 1.0
 Nₓ = 201
 t_start, t_stop = 0.0, 1.0
-Nₜ = 101
+Nₜ = 71
 ts = range(t_start, t_stop, length = Nₜ)
 f_initial = x -> exp(-(x + 0.6)^2 / 0.2^2)
 xs_initial = range(x_left, x_right, length = Nₓ ÷ 2)

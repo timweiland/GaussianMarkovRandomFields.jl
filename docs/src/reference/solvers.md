@@ -2,105 +2,74 @@
 
 Fundamentally, all interesting quantities of GMRFs (samples, marginal variances,
 posterior means, ...) must be computed through **sparse linear algebra**.
-GaussianMarkovRandomFields.jl provides a number of so-called *solvers* which perform the underlying
-computations in different ways and with different trade-offs.
+GaussianMarkovRandomFields.jl uses [LinearSolve.jl](https://github.com/SciML/LinearSolve.jl) as the backend for all linear algebra operations, providing access to a wide range of modern solvers and preconditioners while maintaining a unified interface.
 Our goal is to provide sane defaults that "just work" for most users, while
-still allowing power users to customize the behavior of the solvers.
-Read further to learn about the available solvers and how to use them.
+still allowing power users to customize the behavior through LinearSolve.jl algorithms.
+Read further to learn about the available capabilities and how to use them.
 
-If you don't have time for the details and you're just looking for a
-recommendation, skip to [Choosing a solver](#Choosing-a-solver).
-
-If you're interested in the interface of solvers, skip to [Solver interface](#Solver-interface).
-
-## Cholesky (CHOLMOD)
-[CHOLMOD](https://github.com/DrTimothyAldenDavis/SuiteSparse) is a
-state-of-the-art direct solver for sparse linear systems.
-`CholeskySolver` uses CHOLMOD to compute the sparse Cholesky factorization of
-the precision matrix, which it then leverages to draw samples and compute 
-posterior means.
-Marginal variances are computed using a user-specified variance strategy, which
-defaults to a sampling-based approach.
-
-```@docs
-CholeskySolverBlueprint
-```
+## Direct Methods (Cholesky, LU)
+[CHOLMOD](https://github.com/DrTimothyAldenDavis/SuiteSparse) and other direct solvers are 
+state-of-the-art methods for sparse linear systems.
+LinearSolve.jl automatically selects appropriate direct methods (typically Cholesky for symmetric positive definite systems like GMRF precision matrices) to compute factorizations of the precision matrix, which are then leveraged to draw samples and compute posterior means.
+Marginal variances are computed using selected inversion when available, or RBMC as a fallback.
 
 ## Pardiso
 [Pardiso](https://panua.ch/pardiso/) is a state-of-the-art direct solver for
-sparse linear systems.
-Its main benefit over the `CholeskySolver` is its potential for better
-performance on large-dimensional GMRFs, as well as its highly efficient
-method for marginal variance computation.
+sparse linear systems with excellent performance on large-dimensional GMRFs
+and highly efficient methods for marginal variance computation.
 
-To use this solver, you need to set up and load
-[Pardiso.jl](https://github.com/JuliaSparse/Pardiso.jl).
-The code for our Pardiso solver will then be loaded automatically through
-a package extension.
+To use Pardiso, you need to set up and load [Pardiso.jl](https://github.com/JuliaSparse/Pardiso.jl), then specify `alg=LinearSolve.PardisoJL()` when creating your GMRF:
 
-```@docs
-PardisoGMRFSolverBlueprint
+```julia
+using Pardiso, LinearSolve
+gmrf = GMRF(μ, Q, alg=LinearSolve.PardisoJL())
 ```
 
-## CG
-The Conjugate Gradient (CG) method is an iterative method for solving symmetric
-positive-definite linear systems.
-`CGSolver` uses CG to compute posterior means and draw samples.
+See the [LinearSolve.jl documentation](https://docs.sciml.ai/LinearSolve/stable/solvers/solvers/#LinearSolve.PardisoJL) for more information about PardisoJL algorithm options.
 
-```@docs
-CGSolverBlueprint
+## Iterative Methods (CG, GMRES)
+The Conjugate Gradient (CG) method and other iterative methods are efficient approaches for solving large sparse symmetric positive-definite linear systems.
+LinearSolve.jl provides access to various iterative solvers that can be used for large-scale GMRFs where direct methods become prohibitively expensive.
+
+For symmetric systems like GMRFs, CG-based methods are typically most appropriate:
+
+```julia
+using LinearSolve
+gmrf = GMRF(μ, Q, alg=LinearSolve.KrylovJL_CG())
 ```
 
-## Variance strategies
+## Variance Computation Strategies
 Fundamentally, computing marginal variances of GMRFs is not trivial, as it
 requires computing the diagonal entries of the covariance matrix (which is the
 inverse of the precision matrix).
-The Takahashi recursions (sometimes referred to as a *sparse (partial) inverse*
-method) are a highly accurate and stable method for computing these variances.
-`TakahashiStrategy` uses the Takahashi recursions to compute marginal variances.
-`PardisoSolver` also uses this algorithm internally, but with a highly optimized
-implementation.
 
-`RBMCStrategy` is a sampling-based approach to computing marginal variances.
-It is less accurate than the Takahashi recursions, but can be much faster for
-large GMRFs.
+**Selected Inversion** (including Takahashi recursions) is a highly accurate and stable method for computing these variances when available for the chosen algorithm. This is automatically used when supported.
+
+When selected inversion is not available, the package automatically falls back to **RBMC** (Rao-Blackwellized Monte Carlo), a sampling-based approach that is less accurate but can be much faster for large GMRFs.
 
 ```@docs
-TakahashiStrategy
+AbstractVarianceStrategy
 RBMCStrategy
 BlockRBMCStrategy
 ```
+
+## Advanced Operations
+
+```@docs
+logdet_cov
+selinv
+backward_solve
+```
  
 
-## Choosing a solver
-The default solver uses the `CholeskySolver` for small to medium-sized GMRFs
-and switches to the `CGSolver` for large GRMFs. 
-Similarly, the default variance strategy is `TakahashiStrategy` for small to 
-medium-sized GMRFs and `RBMCStrategy` for large GMRFs.
-See:
-```@docs
-DefaultSolverBlueprint
-```
+## Choosing a Solver
+LinearSolve.jl automatically selects appropriate algorithms based on matrix properties:
+- **Direct methods** (Cholesky, LU) for small to medium-sized GMRFs
+- **Iterative methods** (CG, GMRES) for large sparse GMRFs where direct methods become prohibitively expensive
 
-Indeed, this matches our general recommendations:
-Direct solvers combined with the Takahashi recursions are highly accurate and
-stable and should be used whenever possible.
-However, direct solvers become prohibitively expensive for very large-scale
-GMRFs, both in terms of compute and memory use.
-In these regimes, CG with a good preconditioner may still be a viable option.
+This matches our general recommendations:
+Direct solvers combined with selected inversion are highly accurate and stable and should be used whenever possible.
+However, direct solvers become prohibitively expensive for very large-scale GMRFs, both in terms of compute and memory use.
+In these regimes, iterative methods may still be a viable option.
 
-If you have access to both strong parallel computing resources and a Pardiso
-license, `PardisoGMRFSolver` may be a good fit.
-
-## Solver interface
-```@docs
-AbstractSolver
-AbstractSolverBlueprint
-AbstractVarianceStrategy
-gmrf_precision
-compute_mean
-compute_variance
-compute_rand!
-compute_logdetcov
-infer_solver_blueprint
-```
+If you have access to both strong parallel computing resources and a Pardiso license, `LinearSolve.PardisoJL()` may provide the best performance.

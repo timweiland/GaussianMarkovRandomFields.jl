@@ -5,12 +5,21 @@ AbstractGMRF
 GMRF
 precision_map
 precision_matrix
+InformationVector
+information_vector
+```
+
+## Metadata
+
+```@docs
+MetaGMRF
+GMRFMetadata
 ```
 
 ## Arithmetic
 ```@docs
 condition_on_observations
-LinearConditionalGMRF
+linear_condition
 joint_gmrf
 ```
 
@@ -18,7 +27,6 @@ joint_gmrf
 ### Types
 ```@docs
 AbstractSpatiotemporalGMRF
-ConstantMeshSTGMRF
 ImplicitEulerConstantMeshSTGMRF
 ConcreteConstantMeshSTGMRF
 ```

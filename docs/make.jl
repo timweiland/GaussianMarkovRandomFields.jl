@@ -14,7 +14,6 @@ makedocs(
             "tutorials/autoregressive_models.md",
             "tutorials/spatial_modelling_spdes.md",
             "tutorials/spatiotemporal_modelling.md",
-            "tutorials/autodiff_mcmc.md",
             "tutorials/boundary_conditions.md",
         ],
         "API Reference" => [
@@ -36,12 +35,12 @@ makedocs(
             "Solvers" => "dev-docs/solvers.md",
             "SPDEs" => "dev-docs/spdes.md",
             "Discretizations" => "dev-docs/discretizations.md",
-            "Utilities" => "dev-docs/utils.md",
         ],
     ],
     format = Documenter.HTML(assets = String["assets/citations.css"], collapselevel = 1),
     plugins = [bib],
     modules = [GaussianMarkovRandomFields],
+    checkdocs = :exports,
 )
 
 deploydocs(repo = "github.com/timweiland/GaussianMarkovRandomFields.jl.git")
