@@ -1,7 +1,5 @@
 using LinearSolve
 
-export ensure_factorization!
-
 """
     ensure_factorization!(linsolve)
 
