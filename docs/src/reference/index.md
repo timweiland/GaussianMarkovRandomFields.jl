@@ -4,6 +4,7 @@
 Pages = [
     "gmrfs.md",
     "observation_models.md",
+    "gaussian_approximation.md",
     "spdes.md",
     "discretizations.md",
     "meshes.md",
@@ -11,7 +12,6 @@ Pages = [
     "solvers.md",
     "autoregressive.md",
     "linear_maps.md",
-    "gn_optim.md",
     "preconditioners.md",
     "autodiff.md",
 ]
