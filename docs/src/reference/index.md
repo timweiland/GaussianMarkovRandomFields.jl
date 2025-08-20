@@ -3,6 +3,7 @@
 ```@contents
 Pages = [
     "gmrfs.md",
+    "observation_models.md",
     "spdes.md",
     "discretizations.md",
     "meshes.md",

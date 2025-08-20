@@ -1,0 +1,7 @@
+include("observation_model.jl")
+include("observation_likelihood.jl")
+include("binomial_observations.jl")
+include("exponential_family/base.jl")
+include("composite/composite.jl")
+include("linearly_transformed.jl")
+include("autodiff_likelihood.jl")
