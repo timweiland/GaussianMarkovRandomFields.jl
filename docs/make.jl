@@ -19,6 +19,7 @@ makedocs(
         "API Reference" => [
             "Overview" => "reference/index.md",
             "GMRFs" => "reference/gmrfs.md",
+            "Observation Models" => "reference/observation_models.md",
             "SPDEs" => "reference/spdes.md",
             "Discretizations" => "reference/discretizations.md",
             "Meshes" => "reference/meshes.md",
