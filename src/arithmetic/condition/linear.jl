@@ -5,6 +5,24 @@ export linear_condition
 export condition_on_observations
 
 """
+    prepare_map(Q_prior, x) -> x_converted
+
+Helper function to ensure x is in the same format as Q_prior.
+Uses multiple dispatch to handle AbstractMatrix vs LinearMap cases.
+"""
+# When Q_prior is a matrix, convert to matrix
+prepare_map(::AbstractMatrix, M::AbstractMatrix, ::Int) = M
+prepare_map(::AbstractMatrix, M::UniformScaling, ::Int) = M
+prepare_map(::AbstractMatrix, x::Real, ::Int) = x * I
+prepare_map(::AbstractMatrix, M::LinearMap, ::Int) = to_matrix(M)
+
+# When Q_prior is a LinearMap, convert to LinearMap
+prepare_map(::LinearMap, M::LinearMap, ::Int) = M
+prepare_map(::LinearMap, M::AbstractMatrix, ::Int) = LinearMap(M)
+prepare_map(::LinearMap, M::UniformScaling, n::Int) = LinearMaps.UniformScalingMap(M.λ, n)
+prepare_map(::LinearMap, x::Real, n::Int) = LinearMaps.UniformScalingMap(x, n)
+
+"""
     linear_condition(gmrf::GMRF; A, Q_ϵ, y, b=zeros(size(A, 1)))
 
 Condition a GMRF on linear observations y = A * x + b + ϵ where ϵ ~ N(0, Q_ϵ^(-1)).
@@ -20,20 +38,16 @@ Condition a GMRF on linear observations y = A * x + b + ϵ where ϵ ~ N(0, Q_ϵ^
 A new `GMRF` representing the posterior distribution with updated mean and precision.
 
 # Notes
-This replaces the deprecated `LinearConditionalGMRF` type with a functional approach.
 Uses information vector arithmetic for efficient conditioning without intermediate solves.
 """
 function linear_condition(gmrf::GMRF; A, Q_ϵ, y, b = zeros(size(A, 1)))
-    # Ensure everything is compatible types
-    A = A isa LinearMap ? A : LinearMap(A)
-    if Q_ϵ isa Real
-        Q_ϵ = LinearMaps.UniformScalingMap(Q_ϵ, size(A, 1))
-    elseif !(Q_ϵ isa LinearMap)
-        Q_ϵ = LinearMap(Q_ϵ)
-    end
+    # Ensure A and Q_ϵ are in the same format as the GMRF's precision matrix
+    Q_prior = precision_map(gmrf)
+    A = prepare_map(Q_prior, A, size(Q_prior, 1))
+    Q_ϵ = prepare_map(Q_prior, Q_ϵ, A isa UniformScaling ? size(Q_prior, 1) : size(A, 1))
 
     # Compute posterior precision: Q_posterior = Q_prior + A' * Q_ϵ * A
-    Q_posterior = precision_map(gmrf) + A' * Q_ϵ * A
+    Q_posterior = Q_prior + A' * Q_ϵ * A
 
     # Update information: info_posterior = info_prior + A' * Q_ϵ * (y - b)
     info_posterior = information_vector(gmrf) + A' * (Q_ϵ * (y - b))
@@ -80,7 +94,7 @@ Condition a GMRF `x` on observations `y = A * x + b + ϵ` where `ϵ ~ N(0, Q_ϵ�
 A `GMRF` object representing the conditional GMRF `x | (y = A * x + b + ϵ)`.
 
 # Notes
-This function now delegates to `linear_condition` for improved efficiency.
+This function is deprecated. Use `linear_condition`.
 """
 function condition_on_observations(
         x::GMRF,
@@ -90,10 +104,6 @@ function condition_on_observations(
         b::AbstractVector = zeros(size(A, 1))
         # solver_blueprint parameter removed - no longer needed with LinearSolve
     )
-    # Convert scalar Q_ϵ to UniformScalingMap for compatibility
-    if Q_ϵ isa Real
-        Q_ϵ = LinearMaps.UniformScalingMap(Q_ϵ, size(A, 1))
-    end
     # Delegate to new linear_condition function
     return linear_condition(x; A = A, Q_ϵ = Q_ϵ, y = y, b = b)
 end
