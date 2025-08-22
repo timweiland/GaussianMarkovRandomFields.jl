@@ -21,6 +21,7 @@ makedocs(
             "GMRFs" => "reference/gmrfs.md",
             "Observation Models" => "reference/observation_models.md",
             "Gaussian Approximation" => "reference/gaussian_approximation.md",
+            "Hard Constraints" => "reference/hard_constraints.md",
             "SPDEs" => "reference/spdes.md",
             "Discretizations" => "reference/discretizations.md",
             "Meshes" => "reference/meshes.md",
