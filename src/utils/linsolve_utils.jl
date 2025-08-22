@@ -7,7 +7,9 @@ Prepare matrix A for LinearSolve based on the algorithm type.
 Default implementation uses symmetrize() for proper symmetric handling.
 Specialized methods for algorithms that need raw matrices can override this.
 """
-prepare_for_linsolve(A::AbstractMatrix, alg) = symmetrize(A)
+prepare_for_linsolve(A::AbstractMatrix, _) = symmetrize(A)
+
+prepare_for_linsolve(A::LinearMaps.LinearMap, alg) = prepare_for_linsolve(to_matrix(A), alg)
 
 # Pardiso algorithms need raw sparse matrices, not Symmetric wrappers
 prepare_for_linsolve(A::AbstractMatrix, ::LinearSolve.PardisoJL) = tril(sparse(A))

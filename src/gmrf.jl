@@ -111,7 +111,7 @@ std(d::AbstractGMRF) = sqrt.(var(d))
 #
 #####################
 """
-    GMRF(mean, precision, alg=LinearSolve.DefaultLinearSolver(); Q_sqrt=nothing, rbmc_strategy=RBMCStrategy(1000))
+    GMRF(mean, precision, alg=LinearSolve.DefaultLinearSolver(); Q_sqrt=nothing, rbmc_strategy=RBMCStrategy(1000), linsolve_cache=nothing)
 
 A Gaussian Markov Random Field with mean `mean` and precision matrix `precision`.
 
@@ -121,6 +121,7 @@ A Gaussian Markov Random Field with mean `mean` and precision matrix `precision`
 - `alg`: LinearSolve algorithm to use for linear system solving. Defaults to `LinearSolve.DefaultLinearSolver()`.
 - `Q_sqrt::Union{Nothing, AbstractMatrix}`: Square root of precision matrix Q, used for sampling when algorithm doesn't support backward solve.
 - `rbmc_strategy`: RBMC strategy for marginal variance computation when selected inversion is unavailable. Defaults to `RBMCStrategy(1000)`.
+- `linsolve_cache::Union{Nothing, LinearSolve.LinearCache}`: Existing LinearSolve cache to reuse. If `nothing`, creates a new cache. Useful for iterative algorithms requiring factorization reuse.
 
 # Type Parameters
 - `T<:Real`: The numeric type (e.g., Float64).
@@ -134,10 +135,11 @@ A Gaussian Markov Random Field with mean `mean` and precision matrix `precision`
 - `rbmc_strategy`: RBMC strategy for variance computation fallback.
 
 # Notes
-The LinearSolve cache is constructed automatically and is used to compute means, variances, 
+The LinearSolve cache is constructed automatically (if not provided) and is used to compute means, variances, 
 samples, and other GMRF quantities efficiently. The algorithm choice determines which 
 optimization strategies (selected inversion, backward solve) are available. When selected
 inversion is not supported, marginal variances are computed using the configured RBMC strategy.
+Providing an existing `linsolve_cache` enables factorization reuse in iterative algorithms.
 """
 struct GMRF{T <: Real, PrecisionMap <: Union{LinearMap{T}, AbstractMatrix{T}}, QSqrt, Cache <: LinearSolve.LinearCache, RBMCStrat} <: AbstractGMRF{T, PrecisionMap}
     mean::Vector{T}
@@ -153,7 +155,8 @@ struct GMRF{T <: Real, PrecisionMap <: Union{LinearMap{T}, AbstractMatrix{T}}, Q
             precision::PrecisionMap,
             alg = nothing;
             Q_sqrt = nothing,
-            rbmc_strategy = RBMCStrategy(1000)
+            rbmc_strategy = RBMCStrategy(1000),
+            linsolve_cache = nothing
         ) where {PrecisionMap <: Union{LinearMap, AbstractMatrix}}
         n = length(mean)
         n == size(precision, 1) == size(precision, 2) ||
@@ -171,13 +174,13 @@ struct GMRF{T <: Real, PrecisionMap <: Union{LinearMap{T}, AbstractMatrix{T}}, Q
         end
 
         # Set up LinearSolve cache
-        # Configure algorithm with optimal defaults for GMRF operations
-        configured_alg = configure_algorithm(alg)
-        # For LinearMaps, we need to convert to matrix for LinearSolve
-        precision_matrix = precision isa LinearMap ? to_matrix(precision) : precision
-        # Prepare matrix for LinearSolve based on algorithm requirements
-        prob = LinearProblem(prepare_for_linsolve(precision_matrix, configured_alg), copy(mean))
-        linsolve_cache = init(prob, configured_alg)
+        if linsolve_cache === nothing
+            # Configure algorithm with optimal defaults for GMRF operations
+            configured_alg = configure_algorithm(alg)
+            # Prepare matrix for LinearSolve based on algorithm requirements
+            prob = LinearProblem(prepare_for_linsolve(precision, configured_alg), copy(mean))
+            linsolve_cache = init(prob, configured_alg)
+        end
 
         return new{T, typeof(precision), typeof(Q_sqrt), typeof(linsolve_cache), typeof(rbmc_strategy)}(mean, nothing, precision, Q_sqrt, linsolve_cache, rbmc_strategy)
     end
@@ -188,19 +191,24 @@ struct GMRF{T <: Real, PrecisionMap <: Union{LinearMap{T}, AbstractMatrix{T}}, Q
             precision::PrecisionMap,
             alg = nothing;
             Q_sqrt = nothing,
-            rbmc_strategy = RBMCStrategy(1000)
+            rbmc_strategy = RBMCStrategy(1000),
+            linsolve_cache = nothing
         ) where {T <: Real, PrecisionMap <: Union{LinearMap{T}, AbstractMatrix{T}}}
         n = length(information)
         n == size(precision, 1) == size(precision, 2) ||
             throw(ArgumentError("size mismatch"))
 
         # Set up LinearSolve cache and solve for mean
-        # Configure algorithm with optimal defaults for GMRF operations
-        configured_alg = configure_algorithm(alg)
-        precision_matrix = precision isa LinearMap ? to_matrix(precision) : precision
-        prob = LinearProblem(prepare_for_linsolve(precision_matrix, configured_alg), copy(information.data))
-        linsolve_cache = init(prob, configured_alg)
-        mean = solve!(linsolve_cache).u
+        if linsolve_cache === nothing
+            # Configure algorithm with optimal defaults for GMRF operations
+            configured_alg = configure_algorithm(alg)
+            prob = LinearProblem(prepare_for_linsolve(precision, configured_alg), copy(information.data))
+            linsolve_cache = init(prob, configured_alg)
+        else
+            # Reuse provided cache but update RHS for solving
+            linsolve_cache.b .= information.data
+        end
+        mean = copy(solve!(linsolve_cache).u)
 
         return new{T, typeof(precision), typeof(Q_sqrt), typeof(linsolve_cache), typeof(rbmc_strategy)}(mean, information.data, precision, Q_sqrt, linsolve_cache, rbmc_strategy)
     end
