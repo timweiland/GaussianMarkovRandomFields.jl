@@ -5,6 +5,7 @@ Pages = [
     "gmrfs.md",
     "observation_models.md",
     "gaussian_approximation.md",
+    "hard_constraints.md",
     "spdes.md",
     "discretizations.md",
     "meshes.md",
