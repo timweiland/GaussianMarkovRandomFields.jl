@@ -179,74 +179,18 @@ end
 # FACTORY PATTERN: Make ExponentialFamily callable to create materialized likelihoods
 # =======================================================================================
 
-"""
-    (obs_model::ExponentialFamily{Normal, L})(y; σ, kwargs...) -> NormalLikelihood{L}
-
-Create a materialized Normal likelihood with precomputed hyperparameters.
-
-# Arguments
-- `y`: Observed data
-- `σ`: Standard deviation hyperparameter
-- `kwargs...`: Additional keyword arguments (ignored)
-
-# Returns
-A `NormalLikelihood` with the same link function as the factory model.
-"""
 function (obs_model::ExponentialFamily{Normal, L, I})(y; σ, kwargs...) where {L, I}
     return NormalLikelihood(obs_model.link, Float64.(y), Float64(σ), 1.0 / (σ^2), log(σ), obs_model.indices)
 end
 
-"""
-    (obs_model::ExponentialFamily{Poisson, L})(y; kwargs...) -> PoissonLikelihood{L}
-
-Create a materialized Poisson likelihood.
-
-# Arguments  
-- `y`: Count observations
-- `kwargs...`: Additional keyword arguments (ignored)
-
-# Returns
-A `PoissonLikelihood` with the same link function as the factory model.
-"""
 function (obs_model::ExponentialFamily{Poisson, L, I})(y; kwargs...) where {L, I}
     return PoissonLikelihood(obs_model.link, Int.(y), obs_model.indices)
 end
 
-"""
-    (obs_model::ExponentialFamily{Bernoulli, L})(y; kwargs...) -> BernoulliLikelihood{L}
-
-Create a materialized Bernoulli likelihood.
-
-# Arguments
-- `y`: Binary observations (0 or 1)
-- `kwargs...`: Additional keyword arguments (ignored)
-
-# Returns  
-A `BernoulliLikelihood` with the same link function as the factory model.
-"""
 function (obs_model::ExponentialFamily{Bernoulli, L, I})(y; kwargs...) where {L, I}
     return BernoulliLikelihood(obs_model.link, Int.(y), obs_model.indices)
 end
 
-"""
-    (obs_model::ExponentialFamily{Binomial, L})(y::BinomialObservations; kwargs...) -> BinomialLikelihood{L}
-
-Create a materialized Binomial likelihood from BinomialObservations.
-
-# Arguments
-- `y::BinomialObservations`: Combined successes and trials data
-- `kwargs...`: Additional keyword arguments (ignored)
-
-# Returns
-A `BinomialLikelihood` with the same link function as the factory model.
-
-# Example
-```julia
-# Create BinomialObservations and use with model
-y = BinomialObservations([3, 1, 4], [5, 8, 6])
-obs_lik = obs_model(y)
-```
-"""
 function (obs_model::ExponentialFamily{Binomial, L, I})(y::BinomialObservations; kwargs...) where {L, I}
     return BinomialLikelihood(obs_model.link, successes(y), trials(y), obs_model.indices)
 end

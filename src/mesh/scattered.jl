@@ -1,5 +1,6 @@
 using Gmsh, FerriteGmsh, Ferrite
-using LibGEOS, GeometryBasics, GeoInterface
+using LibGEOS, GeoInterface
+import GeometryBasics
 
 export generate_mesh
 
