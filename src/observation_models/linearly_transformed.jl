@@ -254,7 +254,7 @@ function loghessian(x_full, ltlik::LinearlyTransformedLikelihood)
 
     # Chain rule: A^T * hess_η * A
     # This preserves sparsity patterns efficiently
-    return A' * hess_η * A
+    return Symmetric(A' * hess_η * A)
 end
 
 # =======================================================================================
