@@ -112,3 +112,16 @@ function condition_on_observations(mgmrf::MetaGMRF, args...; kwargs...)
     conditioned_gmrf = condition_on_observations(mgmrf.gmrf, args...; kwargs...)
     return MetaGMRF(conditioned_gmrf, mgmrf.metadata)
 end
+
+# ConstrainedGMRF linear conditioning - apply conditioning to base GMRF then re-constrain
+function linear_condition(constrained_gmrf::ConstrainedGMRF; kwargs...)
+    # Apply linear conditioning to the base GMRF
+    conditioned_base = linear_condition(constrained_gmrf.base_gmrf; kwargs...)
+
+    # Re-apply the same constraints to the conditioned GMRF
+    return ConstrainedGMRF(
+        conditioned_base,
+        constrained_gmrf.constraint_matrix,
+        constrained_gmrf.constraint_vector
+    )
+end
