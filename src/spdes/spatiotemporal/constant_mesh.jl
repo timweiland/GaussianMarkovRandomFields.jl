@@ -101,6 +101,7 @@ function default_preconditioner_strategy(
     return temporal_block_gauss_seidel(Q, block_size)
 end
 
+# COV_EXCL_START
 function Base.show(io::IO, metadata::ImplicitEulerMetadata{D}) where {D}
     return print(io, "ImplicitEulerMetadata{$D}($(metadata.N_spatial) spatial × $(metadata.N_t) time)")
 end
@@ -125,3 +126,4 @@ function Base.show(io::IO, ::MIME"text/plain", metadata::ConcreteSTMetadata{D}) 
     println(io, "  Time points: $(metadata.N_t)")
     return print(io, "  Total size: $(metadata.N_spatial * metadata.N_t)")
 end
+# COV_EXCL_STOP

@@ -215,6 +215,7 @@ function Base.show(io::IO, d::GMRF{T}) where {T}
     return print(io, "GMRF{$T}(n=$(length(d)), alg=$(typeof(d.linsolve_cache.alg)))")
 end
 
+# COV_EXCL_START
 function Base.show(io::IO, ::MIME"text/plain", d::GMRF{T}) where {T}
     println(io, "GMRF{$T} with $(length(d)) variables")
     println(io, "  Algorithm: $(typeof(d.linsolve_cache.alg))")
@@ -225,6 +226,7 @@ function Base.show(io::IO, ::MIME"text/plain", d::GMRF{T}) where {T}
         print(io, "  Q_sqrt: not available")
     end
 end
+# COV_EXCL_STOP
 
 """
     information_vector(d::GMRF)
