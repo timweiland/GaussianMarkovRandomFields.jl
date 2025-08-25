@@ -49,7 +49,7 @@
 
 # ## Building an AR(1) model
 # We begin by loading `GaussianMarkovRandomFields` and `LinearAlgebra`.
-using GaussianMarkovRandomFields, LinearAlgebra
+using GaussianMarkovRandomFields, LinearAlgebra, SparseArrays
 
 # We define a discretization of the real interval $[0, 1]$, and specify
 # some example parameters for the AR(1) model:
@@ -57,17 +57,17 @@ using GaussianMarkovRandomFields, LinearAlgebra
 xs = 0:0.01:1
 N = length(xs)
 ϕ = 0.995
-Λ₀ = 1e6
-Λ = 1e3
+Λ₀ = 1.0e6
+Λ = 1.0e3
 
 # Now we compute the mean and the precision matrix of the joint distribution.
 # We explicitly declare the precision matrix as a symmetric tridiagonal matrix,
 # which unlocks highly efficient linear algebra routines for the underlying
 # computations.
 μ = [ϕ^(i - 1) for i in eachindex(xs)]
-diag = [[Λ₀]; repeat([Λ + ϕ^2], N - 2); [Λ]]
+main_diag = [[Λ₀]; repeat([Λ + ϕ^2], N - 2); [Λ]]
 off_diag = repeat([-ϕ], N - 1)
-Q = SymTridiagonal(diag, off_diag)
+Q = sparse(SymTridiagonal(main_diag, off_diag))
 x = GMRF(μ, Q)
 
 # A GMRF is a multivariate Gaussian, and it's compatible with
@@ -75,7 +75,7 @@ x = GMRF(μ, Q)
 # draw samples as follows:
 using Plots, Distributions
 plot(xs, mean(x), ribbon = 1.96 * std(x), label = "Mean + std")
-for i = 1:3
+for i in 1:3
     plot!(xs, rand(x), fillalpha = 0.3, linestyle = :dash, label = "Sample")
 end
 plot!()
@@ -96,12 +96,12 @@ A = spzeros(2, N)
 A[1, 26] = 1.0
 A[2, 76] = 1.0
 y = [0.85, 0.71]
-Λ_obs = 1e6
+Λ_obs = 1.0e6
 x_cond = condition_on_observations(x, A, Λ_obs, y)
 
 # Indeed, our model now conforms to these observations:
 plot(xs, mean(x_cond), ribbon = 1.96 * std(x_cond), label = "Mean + std")
-for i = 1:3
+for i in 1:3
     plot!(xs, rand(x_cond), fillalpha = 0.3, linestyle = :dash, label = "Sample")
 end
 plot!()
@@ -123,7 +123,7 @@ plot!()
 # immediate neighbors, but also to the neighbors' neighbors (a second-order
 # model).
 W = spzeros(N, N)
-for i = 1:N
+for i in 1:N
     for k in [-2, -1, 1, 2]
         j = i + k
         if 1 <= j <= N
@@ -139,7 +139,7 @@ x_car = generate_car_model(W, 0.9; μ = μ, σ = 0.001)
 
 # Let's take our CAR for a test drive:
 plot(xs, mean(x_car), ribbon = 1.96 * std(x_car), label = "Mean + std")
-for i = 1:3
+for i in 1:3
     plot!(xs, rand(x_car), fillalpha = 0.3, linestyle = :dash, label = "Sample")
 end
 plot!()
@@ -152,10 +152,10 @@ A[1, 1] = 1.0
 A[2, 26] = 1.0
 A[3, 76] = 1.0
 y = [1.0, 0.85, 0.71]
-Λ_obs = 1e6
+Λ_obs = 1.0e6
 x_car_cond = condition_on_observations(x_car, A, Λ_obs, y)
 plot(xs, mean(x_car_cond), ribbon = 1.96 * std(x_car_cond), label = "Mean + std")
-for i = 1:3
+for i in 1:3
     plot!(xs, rand(x_car_cond), fillalpha = 0.3, linestyle = :dash, label = "Sample")
 end
 plot!()

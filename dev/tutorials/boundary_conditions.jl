@@ -1,6 +1,6 @@
 using GaussianMarkovRandomFields, Ferrite
 grid = generate_grid(Line, (50,))
-interpolation = Lagrange{RefLine,1}()
+interpolation = Lagrange{RefLine, 1}()
 quadrature_rule = QuadratureRule{RefLine}(2)
 
 function get_dirichlet_constraint(grid::Ferrite.Grid{1})
@@ -11,7 +11,7 @@ end
 
 dbc = get_dirichlet_constraint(grid)
 
-bcs = [(dbc, 1e-4)] # 1e-4 is the noise in terms of the standard deviation
+bcs = [(dbc, 1.0e-4)] # 1e-4 is the noise in terms of the standard deviation
 
 disc = FEMDiscretization(grid, interpolation, quadrature_rule, [(:u, nothing)], bcs)
 
@@ -27,7 +27,7 @@ function get_periodic_constraint(grid::Ferrite.Grid{1})
     cellidx_right, dofidx_right = collect(grid.facetsets["right"])[1]
 
     temp_dh = DofHandler(grid)
-    add!(temp_dh, :u, Lagrange{RefLine,1}())
+    add!(temp_dh, :u, Lagrange{RefLine, 1}())
     close!(temp_dh)
     cc = CellCache(temp_dh)
     get_dof(cell_idx, dof_idx) = (reinit!(cc, cell_idx); celldofs(cc)[dof_idx])
@@ -39,7 +39,7 @@ end
 
 pbc = get_periodic_constraint(grid)
 
-bcs = [(pbc, 1e-4)]
+bcs = [(pbc, 1.0e-4)]
 disc_periodic =
     FEMDiscretization(grid, interpolation, quadrature_rule, [(:u, nothing)], bcs)
 x_periodic = discretize(matern_spde, disc_periodic)
@@ -65,8 +65,8 @@ ys_ic = exp.(-xs_ic .^ 2 / 0.2^2)
 A_ic = evaluation_matrix(disc, [Tensors.Vec(x) for x in xs_ic])
 A_ic = spatial_to_spatiotemporal(A_ic, 1, N_t)
 
-x_adv_diff_dirichlet = condition_on_observations(x_adv_diff_dirichlet, A_ic, 1e8, ys_ic)
-x_adv_diff_periodic = condition_on_observations(x_adv_diff_periodic, A_ic, 1e8, ys_ic)
+x_adv_diff_dirichlet = condition_on_observations(x_adv_diff_dirichlet, A_ic, 1.0e8, ys_ic)
+x_adv_diff_periodic = condition_on_observations(x_adv_diff_periodic, A_ic, 1.0e8, ys_ic)
 
 plot(x_adv_diff_dirichlet, 1)
 

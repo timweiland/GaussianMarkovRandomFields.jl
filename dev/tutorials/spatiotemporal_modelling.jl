@@ -1,7 +1,7 @@
 x_left, x_right = -1.0, 1.0
 Nₓ = 201
 t_start, t_stop = 0.0, 1.0
-Nₜ = 101
+Nₜ = 71
 ts = range(t_start, t_stop, length = Nₜ)
 f_initial = x -> exp(-(x + 0.6)^2 / 0.2^2)
 xs_initial = range(x_left, x_right, length = Nₓ ÷ 2)
@@ -20,7 +20,7 @@ using GaussianMarkovRandomFields
 using Ferrite
 
 grid = generate_grid(Line, (Nₓ - 1,), Tensors.Vec(x_left), Tensors.Vec(x_right))
-interpolation = Lagrange{RefLine,1}()
+interpolation = Lagrange{RefLine, 1}()
 quadrature_rule = QuadratureRule{RefLine}(2)
 disc = FEMDiscretization(grid, interpolation, quadrature_rule)
 

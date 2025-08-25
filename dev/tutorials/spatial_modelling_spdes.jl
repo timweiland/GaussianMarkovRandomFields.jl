@@ -14,7 +14,7 @@ scatter(x, y, zcolor = zinc)
 
 using Random
 train_idcs = randsubseq(1:size(df, 1), 0.85)
-test_idcs = [i for i = 1:size(df, 1) if isempty(searchsorted(train_idcs, i))]
+test_idcs = [i for i in 1:size(df, 1) if isempty(searchsorted(train_idcs, i))]
 X = [x y]
 X_train = X[train_idcs, :]
 X_test = X[test_idcs, :]
@@ -27,7 +27,7 @@ points = zip(x, y)
 grid = generate_mesh(points, 600.0, 100.0, save_path = "meuse.msh")
 
 using Ferrite
-ip = Lagrange{RefTriangle,1}()
+ip = Lagrange{RefTriangle, 1}()
 qr = QuadratureRule{RefTriangle}(2)
 disc = FEMDiscretization(grid, ip, qr)
 
@@ -36,8 +36,8 @@ u_matern = discretize(spde, disc)
 
 Λ_obs = 10.0
 A_train =
-    evaluation_matrix(disc, [Tensors.Vec(X_train[i, :]...) for i = 1:size(X_train, 1)])
-A_test = evaluation_matrix(disc, [Tensors.Vec(X_test[i, :]...) for i = 1:size(X_test, 1)])
+    evaluation_matrix(disc, [Tensors.Vec(X_train[i, :]...) for i in 1:size(X_train, 1)])
+A_test = evaluation_matrix(disc, [Tensors.Vec(X_test[i, :]...) for i in 1:size(X_test, 1)])
 u_cond = condition_on_observations(u_matern, A_train, Λ_obs, y_train)
 
 rmse = (a, b) -> sqrt(mean((a .- b) .^ 2))
