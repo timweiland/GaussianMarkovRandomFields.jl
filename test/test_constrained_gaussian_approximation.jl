@@ -24,6 +24,38 @@ using Distributions
         @test norm(mean(result) - mean(prior_constrained)) > 0.01  # Should move from prior
     end
 
+    @testset "Indexed Normal observations" begin
+        # Test ConstrainedGMRF with indexed Normal observations (conjugate case)
+        obs_model = ExponentialFamily(Normal, indices = [1, 3])  # Observe only components 1 and 3
+        y = [0.3, -0.2]
+        obs_lik = obs_model(y; σ = 0.5)
+
+        result = gaussian_approximation(prior_constrained, obs_lik)
+
+        @test result isa ConstrainedGMRF
+        @test sum(mean(result)) ≈ 0.0 atol = 1.0e-10  # Constraint still satisfied
+        # Components 2 and 4 should be less affected since they weren't observed
+        posterior_mean = mean(result)
+        @test abs(posterior_mean[2]) < abs(posterior_mean[1])  # Component 2 less affected
+        @test abs(posterior_mean[4]) < abs(posterior_mean[3])  # Component 4 less affected
+    end
+
+    @testset "LinearlyTransformed Normal observations" begin
+        # Test ConstrainedGMRF with linearly transformed Normal observations (conjugate case)
+        A_obs = sparse([1.0 0.5 0.0 0.2; 0.0 1.0 -0.3 0.1])  # 2x4 design matrix
+        y = [0.8, -0.3]
+
+        obs_model = ExponentialFamily(Normal)
+        base_lik = obs_model(y; σ = 0.4)
+        obs_lik = LinearlyTransformedLikelihood(base_lik, A_obs)
+
+        result = gaussian_approximation(prior_constrained, obs_lik)
+
+        @test result isa ConstrainedGMRF
+        @test sum(mean(result)) ≈ 0.0 atol = 1.0e-10  # Constraint still satisfied
+        @test norm(mean(result) - mean(prior_constrained)) > 0.01  # Should move from prior
+    end
+
     @testset "Bernoulli observations" begin
         obs_model = ExponentialFamily(Bernoulli)
         y = [1, 0, 1, 0]
