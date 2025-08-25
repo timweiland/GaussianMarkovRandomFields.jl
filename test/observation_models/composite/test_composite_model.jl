@@ -9,6 +9,9 @@ using Distributions: Normal, Poisson
         composite_model = CompositeObservationModel((gaussian_model, poisson_model))
         @test composite_model isa CompositeObservationModel
         @test length(composite_model.components) == 2
+
+        # Test empty constructor should error
+        @test_throws ArgumentError CompositeObservationModel(())
     end
 
     @testset "Factory pattern - callable interface" begin
