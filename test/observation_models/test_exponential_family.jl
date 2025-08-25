@@ -2,6 +2,10 @@ using Distributions
 using ForwardDiff
 using LinearAlgebra
 using StatsFuns
+using Random
+
+# Define test RNG
+const test_rng = MersenneTwister(123)
 
 # Helper function to test gradient and hessian against ForwardDiff using new API
 function test_against_autodiff(obs_lik, η)
@@ -285,6 +289,125 @@ end
                     @test Matrix(hess_indexed) ≈ hess_fd rtol = 1.0e-8
                 end
             end
+        end
+    end
+
+    @testset "Data Distribution Interface" begin
+        # Test data_distribution function for all families
+        @testset "Normal data distribution" begin
+            model = ExponentialFamily(Normal)
+            x = [0.5, -0.2, 1.1]
+            θ_named = (σ = 0.8,)
+
+            dist = data_distribution(model, x, θ_named)
+            @test dist isa Distribution
+            @test length(dist) == 3
+
+            # Sample from distribution
+            y = rand(test_rng, dist)
+            @test length(y) == 3
+        end
+
+        @testset "Poisson data distribution" begin
+            model = ExponentialFamily(Poisson)
+            x = [0.5, 1.2, -0.1]  # Log scale
+            θ_named = NamedTuple()
+
+            dist = data_distribution(model, x, θ_named)
+            @test dist isa Distribution
+            @test length(dist) == 3
+
+            # Sample from distribution
+            y = rand(test_rng, dist)
+            @test length(y) == 3
+            @test all(y .>= 0)  # Count data
+        end
+
+        @testset "Bernoulli data distribution" begin
+            model = ExponentialFamily(Bernoulli)
+            x = [0.0, 1.5, -0.8]  # Logit scale
+            θ_named = NamedTuple()
+
+            dist = data_distribution(model, x, θ_named)
+            @test dist isa Distribution
+            @test length(dist) == 3
+
+            # Sample from distribution
+            y = rand(test_rng, dist)
+            @test length(y) == 3
+            @test all(y .∈ Ref([0, 1]))  # Binary data
+        end
+
+        @testset "Binomial data distribution" begin
+            model = ExponentialFamily(Binomial)
+            x = [0.2, -0.5, 1.0]  # Logit scale
+            θ_named = (n = 10,)
+
+            dist = data_distribution(model, x, θ_named)
+            @test dist isa Distribution
+            @test length(dist) == 3
+
+            # Sample from distribution
+            y = rand(test_rng, dist)
+            @test length(y) == 3
+            @test all(0 .<= y .<= 10)  # Count data bounded by n
+        end
+    end
+
+    @testset "Hyperparameters Interface" begin
+        # Test hyperparameters function for families not covered elsewhere
+        @testset "Bernoulli hyperparameters" begin
+            model = ExponentialFamily(Bernoulli)
+            @test hyperparameters(model) == ()
+        end
+
+        @testset "Binomial hyperparameters" begin
+            model = ExponentialFamily(Binomial)
+            @test hyperparameters(model) == ()
+        end
+    end
+
+    @testset "Latent Dimension Interface" begin
+        # Test latent_dimension function
+        model = ExponentialFamily(Normal)
+        y = [1.0, 2.0, 3.0, 4.0]
+        @test latent_dimension(model, y) == 4
+
+        # Test with different observation lengths
+        y_short = [1.0, 2.0]
+        @test latent_dimension(model, y_short) == 2
+    end
+
+    @testset "Random Sampling Interface" begin
+        # Test Random.rand method for ExponentialFamily
+        @testset "Normal sampling" begin
+            model = ExponentialFamily(Normal)
+            x = [0.5, -0.2, 1.1]
+            θ_named = (σ = 0.8,)
+
+            y = rand(test_rng, model; x = x, θ_named = θ_named)
+            @test length(y) == 3
+            @test all(isfinite, y)
+        end
+
+        @testset "Poisson sampling" begin
+            model = ExponentialFamily(Poisson)
+            x = [0.5, 1.2, -0.1]  # Log scale
+            θ_named = NamedTuple()
+
+            y = rand(test_rng, model; x = x, θ_named = θ_named)
+            @test length(y) == 3
+            @test all(y .>= 0)  # Count data
+        end
+
+        @testset "Bernoulli sampling" begin
+            model = ExponentialFamily(Bernoulli)
+            x = [0.0, 1.5, -0.8]  # Logit scale
+            θ_named = NamedTuple()
+
+            y = rand(test_rng, model; x = x, θ_named = θ_named)
+            @test length(y) == 3
+            @test all(y .∈ Ref([0, 1]))  # Binary data
         end
     end
 end
