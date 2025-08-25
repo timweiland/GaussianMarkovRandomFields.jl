@@ -70,6 +70,9 @@ struct LinearlyTransformedObservationModel{M <: ObservationModel, A} <: Observat
         if size(design_matrix, 2) == 0
             error("Design matrix must have at least one column (latent component)")
         end
+        if design_matrix isa Matrix
+            @warn "Received a dense design matrix. This can lead to major performance bottlenecks!"
+        end
 
         return new{M, A}(base_model, design_matrix)
     end
