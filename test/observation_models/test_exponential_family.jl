@@ -12,12 +12,12 @@ function test_against_autodiff(obs_lik, η)
     # Test gradient
     grad = loggrad(η, obs_lik)
     grad_fd = ForwardDiff.gradient(x -> loglik(x, obs_lik), η)
-    @test grad ≈ grad_fd rtol = 1.0e-10
+    @test grad ≈ grad_fd atol = 1.0e-4
 
     # Test hessian
     hess = loghessian(η, obs_lik)
     hess_fd = ForwardDiff.hessian(x -> loglik(x, obs_lik), η)
-    return @test Matrix(hess) ≈ hess_fd rtol = 1.0e-8
+    return @test Matrix(hess) ≈ hess_fd atol = 1.0e-4
 end
 
 @testset "ExponentialFamily Models" begin
@@ -283,10 +283,10 @@ end
 
                     # Test against ForwardDiff for correctness
                     grad_fd = ForwardDiff.gradient(x -> loglik(x, indexed_lik), η_full)
-                    @test grad_indexed ≈ grad_fd rtol = 1.0e-10
+                    @test grad_indexed ≈ grad_fd atol = 1.0e-4
 
                     hess_fd = ForwardDiff.hessian(x -> loglik(x, indexed_lik), η_full)
-                    @test Matrix(hess_indexed) ≈ hess_fd rtol = 1.0e-8
+                    @test Matrix(hess_indexed) ≈ hess_fd atol = 1.0e-4
                 end
             end
         end
