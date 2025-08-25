@@ -83,6 +83,7 @@ function Base.iterate(co::CompositeObservations, state = (1, 1))
     return (value, next_state)
 end
 
+# COV_EXCL_START
 # Show methods for nice display
 function Base.show(io::IO, co::CompositeObservations)
     n_components = length(co.components)
@@ -106,3 +107,4 @@ function Base.show(io::IO, co::CompositeObservations)
 end
 
 Base.show(io::IO, ::MIME"text/plain", co::CompositeObservations) = show(io, co)
+# COV_EXCL_STOP

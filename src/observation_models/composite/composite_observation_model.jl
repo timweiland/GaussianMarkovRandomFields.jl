@@ -67,6 +67,7 @@ function (composite_model::CompositeObservationModel)(y::CompositeObservations; 
     return CompositeLikelihood(component_likelihoods)
 end
 
+# COV_EXCL_START
 # Show methods for nice display
 function Base.show(io::IO, model::CompositeObservationModel)
     n_components = length(model.components)
@@ -87,3 +88,4 @@ function Base.show(io::IO, lik::CompositeLikelihood)
     end
     return
 end
+# COV_EXCL_STOP
