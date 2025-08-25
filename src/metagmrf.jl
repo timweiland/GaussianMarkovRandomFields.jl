@@ -68,6 +68,7 @@ sqmahal!(r::AbstractVector, mgmrf::MetaGMRF, x::AbstractVector) = sqmahal!(r, mg
 gradlogpdf(mgmrf::MetaGMRF, x::AbstractVector) = gradlogpdf(mgmrf.gmrf, x)
 
 # Show methods for better UX
+# COV_EXCL_START
 function Base.show(io::IO, mgmrf::MetaGMRF{M}) where {M}
     return print(io, "MetaGMRF{", nameof(M), "}(", mgmrf.gmrf, ")")
 end
@@ -77,3 +78,4 @@ function Base.show(io::IO, ::MIME"text/plain", mgmrf::MetaGMRF{M}) where {M}
     println(io, "  Inner GMRF: ", mgmrf.gmrf)
     return print(io, "  Metadata: ", mgmrf.metadata)
 end
+# COV_EXCL_STOP

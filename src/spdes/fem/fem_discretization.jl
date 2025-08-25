@@ -195,6 +195,7 @@ function node_selection_matrix(f::FEMDiscretization, node_ids; field = :default)
 end
 
 
+# COV_EXCL_START
 function Base.show(io::IO, discretization::FEMDiscretization)
     println(io, "FEMDiscretization")
     println(io, "  grid: ", repr(MIME("text/plain"), discretization.grid))
@@ -206,3 +207,4 @@ function Base.show(io::IO, discretization::FEMDiscretization)
         length(discretization.constraint_handler.prescribed_dofs),
     )
 end
+# COV_EXCL_STOP
