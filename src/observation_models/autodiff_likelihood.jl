@@ -253,6 +253,7 @@ autodiff_hessian_prep(obs_lik::AutoDiffLikelihood) = obs_lik.hess_prep
 # PRETTY PRINTING
 # =======================================================================================
 
+# COV_EXCL_START
 function Base.show(io::IO, obs_model::AutoDiffObservationModel)
     func_name = string(obs_model.loglik_func)
     # Try to extract a cleaner function name if possible
@@ -284,3 +285,4 @@ function Base.show(io::IO, obs_lik::AutoDiffLikelihood)
     print(io, ", hess_backend=", Base.typename(typeof(obs_lik.hess_backend)).wrapper)
     return print(io, ")")
 end
+# COV_EXCL_STOP
