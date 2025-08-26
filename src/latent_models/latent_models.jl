@@ -1,4 +1,3 @@
 include("latent_model.jl")
 include("ar1.jl")
-
-export LatentModel, AR1Model
+include("rw1.jl")
