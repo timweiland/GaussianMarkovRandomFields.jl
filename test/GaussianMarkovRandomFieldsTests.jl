@@ -33,6 +33,7 @@ include("gaussian_approximation/runtests.jl")
 include("test_mesh_utils.jl")
 include("spatiotemporal/test_advection_diffusion.jl")
 include("autoregressive/test_car.jl")
+include("latent_models/test_latent_models.jl")
 include("autodiff/runtests.jl")
 
 @testset "Code quality (Aqua.jl)" begin
