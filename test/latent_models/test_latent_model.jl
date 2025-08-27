@@ -1,5 +1,4 @@
 using GaussianMarkovRandomFields
-using Test
 using LinearAlgebra
 
 
@@ -17,6 +16,8 @@ end
     @test_throws ErrorException precision_matrix(dummy; τ = 1.0)
     @test_throws ErrorException mean(dummy; τ = 1.0)
     @test_throws ErrorException constraints(dummy; τ = 1.0)
+    @test_throws ErrorException model_name(dummy)
+    @test_throws ErrorException Base.length(dummy)
 end
 
 @testset "LatentModel Call Interface" begin

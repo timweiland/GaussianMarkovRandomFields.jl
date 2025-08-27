@@ -1,5 +1,4 @@
 using GaussianMarkovRandomFields
-using Test
 using LinearAlgebra
 
 @testset "AR1Model" begin

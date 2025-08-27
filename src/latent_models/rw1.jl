@@ -48,6 +48,10 @@ struct RW1Model <: LatentModel
     end
 end
 
+function Base.length(model::RW1Model)
+    return model.n
+end
+
 function hyperparameters(model::RW1Model)
     return (τ = Real,)
 end
@@ -95,6 +99,10 @@ function constraints(model::RW1Model; kwargs...)
     A = ones(1, n)  # 1×n matrix
     e = [0.0]       # Constraint vector
     return (A, e)
+end
+
+function model_name(::RW1Model)
+    return :rw1
 end
 
 # The (model::LatentModel)(; kwargs...) method is inherited from the abstract type
