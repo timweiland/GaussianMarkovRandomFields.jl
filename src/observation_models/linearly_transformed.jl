@@ -112,21 +112,6 @@ end
 # FACTORY PATTERN: Make LinearlyTransformedObservationModel callable
 # =======================================================================================
 
-"""
-    (ltom::LinearlyTransformedObservationModel)(y; kwargs...) -> LinearlyTransformedLikelihood
-
-Factory method to create materialized LinearlyTransformedLikelihood.
-
-Delegates hyperparameter handling to the base model, then wraps the result 
-with the design matrix.
-
-# Arguments
-- `y`: Observed data
-- `kwargs...`: Hyperparameters passed through to base model
-
-# Returns
-- `LinearlyTransformedLikelihood`: Materialized likelihood ready for fast evaluation
-"""
 function (ltom::LinearlyTransformedObservationModel)(y; kwargs...)
     # Create materialized base likelihood
     base_likelihood = ltom.base_model(y; kwargs...)
@@ -139,114 +124,24 @@ end
 # HYPERPARAMETER INTERFACE DELEGATION
 # =======================================================================================
 
-"""
-    hyperparameters(ltom::LinearlyTransformedObservationModel) -> Tuple{Vararg{Symbol}}
-
-Return required hyperparameters by delegating to the base model.
-
-The design matrix introduces no new hyperparameters - all parameters come from 
-the base observation model.
-"""
 hyperparameters(ltom::LinearlyTransformedObservationModel) = hyperparameters(ltom.base_model)
-
-"""
-    latent_dimension(ltom::LinearlyTransformedObservationModel, y::AbstractVector) -> Int
-
-Return the latent field dimension for a linearly transformed observation model.
-
-The latent dimension is the number of columns in the design matrix, representing
-the dimension of the full latent field (not the linear predictors).
-"""
 latent_dimension(ltom::LinearlyTransformedObservationModel, y::AbstractVector) = size(ltom.design_matrix, 2)
 
 # =======================================================================================
 # CORE LIKELIHOOD EVALUATION METHODS
 # =======================================================================================
 
-"""
-    loglik(x_full, ltlik::LinearlyTransformedLikelihood) -> Float64
-
-Evaluate log-likelihood for materialized LinearlyTransformedLikelihood.
-
-This is the performance-critical method used in optimization loops. It applies the 
-linear transformation η = A * x_full and delegates to the base likelihood.
-
-# Arguments
-- `x_full`: Full latent field vector (length: n_latent_components)
-- `ltlik`: MaterializedLinearlyTransformedLikelihood instance  
-
-# Returns
-- `Float64`: Log-likelihood value
-
-# Mathematical Details
-Computes: log p(y | η, θ) where η = A * x_full
-"""
 function loglik(x_full, ltlik::LinearlyTransformedLikelihood)
     η = ltlik.design_matrix * x_full
     return loglik(η, ltlik.base_likelihood)
 end
 
-"""
-    loggrad(x_full, ltlik::LinearlyTransformedLikelihood) -> Vector{Float64}
-
-Compute gradient of log-likelihood with respect to full latent field using chain rule.
-
-Applies the chain rule: ∇_{x_full} ℓ = A^T ∇_η ℓ where A is the design matrix
-and ∇_η ℓ is the gradient computed by the base likelihood.
-
-# Arguments
-- `x_full`: Full latent field vector (length: n_latent_components)
-- `ltlik`: MaterializedLinearlyTransformedLikelihood instance
-
-# Returns
-- `Vector{Float64}`: Gradient vector of same length as x_full
-
-# Mathematical Details
-1. Transform: η = A * x_full
-2. Compute base gradient: grad_η = ∇_η log p(y | η, θ)  
-3. Apply chain rule: grad_x = A^T * grad_η
-
-# Performance Notes
-- Preserves sparsity if A is sparse
-- Efficiently handles both dense and sparse design matrices
-- Reuses optimized gradient computations from base likelihood
-"""
 function loggrad(x_full, ltlik::LinearlyTransformedLikelihood)
     η = ltlik.design_matrix * x_full
     grad_η = loggrad(η, ltlik.base_likelihood)
     return ltlik.design_matrix' * grad_η  # Chain rule: A^T * grad_η
 end
 
-"""
-    loghessian(x_full, ltlik::LinearlyTransformedLikelihood) -> AbstractMatrix{Float64}
-
-Compute Hessian of log-likelihood with respect to full latent field using chain rule.
-
-Applies the chain rule for Hessians: ∇²_{x_full} ℓ = A^T ∇²_η ℓ A where A is the 
-design matrix and ∇²_η ℓ is the Hessian computed by the base likelihood.
-
-# Arguments
-- `x_full`: Full latent field vector (length: n_latent_components)
-- `ltlik`: MaterializedLinearlyTransformedLikelihood instance
-
-# Returns
-- `AbstractMatrix{Float64}`: Hessian matrix of size (n_latent_components, n_latent_components)
-
-# Mathematical Details
-1. Transform: η = A * x_full
-2. Compute base Hessian: hess_η = ∇²_η log p(y | η, θ)
-3. Apply chain rule: hess_x = A^T * hess_η * A
-
-# Performance Notes
-- **Sparsity preservation**: If A and hess_η are sparse, result will be sparse
-- **Efficient sandwich computation**: Uses optimized matrix multiplication
-- **Memory scaling**: Result size is (n_latent, n_latent), larger than base (n_obs, n_obs)
-- **Fill-in warning**: A^T * hess_η * A can create new non-zeros even if inputs are sparse
-
-# Common Case Optimization
-For diagonal base Hessians (common with canonical links), the computation
-A^T * Diagonal(d) * A can be computed efficiently without forming the full diagonal matrix.
-"""
 function loghessian(x_full, ltlik::LinearlyTransformedLikelihood)
     η = ltlik.design_matrix * x_full
     hess_η = loghessian(η, ltlik.base_likelihood)
@@ -261,35 +156,6 @@ end
 # SAMPLING INTERFACE
 # =======================================================================================
 
-"""
-    Random.rand(rng::AbstractRNG, ltom::LinearlyTransformedObservationModel; x_full, θ_named) -> Vector
-
-Sample observations from the LinearlyTransformedObservationModel.
-
-Transforms the full latent field to linear predictors η = A * x_full, then 
-delegates sampling to the base observation model.
-
-# Arguments
-- `rng`: Random number generator
-- `ltom`: LinearlyTransformedObservationModel instance
-- `x_full`: Full latent field vector (keyword argument)
-- `θ_named`: Named tuple of hyperparameters (keyword argument)
-
-# Returns
-- `Vector`: Sampled observations of length n_observations
-
-# Mathematical Details
-1. Transform latent field: η = A * x_full
-2. Sample from base model: y ~ base_model(η, θ_named)
-
-# Usage
-```julia
-ltom = LinearlyTransformedObservationModel(base_model, design_matrix)
-x_full = [β₀, β₁, u₁, u₂, u₃]  # Full latent field
-θ_named = (σ = 1.2,)            # Hyperparameters
-y = rand(ltom; x_full=x_full, θ_named=θ_named)
-```
-"""
 function Random.rand(rng::AbstractRNG, ltom::LinearlyTransformedObservationModel; x_full, θ_named)
     η = ltom.design_matrix * x_full
     return Random.rand(rng, ltom.base_model; x = η, θ_named = θ_named)
