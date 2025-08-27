@@ -42,6 +42,10 @@ struct IIDModel <: LatentModel
     end
 end
 
+function Base.length(model::IIDModel)
+    return model.n
+end
+
 function hyperparameters(model::IIDModel)
     return (τ = Real,)
 end
@@ -67,6 +71,10 @@ end
 
 function constraints(model::IIDModel; kwargs...)
     return nothing  # IID has no constraints
+end
+
+function model_name(::IIDModel)
+    return :iid
 end
 
 # The (model::LatentModel)(; kwargs...) method is inherited from the abstract type

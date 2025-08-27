@@ -43,6 +43,10 @@ struct AR1Model <: LatentModel
     end
 end
 
+function Base.length(model::AR1Model)
+    return model.n
+end
+
 function hyperparameters(model::AR1Model)
     return (τ = Real, ρ = Real)
 end
@@ -85,6 +89,10 @@ end
 
 function constraints(model::AR1Model; kwargs...)
     return nothing  # AR1 has no constraints
+end
+
+function model_name(::AR1Model)
+    return :ar1
 end
 
 # The (model::LatentModel)(; kwargs...) method is inherited from the abstract type

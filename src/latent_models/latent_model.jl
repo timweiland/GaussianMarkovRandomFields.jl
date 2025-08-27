@@ -1,4 +1,4 @@
-export LatentModel, hyperparameters, precision_matrix, mean, constraints
+export LatentModel, hyperparameters, precision_matrix, mean, constraints, model_name
 
 """
     LatentModel
@@ -16,10 +16,12 @@ AR1, RW1, and other temporal/spatial models by specifying:
 # Interface
 
 Each concrete subtype must implement:
+- `length(model)`: Return the size/dimension of the latent process
 - `hyperparameters(model)`: Return a NamedTuple describing the hyperparameters
-- `precision(model; kwargs...)`: Construct precision matrix from hyperparameter values
+- `precision_matrix(model; kwargs...)`: Construct precision matrix from hyperparameter values
 - `mean(model; kwargs...)`: Construct mean vector from hyperparameter values  
 - `constraints(model; kwargs...)`: Return constraint information or `nothing`
+- `model_name(model)`: Return a Symbol representing the preferred name for this model type
 - `(model)(; kwargs...)`: Instantiate a concrete GMRF from hyperparameter values
 
 # Usage
@@ -36,6 +38,18 @@ gmrf = model(τ=2.0, ρ=0.8)  # Returns GMRF or ConstrainedGMRF
 ```
 """
 abstract type LatentModel end
+
+"""
+    Base.length(model::LatentModel)
+
+Return the size/dimension of the latent process.
+
+# Returns
+An integer representing the number of latent variables in the model.
+"""
+function Base.length(model::LatentModel)
+    error("length not implemented for $(typeof(model))")
+end
 
 """
     hyperparameters(model::LatentModel)
@@ -96,6 +110,21 @@ constraint matrix and `e` is the constraint vector such that `Ax = e`.
 """
 function constraints(model::LatentModel; kwargs...)
     error("constraints not implemented for $(typeof(model))")
+end
+
+"""
+    model_name(model::LatentModel)
+
+Return a Symbol representing the preferred name for this model type.
+
+This name is used for parameter prefixing in CombinedModel to avoid conflicts.
+For example, if two models both have a τ parameter, they become τ_ar1, τ_besag, etc.
+
+# Returns
+A Symbol that will be used as the suffix in parameter names.
+"""
+function model_name(model::LatentModel)
+    error("model_name not implemented for $(typeof(model))")
 end
 
 """

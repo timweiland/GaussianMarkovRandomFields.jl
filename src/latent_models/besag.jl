@@ -70,6 +70,10 @@ struct BesagModel{M <: AbstractMatrix} <: LatentModel
     end
 end
 
+function Base.length(model::BesagModel)
+    return size(model.adjacency, 1)
+end
+
 function hyperparameters(model::BesagModel)
     return (τ = Real,)
 end
@@ -105,6 +109,10 @@ function constraints(model::BesagModel; kwargs...)
     A = ones(1, n)  # 1×n matrix
     e = [0.0]       # Constraint vector
     return (A, e)
+end
+
+function model_name(::BesagModel)
+    return :besag
 end
 
 # The (model::LatentModel)(; kwargs...) method is inherited from the abstract type
