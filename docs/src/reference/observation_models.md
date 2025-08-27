@@ -226,7 +226,7 @@ ll = loglik(x, obs_lik)
 ```@docs
 ObservationModel
 ObservationLikelihood
-hyperparameters
+hyperparameters(::ObservationModel)
 latent_dimension
 loglik
 loggrad 

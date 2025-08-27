@@ -19,6 +19,7 @@ makedocs(
         "API Reference" => [
             "Overview" => "reference/index.md",
             "GMRFs" => "reference/gmrfs.md",
+            "Latent Models" => "reference/latent_models.md",
             "Observation Models" => "reference/observation_models.md",
             "Gaussian Approximation" => "reference/gaussian_approximation.md",
             "Hard Constraints" => "reference/hard_constraints.md",

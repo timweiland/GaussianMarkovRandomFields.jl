@@ -3,6 +3,7 @@
 ```@contents
 Pages = [
     "gmrfs.md",
+    "latent_models.md",
     "observation_models.md",
     "gaussian_approximation.md",
     "hard_constraints.md",
