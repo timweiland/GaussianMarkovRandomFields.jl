@@ -1,47 +1,51 @@
-# GaussianMarkovRandomFields.jl
+```@raw html
+---
+layout: home
 
-*Gaussian Markov Random Fields in Julia.*
+hero:
+  name: "GMRFs in Julia"
+  text: "Fast and Flexible Latent Gaussian Modelling"
+  tagline: "Clean syntax, fast computations. Powered by the Julia ecosystem."
+  image:
+    src: /assets/logo.svg
+    alt: "GaussianMarkovRandomFields.jl"
+  actions:
+    - theme: brand
+      text: "Get Started"
+      link: /tutorials/
+    - theme: alt
+      text: "View on GitHub"
+      link: https://github.com/timweiland/GaussianMarkovRandomFields.jl
+    - theme: alt  
+      text: "API Reference"
+      link: /reference/
 
-## Introduction
-Gaussian Markov Random Fields (GMRFs) are Gaussian distributions with sparse
-precision (inverse covariance) matrices.
-GaussianMarkovRandomFields.jl provides utilities for working with GMRFs in Julia.
-The goal is to enable **flexible** and **efficient** Bayesian inference from
-GMRFs, powered by sparse linear algebra.
-
-In particular, we support the creation of GMRFs through finite element method
-discretizations of stochastic partial differential equations (SPDEs).
-This unlocks efficient GMRF-based approximations to commonly used Gaussian
-process priors.
-Furthermore, the expressive power of SPDEs allows for flexible, problem-tailored
-priors.
-
-To get started with GaussianMarkovRandomFields.jl, consider going through the [Tutorials](@ref).
-
-## Installation
-GaussianMarkovRandomFields.jl can be installed via its GitHub repo from the Pkg REPL:
-
+features:
+  - title: "⚡ High Performance"
+    details: "Leverages sparse matrix structures for fast computations, enabled by LinearSolve.jl and SelectedInversion.jl."
+  - title: "📊 Smart Observation Models"
+    details: "Built-in exponential family support. Sparse autodiff makes it easy to define your own likelihoods."
+  - title: "🎯 Ready-to-Use Latent Models"
+    details: "AR1, RW1, Besag, ... out-of-the-box. Combine them seamlessly to build complex hierarchical structures."
+  - title: "🔬 SPDE Discretizations"
+    details: "Model with a GP, compute with a GMRF. The SPDE approach makes it possible."
+  - title: "🧮 Solver Variety"
+    details: "CHOLMOD, Pardiso, Krylov methods... Your choice - we make it work."
+  - title: "🔗 Composable Design"
+    details: "Mix and match components: combine latent models, stack observation models, chain transformations - everything just works together."
+---
 ```
-pkg> add https://github.com/timweiland/GaussianMarkovRandomFields.jl
-```
 
-Afterwards, you may load the package using
+## What are Gaussian Markov Random Fields?
+
+Gaussian Markov Random Fields (GMRFs) are Gaussian distributions with sparse precision (inverse covariance) matrices. This sparsity structure makes them computationally efficient for large-scale problems while maintaining the expressiveness needed for complex spatial and temporal modeling.
+
+## Quick Start
+
+Install the package:
 
 ```julia
+using Pkg
+Pkg.add("GaussianMarkovRandomFields")
 using GaussianMarkovRandomFields
 ```
-
-You're good to go!
-
-!!! info
-    While a fair amount of time was spent on this documentation, it is far from
-    perfect. 
-    If you spot parts of the documentation that you find confusing or that are
-    incomplete, please open an issue or a pull request.
-    Your help is much appreciated!
-
-!!! tip
-    Missing a feature?
-    Let us know!
-    If you're interested in contributing, that's even better!
-    Check our contribution guidelines for assistance.
