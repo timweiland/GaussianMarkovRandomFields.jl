@@ -50,4 +50,8 @@ makedocs(
     checkdocs = :exports,
 )
 
-deploydocs(repo = "github.com/timweiland/GaussianMarkovRandomFields.jl.git")
+DocumenterVitepress.deploydocs(;
+    repo = "github.com/timweiland/GaussianMarkovRandomFields.jl.git",
+    devbranch = "main",
+    push_preview = true
+)
