@@ -1,4 +1,4 @@
-using Documenter, GaussianMarkovRandomFields, DocumenterCitations
+using Documenter, DocumenterVitepress, GaussianMarkovRandomFields, DocumenterCitations
 using Ferrite
 
 include("generate_literate.jl")
@@ -6,7 +6,7 @@ include("generate_literate.jl")
 bib = CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"))
 
 makedocs(
-    sitename = "GaussianMarkovRandomFields.jl",
+    sitename = "GMRFs.jl",
     pages = Any[
         "Home" => "index.md",
         "Tutorials" => [
@@ -40,7 +40,11 @@ makedocs(
             "Discretizations" => "dev-docs/discretizations.md",
         ],
     ],
-    format = Documenter.HTML(assets = String["assets/citations.css"], collapselevel = 1),
+    format = DocumenterVitepress.MarkdownVitepress(
+        repo = "github.com/timweiland/GaussianMarkovRandomFields.jl",
+        devbranch = "main",
+        devurl = "dev"
+    ),
     plugins = [bib],
     modules = [GaussianMarkovRandomFields],
     checkdocs = :exports,
