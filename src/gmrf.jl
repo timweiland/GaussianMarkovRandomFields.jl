@@ -227,7 +227,12 @@ end
 function Base.show(io::IO, ::MIME"text/plain", d::GMRF{T}) where {T}
     println(io, "GMRF{$T} with $(length(d)) variables")
     println(io, "  Algorithm: $(typeof(d.linsolve_cache.alg))")
-    println(io, "  Mean: $(mean(d))")
+    μ = mean(d)
+    if length(μ) <= 6
+        println(io, "  Mean: $μ")
+    else
+        println(io, "  Mean: [$(μ[1]), $(μ[2]), $(μ[3]), ..., $(μ[end - 2]), $(μ[end - 1]), $(μ[end])]")
+    end
     return if d.Q_sqrt !== nothing
         print(io, "  Q_sqrt: available")
     else
