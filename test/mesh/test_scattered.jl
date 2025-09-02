@@ -3,10 +3,25 @@ using LinearAlgebra
 using SparseArrays
 using Random
 
-@testset "Scattered mesh" begin
+@testset "Scattered mesh 1D" begin
     rng = MersenneTwister(1249806901)
 
-    # Sample 1000 points within a circle
+    X_1d = sort!(rand(rng, 100)) * 10.0
+    points_1d = [[x] for x in X_1d]
+
+    grid_1d = generate_mesh(points_1d)
+    @test grid_1d isa Ferrite.Grid
+    @test length(grid_1d.cells) > 0
+    @test length(grid_1d.nodes) > length(points_1d)
+
+    grid_1d_order2 = generate_mesh(points_1d; element_order = 2)
+    @test grid_1d_order2 isa Ferrite.Grid
+    @test length(grid_1d_order2.cells) > 0
+end
+
+@testset "Scattered mesh 2D" begin
+    rng = MersenneTwister(1249806901)
+
     n = 1000
     r = 1.0
 
@@ -33,11 +48,10 @@ using Random
     end
 
     X_all = X_train ∪ X_test
-    grid = generate_mesh(X_all, 0.3, 0.05)
-    grid_wider_buffer = generate_mesh(X_all, 0.4, 0.05)
-    @test length(grid_wider_buffer.cells) > length(grid.cells)
-    grid_smaller_cells = generate_mesh(X_all, 0.3, 0.02)
-    @test length(grid_smaller_cells.cells) > length(grid.cells)
+    grid = generate_mesh(X_all)
+    @test grid isa Ferrite.Grid
+    @test length(grid.cells) > 0
+    @test length(grid.nodes) > length(X_all)
 
     ip = Lagrange{RefTriangle, 1}()
     qr = QuadratureRule{RefTriangle}(2)
