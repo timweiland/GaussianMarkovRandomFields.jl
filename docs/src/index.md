@@ -7,7 +7,7 @@ hero:
   text: "Fast and Flexible Latent Gaussian Modelling"
   tagline: "Clean syntax, fast computations. Powered by the Julia ecosystem."
   image:
-    src: /assets/logo.svg
+    src: /logo.svg
     alt: "GaussianMarkovRandomFields.jl"
   actions:
     - theme: brand
