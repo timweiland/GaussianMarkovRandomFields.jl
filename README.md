@@ -53,21 +53,17 @@ To do so:
 
 ## Your first GMRF
 
-Let's construct a GMRF approximation to a Matern process on a square grid:
+Let's construct a GMRF approximation to a Matérn process from observation points:
 
 ``` julia
 using GaussianMarkovRandomFields
 
-# Define mesh via Ferrite.jl
-using Ferrite
-grid = generate_grid(Triangle, (50, 50))
-interpolation_fn = Lagrange{RefTriangle, 1}()
-quad_rule = QuadratureRule{RefTriangle}(2)
-disc = FEMDiscretization(grid, interpolation_fn, quad_rule)
+# Define observation points  
+points = [0.1 0.0; -0.3 0.55; 0.2 0.8; -0.1 -0.2]  # N×2 matrix
 
-# Define SPDE and discretize to get a GMRF
-spde = MaternSPDE{2}(range = 0.3, smoothness = 1)
-x = discretize(spde, disc)
+# Create Matérn latent model (automatically generates mesh and discretization)
+model = MaternModel(points; smoothness = 1)
+x = model(range = 0.3)  # Construct GMRF with specified range
 ```
 
 `x` is a Gaussian distribution, and we can compute all the things Gaussians are
@@ -75,18 +71,17 @@ known for.
 
 ```julia
 # Get interesting quantities
-using Distributions
 μ = mean(x)
 σ_marginal = std(x)
-samp = rand(x) # Sample
-Q_linmap = precision_map(x) # Linear map
-Q = to_matrix(Q_linmap) # Sparse matrix
+samp = rand(x)  # Sample
+Q = precision_map(x)  # Sparse precision matrix
 
-# Form posterior under point observations
-A = evaluation_matrix(disc, [Tensors.Vec(0.1, 0.0), Tensors.Vec(-0.3, 0.55)])
-noise_precision = 1e2 # Inverse of the noise variance
-y = [0.83, 0.12]
-x_cond = condition_on_observations(x, A, noise_precision, y) # Again a GMRF!
+# Form posterior under point observations using new helpers
+using Distributions: Normal
+obs_model = PointEvaluationObsModel(model.discretization, points, Normal)
+y = [0.83, 0.12, 0.45, -0.21]
+obs_likelihood = obs_model(y; σ = 0.1)
+x_cond = gaussian_approximation(x, obs_likelihood)  # Posterior GMRF!
 ```
 
 Make sure to check the documentation for further examples!
