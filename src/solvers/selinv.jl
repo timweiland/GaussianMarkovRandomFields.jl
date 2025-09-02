@@ -15,6 +15,7 @@ This is determined at compile-time through dispatch on the algorithm type.
 supports_selinv(::LinearSolve.CHOLMODFactorization) = Val{true}()
 supports_selinv(::LinearSolve.CholeskyFactorization) = Val{true}()
 supports_selinv(::LinearSolve.DiagonalFactorization) = Val{true}()
+supports_selinv(::LinearSolve.LDLtFactorization) = Val{true}()
 supports_selinv(::LinearSolve.PardisoJL) = Val{true}()
 
 # Handle DefaultLinearSolver by converting to actual algorithm type
@@ -81,6 +82,11 @@ function _selinv_diag_impl(linsolve, ::LinearSolve.DiagonalFactorization)
     return 1 ./ diag(linsolve.A)
 end
 
+function _selinv_diag_impl(linsolve, ::LinearSolve.LDLtFactorization)
+    factorization = LinearSolve.@get_cacheval(linsolve, :LDLtFactorization)
+    return SelectedInversion.selinv_diag(factorization)
+end
+
 function _selinv_diag_impl(linsolve, ::LinearSolve.PardisoJL)
     # Pardiso selected inversion - will be implemented in extension
     error("Pardiso selinv implementation requires the Pardiso extension")
@@ -108,6 +114,11 @@ end
 function _selinv_impl(linsolve, ::LinearSolve.DiagonalFactorization)
     # For diagonal matrices, full selected inverse is just the diagonal inverse
     return spdiagm(0 => 1 ./ diag(linsolve.A))
+end
+
+function _selinv_impl(linsolve, ::LinearSolve.LDLtFactorization)
+    factorization = LinearSolve.@get_cacheval(linsolve, :LDLtFactorization)
+    return SelectedInversion.selinv(factorization; depermute = true).Z
 end
 
 function _selinv_impl(linsolve, ::LinearSolve.PardisoJL)
