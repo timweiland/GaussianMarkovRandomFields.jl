@@ -55,53 +55,45 @@ size(X_train, 1), size(X_test, 1)
 # GaussianMarkovRandomFields.jl takes care of the technical details for you, so you can focus on the
 # modelling.
 #
-# We start by generating a FEM mesh for our data. Internally, GaussianMarkovRandomFields.jl computes
-# a convex hull around the scattered data and then extends it slightly to
-# counteract effects from the boundary condition of the SPDE.
+# We create a Matern latent model directly from the spatial coordinates.
+# Internally, GaussianMarkovRandomFields.jl computes a convex hull around the scattered data,
+# generates a FEM mesh, and sets up the SPDE discretization automatically.
 #
-# ![This image depicts the mesh generated for the scattered data.](meuse_msh_fig.png)
-#
-# The final output is a Ferrite.jl grid. We can also save the generated mesh,
-# e.g. to visualize it via Gmsh.
+# Once we have the latent model, we need to instantiate it for a concrete range parameter.
+# This architecture makes it easy to construct the same GMRF structure many times for different hyperparameter values.
 using GaussianMarkovRandomFields
-points = zip(x, y)
-grid = generate_mesh(points, 600.0, 100.0, save_path = "meuse.msh")
+latent_model = MaternModel(X; smoothness = 1)
+u_matern = latent_model(range = 400.0)
 
-# We can now create a FEM discretization, which consists of the grid, a choice
-# of basis functions, and a quadrature rule.
-using Ferrite
-ip = Lagrange{RefTriangle, 1}()
-qr = QuadratureRule{RefTriangle}(2)
-disc = FEMDiscretization(grid, ip, qr)
+# Next, we create an observation model for function value observations at the training points.
+# `PointEvaluationObsModel` expresses that we're observing the value of our latent field at some specified points.
+# `Normal` could've been replaced e.g. by `Poisson` to observe counts at the evaluation points instead -- GLM style.
+# As before, we need to pass hyperparameters to get a concrete object (an ObservationLikelihood).
+# Once we have a concrete GMRF and a concrete observation likelihood, we can form a posterior through `gaussian_approximation`.
+import Distributions
+obs_noise_std = 0.32
+obs_model = PointEvaluationObsModel(latent_model.discretization, X_train, Distributions.Normal)
+obs_lik = obs_model(y_train; σ = obs_noise_std)
+u_cond = gaussian_approximation(u_matern, obs_lik)
 
-# We now create a Matern SPDE and discretize it.
-# While we could specify the Matern SPDE in terms of its direct parameters κ
-# and ν, we here choose to specify it through the more easily interpretable
-# parameters `range` and `smoothness`.
-spde = MaternSPDE{2}(range = 400.0, smoothness = 1)
-u_matern = discretize(spde, disc)
-
-# We can then condition the resulting Matern GMRF on the training data, where we
-# assume an inverse noise variance of 10 (i.e. a variance of 0.1).
-Λ_obs = 10.0
-A_train =
-    evaluation_matrix(disc, [Tensors.Vec(X_train[i, :]...) for i in 1:size(X_train, 1)])
-A_test = evaluation_matrix(disc, [Tensors.Vec(X_test[i, :]...) for i in 1:size(X_test, 1)])
-u_cond = condition_on_observations(u_matern, A_train, Λ_obs, y_train)
-
-# We can evaluate the RMSE of the posterior mean on the test data:
+# Next, we can evaluate the RMSE of the posterior mean on the test data.
+# `conditional_distribution` gives us the predictive distribution p(y | x) for fixed `x`.
+obs_model_test = PointEvaluationObsModel(latent_model.discretization, X_test, Distributions.Normal)
+pred_dist_train = conditional_distribution(obs_model, mean(u_cond); σ = obs_noise_std)
+pred_dist_test = conditional_distribution(obs_model_test, mean(u_cond); σ = obs_noise_std)
 rmse = (a, b) -> sqrt(mean((a .- b) .^ 2))
-rmse(A_train * mean(u_cond), y_train), rmse(A_test * mean(u_cond), y_test)
+rmse(mean(pred_dist_train), y_train), rmse(mean(pred_dist_test), y_test)
 
 # We can also visualize the posterior mean and standard deviation. To this end,
 # we write the corresponding vectors to a VTK file together with the grid data,
 # which can then be visualized in e.g. Paraview.
-VTKGridFile("meuse_mean", disc.dof_handler) do vtk
-    write_solution(vtk, disc.dof_handler, mean(u_cond))
+using Ferrite
+VTKGridFile("meuse_mean", latent_model.discretization.dof_handler) do vtk
+    write_solution(vtk, latent_model.discretization.dof_handler, mean(u_cond))
 end
 using Distributions
-VTKGridFile("meuse_std", disc.dof_handler) do vtk
-    write_solution(vtk, disc.dof_handler, std(u_cond))
+VTKGridFile("meuse_std", latent_model.discretization.dof_handler) do vtk
+    write_solution(vtk, latent_model.discretization.dof_handler, std(u_cond))
 end
 
 # In the end, our posterior mean looks like this:

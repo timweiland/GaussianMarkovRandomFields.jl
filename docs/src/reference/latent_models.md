@@ -43,6 +43,7 @@ RW1Model
 ### Spatial Models
 
 ```@docs
+MaternModel
 BesagModel
 ```
 
@@ -67,6 +68,11 @@ CombinedModel
 ar1 = AR1Model(100)
 gmrf = ar1(τ=2.0, ρ=0.8)
 
+# Spatial Matérn model from points
+points = [0.0 0.0; 1.0 0.0; 0.5 1.0]  # N×2 matrix
+matern = MaternModel(points; smoothness = 2)
+gmrf = matern(range=1.5)
+
 # Spatial Besag model
 W = sparse_adjacency_matrix
 besag = BesagModel(W)
@@ -85,6 +91,13 @@ hyperparameters(bym)  # (τ_besag = Real, τ_iid = Real)
 
 # Construct combined GMRF
 gmrf = bym(τ_besag=1.0, τ_iid=2.0)
+
+# Continuous spatial field + independent effects
+points = generate_observation_points()
+spatial_matern = MaternModel(points; smoothness = 1) 
+independent_effects = IIDModel(length(points))
+combined = CombinedModel(spatial_matern, independent_effects)
+gmrf = combined(range=2.0, τ_iid=0.1)
 ```
 
 ### Smart Parameter Naming
