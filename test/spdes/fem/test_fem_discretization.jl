@@ -19,6 +19,11 @@ using GaussianMarkovRandomFields, Ferrite, SparseArrays
     @test all(A .<= 1)
     @test sum(A, dims = 2) ≈ ones(length(X))
 
+    # Test Matrix interface
+    X_matrix = [0.5 0.45; 0.67 0.55]  # N×2 matrix
+    A_matrix = evaluation_matrix(f, X_matrix)
+    @test A_matrix ≈ A
+
 
     node_idcs = [6, 13]
     B = node_selection_matrix(f, node_idcs)

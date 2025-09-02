@@ -137,8 +137,16 @@ ndofs(f::FEMDiscretization) = f.dof_handler.ndofs
 
 Return the matrix A such that A[i, j] is the value of the j-th basis function
 at the i-th point in X.
+
+# Arguments
+- `f::FEMDiscretization`: The finite element discretization
+- `X`: Evaluation points, either a Vector of Tensors.Vec or an AbstractMatrix where each row is a point
+- `field`: Field name (default: first field in dof_handler)
+
+# Matrix format
+When `X` is a matrix, it should be N×D where N is the number of points and D is the spatial dimension.
 """
-function evaluation_matrix(f::FEMDiscretization, X; field = :default)
+function evaluation_matrix(f::FEMDiscretization, X::AbstractVector; field = :default)
     if field == :default
         field = first(f.dof_handler.field_names)
     end
@@ -160,6 +168,24 @@ function evaluation_matrix(f::FEMDiscretization, X; field = :default)
         append!(Vs, vals)
     end
     return sparse(Is, Js, Vs, length(X), ndofs(f))
+end
+
+"""
+    evaluation_matrix(f::FEMDiscretization, X::AbstractMatrix; field = :default)
+
+Convenience method that accepts a matrix where each row is a point.
+Converts the matrix to a Vector of Tensors.Vec and delegates to the vector method.
+"""
+function evaluation_matrix(f::FEMDiscretization, X::AbstractMatrix; field = :default)
+    # Validate matrix dimensions
+    D = ndim(f)
+    size(X, 2) == D || throw(ArgumentError("Matrix must have $D columns for $(D)D discretization, got $(size(X, 2))"))
+
+    # Convert matrix to Vector of Tensors.Vec
+    X_vec = [Tensors.Vec(Tuple(X[i, :])) for i in 1:size(X, 1)]
+
+    # Delegate to existing implementation
+    return evaluation_matrix(f, X_vec; field = field)
 end
 
 """

@@ -263,6 +263,14 @@ AutoDiffObservationModel
 AutoDiffLikelihood
 ```
 
+### FEM Helper Functions
+
+```@docs
+PointEvaluationObsModel
+PointDerivativeObsModel
+PointSecondDerivativeObsModel
+```
+
 ### Advanced Features
 
 ```@docs
