@@ -237,7 +237,7 @@ loghessian
 
 ```@docs
 ExponentialFamily
-data_distribution
+conditional_distribution
 ExponentialFamilyLikelihood
 NormalLikelihood
 PoissonLikelihood

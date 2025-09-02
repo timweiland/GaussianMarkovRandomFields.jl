@@ -1,6 +1,6 @@
 using Random
 
-export ObservationModel, hyperparameters, latent_dimension
+export ObservationModel, hyperparameters, latent_dimension, conditional_distribution
 
 """
     ObservationModel
@@ -27,26 +27,6 @@ See also: [`ObservationLikelihood`](@ref), [`ExponentialFamily`](@ref)
 """
 abstract type ObservationModel end
 
-
-"""
-    Random.rand(rng::AbstractRNG, obs_model::ObservationModel; x, θ_named) -> Vector
-
-Sample observations y from the observation model given latent field x and hyperparameters θ_named.
-
-# Arguments
-- `rng`: Random number generator
-- `obs_model`: The observation model to sample from
-- `x`: Latent field vector
-- `θ_named`: Named tuple of hyperparameters
-
-# Returns
-- `y`: Vector of sampled observations, same length as x
-
-Concrete observation model types should implement this method for efficient sampling.
-"""
-function Random.rand(rng::AbstractRNG, obs_model::ObservationModel; x, θ_named)
-    error("Sampling not implemented for observation model type $(typeof(obs_model))")
-end
 
 """
     hyperparameters(obs_model::ObservationModel) -> Tuple{Vararg{Symbol}}
@@ -98,3 +78,41 @@ latent_dimension(LinearlyTransformedObservationModel(base, A), y) == size(A, 2)
 ```
 """
 latent_dimension(obs_model::ObservationModel, y::AbstractVector) = nothing
+
+"""
+    conditional_distribution(obs_model::ObservationModel, x; kwargs...) -> Distribution
+
+Construct the conditional distribution p(y | x, θ) for sampling new observations.
+
+This function returns a Distribution object that represents the probability 
+distribution over observations y given latent field values x and hyperparameters θ.
+It is used for sampling new observations from the observation model.
+
+# Arguments
+- `obs_model`: An observation model implementing the `ObservationModel` interface
+- `x`: Latent field values (vector)  
+- `kwargs...`: Hyperparameters as keyword arguments
+
+# Returns
+Distribution object that can be used with `rand()` to generate observations
+
+# Example
+```julia
+model = ExponentialFamily(Poisson)
+x = [1.0, 2.0]
+dist = conditional_distribution(model, x)  # Poisson has no hyperparameters
+y = rand(dist)  # Sample observations
+
+# For Normal distribution with hyperparameters
+model_normal = ExponentialFamily(Normal)
+x = [0.0, 1.0] 
+dist = conditional_distribution(model_normal, x; σ=0.5)
+y = rand(dist)  # Sample observations
+```
+
+# Implementation
+All observation models should implement this method. The default throws an error.
+"""
+function conditional_distribution(obs_model::ObservationModel, x; kwargs...)
+    error("conditional_distribution not implemented for observation model type $(typeof(obs_model))")
+end
