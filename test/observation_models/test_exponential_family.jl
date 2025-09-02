@@ -292,14 +292,13 @@ end
         end
     end
 
-    @testset "Data Distribution Interface" begin
-        # Test data_distribution function for all families
-        @testset "Normal data distribution" begin
+    @testset "Conditional Distribution Interface" begin
+        # Test conditional_distribution function for all families
+        @testset "Normal conditional distribution" begin
             model = ExponentialFamily(Normal)
             x = [0.5, -0.2, 1.1]
-            θ_named = (σ = 0.8,)
 
-            dist = data_distribution(model, x, θ_named)
+            dist = conditional_distribution(model, x; σ = 0.8)
             @test dist isa Distribution
             @test length(dist) == 3
 
@@ -308,12 +307,11 @@ end
             @test length(y) == 3
         end
 
-        @testset "Poisson data distribution" begin
+        @testset "Poisson conditional distribution" begin
             model = ExponentialFamily(Poisson)
             x = [0.5, 1.2, -0.1]  # Log scale
-            θ_named = NamedTuple()
 
-            dist = data_distribution(model, x, θ_named)
+            dist = conditional_distribution(model, x)
             @test dist isa Distribution
             @test length(dist) == 3
 
@@ -323,12 +321,11 @@ end
             @test all(y .>= 0)  # Count data
         end
 
-        @testset "Bernoulli data distribution" begin
+        @testset "Bernoulli conditional distribution" begin
             model = ExponentialFamily(Bernoulli)
             x = [0.0, 1.5, -0.8]  # Logit scale
-            θ_named = NamedTuple()
 
-            dist = data_distribution(model, x, θ_named)
+            dist = conditional_distribution(model, x)
             @test dist isa Distribution
             @test length(dist) == 3
 
@@ -338,12 +335,11 @@ end
             @test all(y .∈ Ref([0, 1]))  # Binary data
         end
 
-        @testset "Binomial data distribution" begin
+        @testset "Binomial conditional distribution" begin
             model = ExponentialFamily(Binomial)
             x = [0.2, -0.5, 1.0]  # Logit scale
-            θ_named = (n = 10,)
 
-            dist = data_distribution(model, x, θ_named)
+            dist = conditional_distribution(model, x; n = 10)
             @test dist isa Distribution
             @test length(dist) == 3
 
@@ -376,38 +372,5 @@ end
         # Test with different observation lengths
         y_short = [1.0, 2.0]
         @test latent_dimension(model, y_short) == 2
-    end
-
-    @testset "Random Sampling Interface" begin
-        # Test Random.rand method for ExponentialFamily
-        @testset "Normal sampling" begin
-            model = ExponentialFamily(Normal)
-            x = [0.5, -0.2, 1.1]
-            θ_named = (σ = 0.8,)
-
-            y = rand(test_rng, model; x = x, θ_named = θ_named)
-            @test length(y) == 3
-            @test all(isfinite, y)
-        end
-
-        @testset "Poisson sampling" begin
-            model = ExponentialFamily(Poisson)
-            x = [0.5, 1.2, -0.1]  # Log scale
-            θ_named = NamedTuple()
-
-            y = rand(test_rng, model; x = x, θ_named = θ_named)
-            @test length(y) == 3
-            @test all(y .>= 0)  # Count data
-        end
-
-        @testset "Bernoulli sampling" begin
-            model = ExponentialFamily(Bernoulli)
-            x = [0.0, 1.5, -0.8]  # Logit scale
-            θ_named = NamedTuple()
-
-            y = rand(test_rng, model; x = x, θ_named = θ_named)
-            @test length(y) == 3
-            @test all(y .∈ Ref([0, 1]))  # Binary data
-        end
     end
 end

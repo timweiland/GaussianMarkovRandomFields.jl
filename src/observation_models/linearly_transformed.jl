@@ -153,10 +153,10 @@ function loghessian(x_full, ltlik::LinearlyTransformedLikelihood)
 end
 
 # =======================================================================================
-# SAMPLING INTERFACE
+# CONDITIONAL DISTRIBUTION INTERFACE
 # =======================================================================================
 
-function Random.rand(rng::AbstractRNG, ltom::LinearlyTransformedObservationModel; x_full, θ_named)
+function conditional_distribution(ltom::LinearlyTransformedObservationModel, x_full; kwargs...)
     η = ltom.design_matrix * x_full
-    return Random.rand(rng, ltom.base_model; x = η, θ_named = θ_named)
+    return conditional_distribution(ltom.base_model, η; kwargs...)
 end
