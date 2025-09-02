@@ -50,6 +50,12 @@ using GaussianMarkovRandomFields, Ferrite, SparseArrays, Tensors
                 @test nnz(D) <= length(X) * getnbasefunctions(ip)
                 @test nnz(D) > 0
             end
+
+            # Test Matrix interface
+            X_matrix = [0.5 0.45; 0.67 0.55]  # N×2 matrix
+            Ds_matrix = derivative_matrices(f, X_matrix; derivative_idcs = [1, 2])
+            @test Ds_matrix[1] ≈ Ds[1]
+            @test Ds_matrix[2] ≈ Ds[2]
         end
 
         @testset "Second derivative matrix" begin
@@ -64,6 +70,12 @@ using GaussianMarkovRandomFields, Ferrite, SparseArrays, Tensors
                     @test nnz(D) > 0
                 end
             end
+
+            # Test Matrix interface
+            X_matrix = [0.5 0.45; 0.67 0.55]  # N×2 matrix
+            Ds_matrix = second_derivative_matrices(f, X_matrix; derivative_idcs = [(1, 1), (2, 2)])
+            @test Ds_matrix[1] ≈ Ds[1]
+            @test Ds_matrix[2] ≈ Ds[2]
         end
     end
 end

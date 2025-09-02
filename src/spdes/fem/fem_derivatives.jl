@@ -135,7 +135,7 @@ contains the derivative of all basis functions with respect to y at X[i].
 """
 function derivative_matrices(
         f::FEMDiscretization,
-        X;
+        X::AbstractVector;
         derivative_idcs = [1],
         field = :default,
     )
@@ -168,6 +168,29 @@ function derivative_matrices(
 end
 
 """
+    derivative_matrices(f::FEMDiscretization, X::AbstractMatrix; kwargs...)
+
+Convenience method that accepts a matrix where each row is a point.
+Converts the matrix to a Vector of Tensors.Vec and delegates to the vector method.
+"""
+function derivative_matrices(
+        f::FEMDiscretization,
+        X::AbstractMatrix;
+        derivative_idcs = [1],
+        field = :default,
+    )
+    # Validate matrix dimensions
+    D = ndim(f)
+    size(X, 2) == D || throw(ArgumentError("Matrix must have $D columns for $(D)D discretization, got $(size(X, 2))"))
+
+    # Convert matrix to Vector of Tensors.Vec
+    X_vec = [Tensors.Vec(Tuple(X[i, :])) for i in 1:size(X, 1)]
+
+    # Delegate to existing implementation
+    return derivative_matrices(f, X_vec; derivative_idcs = derivative_idcs, field = field)
+end
+
+"""
     second_derivative_matrices(f::FEMDiscretization{D}, X; derivative_idcs = [(1,1)])
 
 Return a vector of matrices such that mats[k][i, j] is the second derivative of
@@ -193,7 +216,7 @@ laplacian = A + B
 """
 function second_derivative_matrices(
         f::FEMDiscretization,
-        X;
+        X::AbstractVector;
         derivative_idcs = [(1, 1)],
         field = :default,
     )
@@ -232,4 +255,27 @@ function second_derivative_matrices(
     mats =
         [sparse(Is[k], Js[k], Vs[k], length(X), ndofs(f)) for k in 1:length(derivative_idcs)]
     return mats
+end
+
+"""
+    second_derivative_matrices(f::FEMDiscretization, X::AbstractMatrix; kwargs...)
+
+Convenience method that accepts a matrix where each row is a point.
+Converts the matrix to a Vector of Tensors.Vec and delegates to the vector method.
+"""
+function second_derivative_matrices(
+        f::FEMDiscretization,
+        X::AbstractMatrix;
+        derivative_idcs = [(1, 1)],
+        field = :default,
+    )
+    # Validate matrix dimensions
+    D = ndim(f)
+    size(X, 2) == D || throw(ArgumentError("Matrix must have $D columns for $(D)D discretization, got $(size(X, 2))"))
+
+    # Convert matrix to Vector of Tensors.Vec
+    X_vec = [Tensors.Vec(Tuple(X[i, :])) for i in 1:size(X, 1)]
+
+    # Delegate to existing implementation
+    return second_derivative_matrices(f, X_vec; derivative_idcs = derivative_idcs, field = field)
 end
