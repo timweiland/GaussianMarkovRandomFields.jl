@@ -18,7 +18,7 @@ using LinearMaps
 using LinearSolve
 
 
-export AbstractGMRF, GMRF, precision_map, precision_matrix, InformationVector, information_vector
+export AbstractGMRF, GMRF, precision_map, precision_matrix, InformationVector, information_vector, std
 
 ########################################################
 #
