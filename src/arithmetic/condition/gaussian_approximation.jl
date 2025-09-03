@@ -63,24 +63,34 @@ function gaussian_approximation(prior_gmrf::GMRF, obs_lik::NormalLikelihood{Iden
     # Normal observations with identity link: y ~ N(x, σ²I) - this is conjugate!
     # Equivalent to: y = A*x + 0 + ε, where ε ~ N(0, σ²I)
 
-    if obs_lik.indices === nothing
-        # Non-indexed case: A = I (identity)
-        A = 1.0 * I
-    else
-        # Indexed case: A selects the relevant components
-        n_total = length(mean(prior_gmrf))
-        n_obs = length(obs_lik.y)
-        A = spzeros(n_obs, n_total)
-        for (i, idx) in enumerate(obs_lik.indices)
-            A[i, idx] = 1.0
-        end
-    end
-
     Q_ϵ = obs_lik.inv_σ²  # 1/σ² (scalar gets converted to scaled identity automatically)
     y = obs_lik.y
     b = zeros(length(y))  # No offset
 
-    return linear_condition(prior_gmrf; A = A, Q_ϵ = Q_ϵ, y = y, b = b)
+    if obs_lik.indices === nothing
+        # Non-indexed case: A = I, so A' * Q_ϵ * A = Q_ϵ * I = Diagonal(fill(Q_ϵ, n))
+        A = 1.0 * I
+        n_total = length(mean(prior_gmrf))
+        obs_precision_contrib = Diagonal(fill(obs_lik.inv_σ², n_total))
+        return linear_condition(
+            prior_gmrf; A = A, Q_ϵ = Q_ϵ, y = y, b = b,
+            obs_precision_contrib = obs_precision_contrib
+        )
+    else
+        # Indexed case: A' * Q_ϵ * A is diagonal with Q_ϵ at selected indices, 0 elsewhere
+        n_total = length(mean(prior_gmrf))
+        n_obs = length(obs_lik.y)
+        A = spzeros(n_obs, n_total)
+        diag_entries = zeros(n_total)
+        @inbounds for (i, idx) in enumerate(obs_lik.indices)
+            A[i, idx] = 1.0
+            diag_entries[idx] = obs_lik.inv_σ²
+        end
+        return linear_condition(
+            prior_gmrf; A = A, Q_ϵ = Q_ϵ, y = y, b = b,
+            obs_precision_contrib = Diagonal(diag_entries)
+        )
+    end
 end
 
 # Specialized dispatch for linearly transformed Normal observation likelihoods (also conjugate)

@@ -23,7 +23,7 @@ prepare_map(::LinearMap, M::UniformScaling, n::Int) = LinearMaps.UniformScalingM
 prepare_map(::LinearMap, x::Real, n::Int) = LinearMaps.UniformScalingMap(x, n)
 
 """
-    linear_condition(gmrf::GMRF; A, Q_ϵ, y, b=zeros(size(A, 1)))
+    linear_condition(gmrf::GMRF; A, Q_ϵ, y, b=zeros(size(A, 1)), obs_precision_contrib=nothing)
 
 Condition a GMRF on linear observations y = A * x + b + ϵ where ϵ ~ N(0, Q_ϵ^(-1)).
 
@@ -33,27 +33,35 @@ Condition a GMRF on linear observations y = A * x + b + ϵ where ϵ ~ N(0, Q_ϵ^
 - `Q_ϵ::Union{AbstractMatrix, LinearMap}`: Precision matrix of observation noise
 - `y::AbstractVector`: Observation values
 - `b::AbstractVector`: Offset vector (defaults to zeros)
+- `obs_precision_contrib`: Precomputed A' * Q_ϵ * A (optional optimization)
 
 # Returns
 A new `GMRF` representing the posterior distribution with updated mean and precision.
 
+# Performance Optimization
+When A has special structure (e.g., index selection), users can precompute
+A' * Q_ϵ * A more efficiently and pass it to avoid redundant computation.
+
 # Notes
 Uses information vector arithmetic for efficient conditioning without intermediate solves.
 """
-function linear_condition(gmrf::GMRF; A, Q_ϵ, y, b = zeros(size(A, 1)))
-    # Ensure A and Q_ϵ are in the same format as the GMRF's precision matrix
+function linear_condition(gmrf::GMRF; A, Q_ϵ, y, b = zeros(size(A, 1)), obs_precision_contrib = nothing)
+    # Prepare common components
     Q_prior = precision_map(gmrf)
     A = prepare_map(Q_prior, A, size(Q_prior, 1))
     Q_ϵ = prepare_map(Q_prior, Q_ϵ, A isa UniformScaling ? size(Q_prior, 1) : size(A, 1))
 
-    # Compute posterior precision: Q_posterior = Q_prior + A' * Q_ϵ * A
-    Q_posterior = Q_prior + A' * Q_ϵ * A
+    # Compute or use precomputed A' * Q_ϵ * A
+    if obs_precision_contrib === nothing
+        obs_precision_contrib = A' * Q_ϵ * A
+    else
+        obs_precision_contrib = prepare_map(Q_prior, obs_precision_contrib, size(Q_prior, 1))
+    end
 
-    # Update information: info_posterior = info_prior + A' * Q_ϵ * (y - b)
+    # Compute posterior precision and information
+    Q_posterior = Q_prior + obs_precision_contrib
     info_posterior = information_vector(gmrf) + A' * (Q_ϵ * (y - b))
 
-    # Create new GMRF from information vector
-    # TODO: Compute Q_sqrt for conditioned GMRF - non-trivial, skipping for now
     return GMRF(InformationVector(info_posterior), Q_posterior, gmrf.linsolve_cache.alg; Q_sqrt = nothing)
 end
 
