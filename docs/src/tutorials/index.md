@@ -5,6 +5,7 @@ Pages = [
     "autoregressive_models.md",
     "spatial_modelling_spdes.md",
     "spatiotemporal_modelling.md",
-    "boundary_conditions.md"
+    "boundary_conditions.md",
+    "bernoulli_spatial_classification.md"
 ]
 ```

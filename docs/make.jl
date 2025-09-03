@@ -15,6 +15,7 @@ makedocs(
             "tutorials/spatial_modelling_spdes.md",
             "tutorials/spatiotemporal_modelling.md",
             "tutorials/boundary_conditions.md",
+            "tutorials/bernoulli_spatial_classification.md",
         ],
         "API Reference" => [
             "Overview" => "reference/index.md",
