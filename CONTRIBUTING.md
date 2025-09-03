@@ -27,11 +27,13 @@ The following guidelines will help you get started.
 
 - Follow the [Julia Style Guide](https://docs.julialang.org/en/v1/manual/style-guide/).
 - Use meaningful variable names and avoid excessive abbreviations.
-- Format your code using [`JuliaFormatter.jl`](https://github.com/domluna/JuliaFormatter.jl):
-  ```julia
-  using JuliaFormatter
-  format(".")
+- Format your code using [Runic](https://github.com/fredrikekre/runic):
+  ```sh
+  make format
+  # or
+  runic --inplace .
   ```
+  If you use pre-commit, install hooks once with `pre-commit install`.
 
 ## Making Changes
 
@@ -75,6 +77,5 @@ If you find a bug or have a feature request, please [open an issue](https://gith
 By contributing, you agree that your contributions will be licensed under the same license as the repository.
 
 Thank you for contributing to **GaussianMarkovRandomFields.jl**! 🚀
-
 
 
