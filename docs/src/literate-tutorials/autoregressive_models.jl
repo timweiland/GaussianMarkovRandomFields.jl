@@ -49,26 +49,26 @@
 
 # ## Building an AR(1) model
 # We begin by loading `GaussianMarkovRandomFields` and `LinearAlgebra`.
-using GaussianMarkovRandomFields, LinearAlgebra, SparseArrays
+using GaussianMarkovRandomFields, LinearAlgebra
 
 # We define a discretization of the real interval $[0, 1]$, and specify
 # some example parameters for the AR(1) model:
 
 xs = 0:0.01:1
 N = length(xs)
-ϕ = 0.995
-Λ₀ = 1.0e6
-Λ = 1.0e3
+ρ = 0.995
+τ = 3.0e4
 
 # Now we compute the mean and the precision matrix of the joint distribution.
 # We explicitly declare the precision matrix as a symmetric tridiagonal matrix,
 # which unlocks highly efficient linear algebra routines for the underlying
 # computations.
-μ = [ϕ^(i - 1) for i in eachindex(xs)]
-main_diag = [[Λ₀]; repeat([Λ + ϕ^2], N - 2); [Λ]]
-off_diag = repeat([-ϕ], N - 1)
-Q = sparse(SymTridiagonal(main_diag, off_diag))
-x = GMRF(μ, Q)
+using LinearSolve
+μ = [ρ^(i - 1) for i in eachindex(xs)]
+main_diag = τ * [[1.0]; repeat([1.0 + ρ^2], N - 2); [1.0]]
+off_diag = τ * repeat([-ρ], N - 1)
+Q = SymTridiagonal(main_diag, off_diag)
+x = GMRF(μ, Q, LinearSolve.LDLtFactorization())
 
 # A GMRF is a multivariate Gaussian, and it's compatible with
 # `Distributions.jl`. We can get its mean, marginal standard deviation, and
@@ -89,15 +89,19 @@ plot!()
 # ```
 # then the posterior conditioned on these observations is again a GMRF, the
 # moments of which we can compute in closed form.
-# In terms of code, we achieve this through `condition_on_observations`. Let's
-# condition our model on the observations $x_{26} = 0.85$ and $x_{76} = 0.71$:
-using SparseArrays
-A = spzeros(2, N)
-A[1, 26] = 1.0
-A[2, 76] = 1.0
+#
+# In terms of code, the workflow for this is as follows:
+# 1. Create a so-called "Observation Model". This basically defines the "category" of likelihood.
+# 2. Instantiate a concrete likelihood from the model. This involves specifying concrete observations and hyperparameters.
+# 3. Form a Gaussian approximation to the posterior under the prior and the observation likelihood.
+#
+# In the case of linear Gaussian likelihoods, the "approximation" is of course exact, which our package leverages under the hood
+# by dispatching to a closed-form expression.
+import Distributions
+obs_model = ExponentialFamily(Distributions.Normal, indices = [26, 76]) # Model
 y = [0.85, 0.71]
-Λ_obs = 1.0e6
-x_cond = condition_on_observations(x, A, Λ_obs, y)
+obs_lik = obs_model(y; σ = 0.001) # Concrete likelihood
+x_cond = gaussian_approximation(x, obs_lik)
 
 # Indeed, our model now conforms to these observations:
 plot(xs, mean(x_cond), ribbon = 1.96 * std(x_cond), label = "Mean + std")
@@ -105,6 +109,17 @@ for i in 1:3
     plot!(xs, rand(x_cond), fillalpha = 0.3, linestyle = :dash, label = "Sample")
 end
 plot!()
+
+# ## Latent models API
+# Above, we constructed the precision matrix of the AR1 GMRF manually.
+# But of course, GaussianMarkovRandomFields.jl also provides utilities to construct common GMRF structures automatically.
+# This is implemented through so-called "Latent Models".
+#
+# The workflow is similar to that of Observation Models:
+# 1. Construct a "Latent Model", which defines a "category" of GMRF structure.
+# 2. Instantiate a concrete GMRF from the latent model. This involves specifying the concrete hyperparameter values.
+latent_model = AR1Model(N)
+x_ar1 = latent_model(ρ = ρ, τ = τ)
 
 # ## Beyond first-order models: CARs
 # You may have noticed that the AR(1) model above produces very rough samples.
@@ -122,12 +137,13 @@ plot!()
 # Let us construct an adjacency matrix that relates nodes not only to their
 # immediate neighbors, but also to the neighbors' neighbors (a second-order
 # model).
+using SparseArrays
 W = spzeros(N, N)
 for i in 1:N
     for k in [-2, -1, 1, 2]
         j = i + k
         if 1 <= j <= N
-            W[i, j] = 1.0 / abs(k)
+            W[i, j] = 1.0
         end
     end
 end
@@ -135,7 +151,7 @@ end
 # Now that we have the adjacency matrix, we can use a GaussianMarkovRandomFields.jl utility function
 # to generate a CAR model from it, which internally constructs a slight variation
 # of the graph Laplacian to form the precision matrix.
-x_car = generate_car_model(W, 0.9; μ = μ, σ = 0.001)
+x_car = generate_car_model(W, 0.99; μ = μ, σ = 0.001)
 
 # Let's take our CAR for a test drive:
 plot(xs, mean(x_car), ribbon = 1.96 * std(x_car), label = "Mean + std")
@@ -147,13 +163,10 @@ plot!()
 # Let's see how this model fits data. We take the same observations as for the
 # AR(1) model, but also add an observation for the starting point to reduce
 # the uncertainty there.
-A = spzeros(3, N)
-A[1, 1] = 1.0
-A[2, 26] = 1.0
-A[3, 76] = 1.0
+obs_model = ExponentialFamily(Distributions.Normal, indices = [1, 26, 76])
 y = [1.0, 0.85, 0.71]
-Λ_obs = 1.0e6
-x_car_cond = condition_on_observations(x_car, A, Λ_obs, y)
+obs_lik = obs_model(y; σ = 0.001)
+x_car_cond = gaussian_approximation(x_car, obs_lik)
 plot(xs, mean(x_car_cond), ribbon = 1.96 * std(x_car_cond), label = "Mean + std")
 for i in 1:3
     plot!(xs, rand(x_car_cond), fillalpha = 0.3, linestyle = :dash, label = "Sample")
