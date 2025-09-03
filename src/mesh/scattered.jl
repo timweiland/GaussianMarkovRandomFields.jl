@@ -15,7 +15,7 @@ Returns (sizeMin, sizeMax, distMin, distMax, interior_mesh_size)
 
 `interior_mesh_size` is a convenient overall interior target (median kNN).
 """
-function auto_size_params(points; α::Real = 1.0, β::Real = 3.0, γ::Real = 3.0)
+function auto_size_params(points; α::Real = 0.8, β::Real = 3.0, γ::Real = 3.0)
     n = length(points)
     @assert n >= 2 "Need at least two points to compute spacing."
 
@@ -32,27 +32,42 @@ function auto_size_params(points; α::Real = 1.0, β::Real = 3.0, γ::Real = 3.0
     dmin = minimum(d_i)
     dmed = median(d_i)
 
-    sizeMin = α * dmin
+    sizeMin = α * dmed
     sizeMax = β * dmed
     distMin = dmin
     distMax = γ * dmed
     interior_mesh_size = dmed
+    @show sizeMin, sizeMax, distMin, distMax, interior_mesh_size
 
     return sizeMin, sizeMax, distMin, distMax, interior_mesh_size
 end
 
-function _add_poly_to_gmsh(poly, mesh_size)
-    p_initial = gmsh.model.geo.addPoint(poly.exterior[1][1]..., 0, mesh_size)
-    p_last = p_initial
-
-    lines = []
-    for i in eachindex(poly.exterior[1:(end - 1)])
-        p_cur = gmsh.model.geo.addPoint(poly.exterior[i][2]..., 0, mesh_size)
-        push!(lines, gmsh.model.geo.addLine(p_last, p_cur))
-        p_last = p_cur
+function _ring_points(poly)
+    # poly.exterior is a ring; ensure we don't double-close it
+    ring = [Tuple(p[1]) for p in poly.exterior]
+    if length(ring) >= 2 && ring[1] == ring[end]
+        pop!(ring)  # drop duplicate last point if closed
     end
-    push!(lines, gmsh.model.geo.addLine(p_last, p_initial))
-    return gmsh.model.geo.addCurveLoop(reverse(lines))
+    return ring
+end
+
+function _add_poly_to_gmsh(poly, mesh_size; hole::Bool = false)
+    ring = _ring_points(poly)
+    @show ring[1]
+    # create gmsh points
+    p = [gmsh.model.geo.addPoint(xy..., 0.0, mesh_size) for xy in ring]
+    # lines in consistent order
+    lines = Int[]
+    for i in 1:(length(p) - 1)
+        push!(lines, gmsh.model.geo.addLine(p[i], p[i + 1]))
+    end
+    push!(lines, gmsh.model.geo.addLine(p[end], p[1]))  # close
+    # inner loops (holes) must be opposite orientation
+    if hole
+        return gmsh.model.geo.addCurveLoop(reverse(lines))
+    else
+        return gmsh.model.geo.addCurveLoop(lines)
+    end
 end
 
 function _setup_gmsh_common(model_name::String)
@@ -213,14 +228,19 @@ function generate_mesh(
 
     _setup_gmsh_common("Scattered mesh")
 
-    c_ext = _add_poly_to_gmsh(outer_boundary_gb, sizeMax)
-    c_int = _add_poly_to_gmsh(ch_gb, interior_mesh_size)
+    c_ext = _add_poly_to_gmsh(outer_boundary_gb, sizeMax, hole = false)
+    c_int = _add_poly_to_gmsh(ch_gb, interior_mesh_size, hole = true)
     s_int = gmsh.model.geo.addPlaneSurface([c_int])
     s_ext = gmsh.model.geo.addPlaneSurface([c_ext, c_int])
 
     ch_points = [l[1] for l in ch_gb.exterior]
     ch_points_inds = indexin(ch_points, mp)
-    mp_inner = mp.points[1:end .∉ Ref(ch_points_inds)]
+
+    hull_boundary = LibGEOS.boundary(ch_gb)
+
+    filter_fn = p -> LibGEOS.distance(hull_boundary, p) > 1.0e-8
+    mp_inner = filter(filter_fn, mp.points)
+    #mp_inner = mp.points[1:end .∉ Ref(ch_points_inds)]
     ps_inner = [gmsh.model.geo.addPoint(p..., 0, interior_mesh_size) for p in mp_inner]
 
     gmsh.model.geo.synchronize()
