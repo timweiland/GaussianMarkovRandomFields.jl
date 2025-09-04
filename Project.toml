@@ -33,11 +33,13 @@ Pardiso = "46dd5b70-b6fb-5a00-ae2d-e8fea33afaf2"
 SparseConnectivityTracer = "9f842d2f-2579-4b1d-911e-f412cf18a3f5"
 SparseDiffTools = "47a9eef4-7e08-11e9-0b38-333d64bd3804"
 SparseMatrixColorings = "0a514795-09f3-496d-8182-132a7b665d35"
+StatsModels = "3eaba693-59b7-5ba5-a881-562e759f1c8d"
 Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [extensions]
 GaussianMarkovRandomFieldsAutoDiff = ["ForwardDiff", "Zygote"]
+GaussianMarkovRandomFieldsFormula = "StatsModels"
 GaussianMarkovRandomFieldsMakie = "Makie"
 GaussianMarkovRandomFieldsPardiso = "Pardiso"
 GaussianMarkovRandomFieldsSparseADLikelihoods = ["SparseConnectivityTracer", "SparseMatrixColorings"]
@@ -72,6 +74,7 @@ SparseDiffTools = "2"
 SparseMatrixColorings = "0.4"
 SpecialFunctions = "2"
 StatsFuns = "1"
+StatsModels = "0.7"
 Symbolics = "5"
 Tensors = "1.16"
 Test = "<0.0.1, 1"
@@ -88,6 +91,8 @@ SparseConnectivityTracer = "9f842d2f-2579-4b1d-911e-f412cf18a3f5"
 SparseMatrixColorings = "0a514795-09f3-496d-8182-132a7b665d35"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
+StatsModels = "3eaba693-59b7-5ba5-a881-562e759f1c8d"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 
 [targets]
-test = ["Aqua", "ForwardDiff", "LinearAlgebra", "ReTest", "SparseArrays", "SparseConnectivityTracer", "SparseMatrixColorings", "Test", "Zygote"]
+test = ["Aqua", "ForwardDiff", "LinearAlgebra", "ReTest", "SparseArrays", "SparseConnectivityTracer", "SparseMatrixColorings", "Test", "Zygote", "StatsModels", "Distributions"]
