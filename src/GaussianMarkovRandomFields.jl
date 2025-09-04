@@ -13,6 +13,7 @@ include("mesh/mesh.jl")
 include("observation_models/observation_models.jl")
 include("arithmetic/arithmetic.jl")
 include("latent_models/latent_models.jl")
+include("formula/constructors.jl")
 include("plots/makie.jl")
 include("autodiff/autodiff.jl")
 
