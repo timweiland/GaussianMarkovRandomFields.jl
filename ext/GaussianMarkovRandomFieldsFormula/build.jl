@@ -1,0 +1,117 @@
+# LatentModel construction and formula components builder
+
+# LatentModel construction per term
+function _latent_model(term::IIDTerm, data)
+    v = _getcolumn(data, term.variable)
+    lvls, _ = _levels_and_index(v)
+    return IIDModel(length(lvls))
+end
+
+function _latent_model(term::RandomWalkTerm{1}, data)
+    v = _getcolumn(data, term.variable)
+    lvls, _ = _levels_and_index(v)
+    return RW1Model(length(lvls))
+end
+
+function _latent_model(term::AR1Term, data)
+    v = _getcolumn(data, term.variable)
+    lvls, _ = _levels_and_index(v)
+    return AR1Model(length(lvls))
+end
+
+# Column widths for each term (avoid relying on internal StatsModels widths)
+_ncols_for_term(term, data) = size(StatsModels.modelcols(term, data), 2)
+
+# Build components
+function GaussianMarkovRandomFields.build_formula_components(
+        formula::StatsModels.FormulaTerm,
+        data;
+        family = Distributions.Normal,
+        trials = nothing,
+        fixed_prior::Real = 1.0e-6,
+    )
+    # Transform formula
+    schema = StatsModels.schema(formula, data)
+    tf = StatsModels.apply_schema(formula, schema)
+
+    # Response
+    y = StatsModels.modelcols(tf.lhs, data)
+    if family == Distributions.Binomial
+        trials === nothing && error("family=Binomial requires trials keyword specifying a column name")
+        tcol = _getcolumn(data, trials)
+        length(tcol) == length(y) || error("trials length $(length(tcol)) must match response length $(length(y))")
+        y = BinomialObservations(y, tcol)
+    end
+
+    # Partition terms
+    rhs_terms = tf.rhs isa StatsModels.MatrixTerm ? tf.rhs.terms : [tf.rhs]
+    random_terms = FormulaRandomEffectTerm[]
+    fixed_terms = Any[]
+    for t in rhs_terms
+        if t isa FormulaRandomEffectTerm
+            push!(random_terms, t)
+        else
+            push!(fixed_terms, t)
+        end
+    end
+
+    # Build random mapping blocks and models
+    A_blocks = Vector{SparseMatrixCSC{Float64, Int}}()
+    models = Vector{GaussianMarkovRandomFields.LatentModel}()
+    for rt in random_terms
+        A_i = StatsModels.modelcols(rt, data)
+        A_i isa SparseMatrixCSC || (A_i = sparse(A_i))
+        push!(A_blocks, A_i)
+        push!(models, _latent_model(rt, data))
+    end
+
+    # Build fixed-effects design from fixed terms only
+    n_fixed = 0
+    if !isempty(fixed_terms)
+        fixed_cols = Vector{AbstractMatrix}()
+        for ft in fixed_terms
+            X = StatsModels.modelcols(ft, data)
+            X isa AbstractMatrix || (X = reshape(X, :, 1))
+            push!(fixed_cols, X)
+        end
+        X_fixed = hcat(fixed_cols...)
+        X_fixed = sparse(X_fixed)
+        n_fixed = size(X_fixed, 2)
+        push!(A_blocks, X_fixed)
+        if n_fixed > 0
+            push!(models, FixedEffectsModel(n_fixed; λ = fixed_prior))
+        end
+    end
+
+    # Assemble A and CombinedModel
+    isempty(A_blocks) && error("No terms found in RHS to construct design matrix")
+    A = hcat(A_blocks...)
+
+    isempty(models) && error("No latent components constructed (check formula RHS)")
+    combined_model = CombinedModel(models...)
+
+    # Observation model
+    base_model = ExponentialFamily(family)
+    obs_model = LinearlyTransformedObservationModel(base_model, A)
+
+    # Hyperparameters (prefixed)
+    hyperparams = GaussianMarkovRandomFields.hyperparameters(combined_model)
+
+    meta = (
+        n_random = length(random_terms),
+        n_fixed = n_fixed,
+        term_sizes = (
+            random = [size(StatsModels.modelcols(t, data), 2) for t in random_terms],
+            fixed = [size(StatsModels.modelcols(t, data), 2) for t in fixed_terms],
+        ),
+    )
+
+    return (
+        A = A,
+        y = y,
+        obs_model = obs_model,
+        combined_model = combined_model,
+        hyperparams = hyperparams,
+        meta = meta,
+    )
+end

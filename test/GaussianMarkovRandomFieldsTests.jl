@@ -35,6 +35,7 @@ include("spatiotemporal/test_advection_diffusion.jl")
 include("autoregressive/test_car.jl")
 include("latent_models/test_latent_models.jl")
 include("autodiff/runtests.jl")
+include("formula/test_formula_interface.jl")
 
 @testset "Code quality (Aqua.jl)" begin
     Aqua.test_all(GaussianMarkovRandomFields; ambiguities = false)
