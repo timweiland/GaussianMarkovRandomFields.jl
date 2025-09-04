@@ -16,9 +16,8 @@ Generic loglik implementation for all exponential family likelihoods using produ
 """
 function loglik(x, lik::ExponentialFamilyLikelihood)
     y = lik.y
-    # Use indexed view if indices are specified, otherwise use full x
-    η = lik.indices === nothing ? x : view(x, lik.indices)
-    μ = apply_invlink.(Ref(lik.link), η)
+    η = _eta(lik, x)
+    μ = _mu(lik, η)
     dist = _construct_distribution(lik, μ)
     return logpdf(dist, y)
 end
@@ -32,8 +31,7 @@ Computes: ∑ᵢ logpdf(Normal(μᵢ, σ), yᵢ) = -n/2 * log(2π) - n * log(σ)
 """
 function loglik(x, lik::NormalLikelihood)
     y = lik.y
-    # Use indexed view if indices are specified, otherwise use full x
-    η = lik.indices === nothing ? x : view(x, lik.indices)
+    η = _eta(lik, x)
     μ = apply_invlink.(Ref(lik.link), η)
 
     # Fast computation avoiding product_distribution
@@ -69,20 +67,11 @@ end
 
 Compute gradient of Normal likelihood with canonical identity link w.r.t. latent field x.
 """
-# Non-indexed case (indices === nothing)
-function loggrad(x, lik::NormalLikelihood{IdentityLink, Nothing})
-    y = lik.y
-    μ = x  # Canonical identity link: μ = x
-    return (y .- μ) .* lik.inv_σ²
-end
-
-# Indexed case (indices !== nothing)
 function loggrad(x, lik::NormalLikelihood{IdentityLink})
     y = lik.y
-    grad = zeros(eltype(x), length(x))
-    μ = view(x, lik.indices)
-    grad[lik.indices] .= (y .- μ) .* lik.inv_σ²
-    return grad
+    η = _eta(lik, x)
+    g_obs = (y .- η) .* lik.inv_σ²
+    return _embed_grad(lik, g_obs, length(x))
 end
 
 """
@@ -90,22 +79,12 @@ end
 
 Compute gradient of Poisson likelihood with canonical log link w.r.t. latent field x.
 """
-# Non-indexed case
-function loggrad(x, lik::PoissonLikelihood{LogLink, Nothing})
-    y = lik.y
-    η = x
-    μ = exp.(η)  # Canonical log link: μ = exp(η)
-    return y .- μ
-end
-
-# Indexed case
 function loggrad(x, lik::PoissonLikelihood{LogLink})
     y = lik.y
-    grad = zeros(eltype(x), length(x))
-    η = view(x, lik.indices)
-    μ = exp.(η)
-    grad[lik.indices] .= y .- μ
-    return grad
+    η = _eta(lik, x)
+    μ = _mu(lik, η)
+    g_obs = y .- μ
+    return _embed_grad(lik, g_obs, length(x))
 end
 
 """
@@ -113,22 +92,12 @@ end
 
 Compute gradient of Bernoulli likelihood with canonical logit link w.r.t. latent field x.
 """
-# Non-indexed case
-function loggrad(x, lik::BernoulliLikelihood{LogitLink, Nothing})
-    y = lik.y
-    η = x
-    μ = logistic.(η)  # Canonical logit link: μ = logistic(η)
-    return y .- μ
-end
-
-# Indexed case
 function loggrad(x, lik::BernoulliLikelihood{LogitLink})
     y = lik.y
-    grad = zeros(eltype(x), length(x))
-    η = view(x, lik.indices)
+    η = _eta(lik, x)
     μ = logistic.(η)
-    grad[lik.indices] .= y .- μ
-    return grad
+    g_obs = y .- μ
+    return _embed_grad(lik, g_obs, length(x))
 end
 
 """
@@ -136,24 +105,13 @@ end
 
 Compute gradient of Binomial likelihood with canonical logit link w.r.t. latent field x.
 """
-# Non-indexed case
-function loggrad(x, lik::BinomialLikelihood{LogitLink, Nothing})
-    y = lik.y
-    n = lik.n
-    η = x
-    μ = logistic.(η)  # Canonical logit link: μ = logistic(η)
-    return y .- n .* μ
-end
-
-# Indexed case
 function loggrad(x, lik::BinomialLikelihood{LogitLink})
     y = lik.y
     n = lik.n
-    grad = zeros(eltype(x), length(x))
-    η = view(x, lik.indices)
+    η = _eta(lik, x)
     μ = logistic.(η)
-    grad[lik.indices] .= y .- n .* μ
-    return grad
+    g_obs = y .- n .* μ
+    return _embed_grad(lik, g_obs, length(x))
 end
 
 # ----------------------------- loghessian methods for canonical links --------------------------
@@ -163,16 +121,9 @@ end
 
 Compute Hessian of Normal likelihood with canonical identity link w.r.t. latent field x.
 """
-# Non-indexed case
-function loghessian(x, lik::NormalLikelihood{IdentityLink, Nothing})
-    return Diagonal(-ones(length(x)) .* lik.inv_σ²)
-end
-
-# Indexed case
 function loghessian(x, lik::NormalLikelihood{IdentityLink})
-    diagonal_terms = zeros(eltype(x), length(x))
-    diagonal_terms[lik.indices] .= -lik.inv_σ²
-    return Diagonal(diagonal_terms)
+    d_obs = fill(-lik.inv_σ², length(lik.y))
+    return _embed_diag(lik, d_obs, length(x))
 end
 
 """
@@ -180,20 +131,11 @@ end
 
 Compute Hessian of Poisson likelihood with canonical log link w.r.t. latent field x.
 """
-# Non-indexed case
-function loghessian(x, lik::PoissonLikelihood{LogLink, Nothing})
-    η = x
-    μ = exp.(η)  # Canonical log link: μ = exp(η)
-    return Diagonal(-μ)
-end
-
-# Indexed case
 function loghessian(x, lik::PoissonLikelihood{LogLink})
-    diagonal_terms = zeros(eltype(x), length(x))
-    η = view(x, lik.indices)
-    μ = exp.(η)
-    diagonal_terms[lik.indices] .= -μ
-    return Diagonal(diagonal_terms)
+    η = _eta(lik, x)
+    μ = _mu(lik, η)
+    d_obs = -μ
+    return _embed_diag(lik, d_obs, length(x))
 end
 
 """
@@ -201,20 +143,11 @@ end
 
 Compute Hessian of Bernoulli likelihood with canonical logit link w.r.t. latent field x.
 """
-# Non-indexed case
-function loghessian(x, lik::BernoulliLikelihood{LogitLink, Nothing})
-    η = x
-    μ = logistic.(η)  # Canonical logit link: μ = logistic(η)
-    return Diagonal(-μ .* (1 .- μ))
-end
-
-# Indexed case
 function loghessian(x, lik::BernoulliLikelihood{LogitLink})
-    diagonal_terms = zeros(eltype(x), length(x))
-    η = view(x, lik.indices)
+    η = _eta(lik, x)
     μ = logistic.(η)
-    diagonal_terms[lik.indices] .= -μ .* (1 .- μ)
-    return Diagonal(diagonal_terms)
+    d_obs = -μ .* (1 .- μ)
+    return _embed_diag(lik, d_obs, length(x))
 end
 
 """
@@ -222,20 +155,10 @@ end
 
 Compute Hessian of Binomial likelihood with canonical logit link w.r.t. latent field x.
 """
-# Non-indexed case
-function loghessian(x, lik::BinomialLikelihood{LogitLink, Nothing})
-    n = lik.n
-    η = x
-    μ = logistic.(η)  # Canonical logit link: μ = logistic(η)
-    return Diagonal(-n .* μ .* (1 .- μ))
-end
-
-# Indexed case
 function loghessian(x, lik::BinomialLikelihood{LogitLink})
     n = lik.n
-    diagonal_terms = zeros(eltype(x), length(x))
-    η = view(x, lik.indices)
+    η = _eta(lik, x)
     μ = logistic.(η)
-    diagonal_terms[lik.indices] .= -n .* μ .* (1 .- μ)
-    return Diagonal(diagonal_terms)
+    d_obs = -n .* μ .* (1 .- μ)
+    return _embed_diag(lik, d_obs, length(x))
 end

@@ -45,6 +45,69 @@ end
         end
     end
 
+    @testset "Poisson Offsets" begin
+        @testset "Non-indexed, LogLink" begin
+            model = ExponentialFamily(Poisson, LogLink())
+            η = randn(6)
+            y = rand(0:10, 6)
+            offset = randn(6) .* 0.3  # arbitrary log-exposure
+
+            lik = model(y; offset = offset)
+
+            # Log-likelihood matches reference with μ = exp(η + offset)
+            ll = loglik(η, lik)
+            μ = exp.(η .+ offset)
+            ref = logpdf(product_distribution(Poisson.(μ)), y)
+            @test ll ≈ ref atol = 1.0e-10
+
+            # Gradient/Hessian match ForwardDiff
+            grad = loggrad(η, lik)
+            grad_fd = ForwardDiff.gradient(x -> loglik(x, lik), η)
+            @test grad ≈ grad_fd atol = 1.0e-6
+
+            hess = loghessian(η, lik)
+            hess_fd = ForwardDiff.hessian(x -> loglik(x, lik), η)
+            @test Matrix(hess) ≈ hess_fd atol = 1.0e-6
+        end
+
+        @testset "Indexed, LogLink" begin
+            model = ExponentialFamily(Poisson, LogLink(); indices = 2:4)
+            η_full = randn(6)
+            y = rand(0:10, 3)
+            offset = randn(3) .* 0.2
+
+            lik = model(y; offset = offset)
+
+            ll = loglik(η_full, lik)
+            μ = exp.(η_full[2:4] .+ offset)
+            ref = logpdf(product_distribution(Poisson.(μ)), y)
+            @test ll ≈ ref atol = 1.0e-10
+
+            grad = loggrad(η_full, lik)
+            grad_fd = ForwardDiff.gradient(x -> loglik(x, lik), η_full)
+            @test grad ≈ grad_fd atol = 1.0e-6
+
+            hess = loghessian(η_full, lik)
+            hess_fd = ForwardDiff.hessian(x -> loglik(x, lik), η_full)
+            @test Matrix(hess) ≈ hess_fd atol = 1.0e-6
+
+            # Ensure zeros outside indices
+            @test grad[1] == 0.0 && grad[5] == 0.0 && grad[6] == 0.0
+        end
+
+        @testset "conditional_distribution with offset" begin
+            model = ExponentialFamily(Poisson)
+            x = randn(5)
+            offset = fill(0.3, 5)
+
+            dist_no = conditional_distribution(model, x)
+            dist_off = conditional_distribution(model, x; offset = offset)
+
+            @test mean(dist_no) ≈ exp.(x) atol = 1.0e-10
+            @test mean(dist_off) ≈ exp.(x .+ offset) atol = 1.0e-10
+        end
+    end
+
     @testset "Bernoulli Family" begin
         # Test with different link functions
         links = [LogitLink(), LogLink()]
