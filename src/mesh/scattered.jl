@@ -37,7 +37,6 @@ function auto_size_params(points; α::Real = 0.8, β::Real = 3.0, γ::Real = 3.0
     distMin = dmin
     distMax = γ * dmed
     interior_mesh_size = dmed
-    @show sizeMin, sizeMax, distMin, distMax, interior_mesh_size
 
     return sizeMin, sizeMax, distMin, distMax, interior_mesh_size
 end
@@ -53,7 +52,6 @@ end
 
 function _add_poly_to_gmsh(poly, mesh_size; hole::Bool = false)
     ring = _ring_points(poly)
-    @show ring[1]
     # create gmsh points
     p = [gmsh.model.geo.addPoint(xy..., 0.0, mesh_size) for xy in ring]
     # lines in consistent order
