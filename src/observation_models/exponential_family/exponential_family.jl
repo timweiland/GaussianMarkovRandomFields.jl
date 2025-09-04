@@ -181,6 +181,20 @@ function _conditional_distribution_family(::Type{<:Binomial}, μ; n, kwargs...)
     return product_distribution(Binomial.(n, μ))
 end
 
+function conditional_distribution(obs_model::ExponentialFamily{Poisson}, x; offset = nothing)
+    # Offsets are only supported for Poisson with LogLink (log-exposure)
+    if (offset !== nothing) && !(obs_model.link isa LogLink)
+        throw(ArgumentError("offset is only supported for Poisson with LogLink"))
+    end
+    η = x
+    if offset !== nothing
+        length(offset) == length(x) || throw(ArgumentError("offset length $(length(offset)) must match x length $(length(x))"))
+        η = η .+ offset
+    end
+    μ = apply_invlink.(Ref(obs_model.link), η)
+    return product_distribution(Poisson.(μ))
+end
+
 
 # =======================================================================================
 # FACTORY PATTERN: Make ExponentialFamily callable to create materialized likelihoods
@@ -190,8 +204,16 @@ function (obs_model::ExponentialFamily{Normal, L, I})(y; σ, kwargs...) where {L
     return NormalLikelihood(obs_model.link, Float64.(y), Float64(σ), 1.0 / (σ^2), log(σ), obs_model.indices)
 end
 
-function (obs_model::ExponentialFamily{Poisson, L, I})(y; kwargs...) where {L, I}
-    return PoissonLikelihood(obs_model.link, Int.(y), obs_model.indices)
+function (obs_model::ExponentialFamily{Poisson, L, I})(y; offset = nothing, kwargs...) where {L, I}
+    # Offsets are only supported for Poisson with LogLink (log-exposure)
+    if (offset !== nothing) && !(obs_model.link isa LogLink)
+        throw(ArgumentError("offset is only supported for Poisson with LogLink"))
+    end
+    offset_vec = offset === nothing ? nothing : Float64.(offset)
+    if offset_vec !== nothing
+        length(offset_vec) == length(y) || throw(ArgumentError("offset length $(length(offset_vec)) must match y length $(length(y))"))
+    end
+    return PoissonLikelihood(obs_model.link, Int.(y), obs_model.indices, offset_vec)
 end
 
 function (obs_model::ExponentialFamily{Bernoulli, L, I})(y; kwargs...) where {L, I}

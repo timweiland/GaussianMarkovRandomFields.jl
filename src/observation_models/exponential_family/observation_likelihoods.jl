@@ -59,10 +59,11 @@ obs_lik = obs_model([1, 3, 0, 2])      # PoissonLikelihood{LogLink}
 ll = loglik([0.0, 1.1, -2.0, 0.7], obs_lik)  # x values on log scale
 ```
 """
-struct PoissonLikelihood{L <: LinkFunction, I} <: ExponentialFamilyLikelihood{L, I}
+struct PoissonLikelihood{L <: LinkFunction, I, O} <: ExponentialFamilyLikelihood{L, I}
     link::L
     y::Vector{Int}
     indices::I  # Can be Nothing, UnitRange, or Vector{Int}
+    offset::O   # Nothing or Vector{Float64}
 end
 
 """

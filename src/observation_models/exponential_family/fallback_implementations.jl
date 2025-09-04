@@ -14,53 +14,29 @@ using Distributions: product_distribution
     loggrad(x, lik::ExponentialFamilyLikelihood) -> Vector{Float64}
 
 Optimized chain rule implementation for exponential family likelihoods.
+Handles indexing via helper embedding.
 """
-# Non-indexed case
-function loggrad(x, lik::T) where {L, T <: ExponentialFamilyLikelihood{L, Nothing}}
-    η = x
-    μ = apply_invlink.(Ref(lik.link), η)
-    dμ_dη = derivative_invlink.(Ref(lik.link), η)
-
-    return _loggrad_family(lik, μ, dμ_dη)
-end
-
-# Indexed case
 function loggrad(x, lik::ExponentialFamilyLikelihood)
-    grad = zeros(eltype(x), length(x))
-    η = view(x, lik.indices)
-    μ = apply_invlink.(Ref(lik.link), η)
+    η = _eta(lik, x)
+    μ = _mu(lik, η)
     dμ_dη = derivative_invlink.(Ref(lik.link), η)
-
-    grad[lik.indices] .= _loggrad_family(lik, μ, dμ_dη)
-    return grad
+    g_obs = _loggrad_family(lik, μ, dμ_dη)
+    return _embed_grad(lik, g_obs, length(x))
 end
 
 """
     loghessian(x, lik::ExponentialFamilyLikelihood) -> Diagonal{Float64}
 
 Optimized chain rule implementation for exponential family likelihoods.
+Handles indexing via helper embedding.
 """
-# Non-indexed case
-function loghessian(x, lik::T) where {L, T <: ExponentialFamilyLikelihood{L, Nothing}}
-    η = x
-    μ = apply_invlink.(Ref(lik.link), η)
-    dμ_dη = derivative_invlink.(Ref(lik.link), η)
-    d2μ_dη² = second_derivative_invlink.(Ref(lik.link), η)
-
-    diagonal_terms = _loghessian_diagonal_family(lik, μ, dμ_dη, d2μ_dη²)
-    return Diagonal(diagonal_terms)
-end
-
-# Indexed case
 function loghessian(x, lik::ExponentialFamilyLikelihood)
-    diagonal_terms = zeros(eltype(x), length(x))
-    η = view(x, lik.indices)
-    μ = apply_invlink.(Ref(lik.link), η)
+    η = _eta(lik, x)
+    μ = _mu(lik, η)
     dμ_dη = derivative_invlink.(Ref(lik.link), η)
     d2μ_dη² = second_derivative_invlink.(Ref(lik.link), η)
-
-    diagonal_terms[lik.indices] .= _loghessian_diagonal_family(lik, μ, dμ_dη, d2μ_dη²)
-    return Diagonal(diagonal_terms)
+    d_obs = _loghessian_diagonal_family(lik, μ, dμ_dη, d2μ_dη²)
+    return _embed_diag(lik, d_obs, length(x))
 end
 
 # ----------------------------- Family-specific helper functions for gradients/hessians --------------------------
