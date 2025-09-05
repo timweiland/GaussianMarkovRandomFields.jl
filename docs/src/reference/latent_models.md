@@ -51,6 +51,7 @@ BesagModel
 
 ```@docs
 IIDModel
+FixedEffectsModel
 ```
 
 ### Model Composition
@@ -159,3 +160,15 @@ ar1(τ=1.0, ρ=1.5)    # ArgumentError: |ρ| must be < 1
 - [`GMRF`](@ref) and [`ConstrainedGMRF`](@ref) for the underlying GMRF types
 - [Hard Constraints](@ref) for constraint handling details
 - [Observation Models](@ref) for linking GMRFs to data
+
+## Formula Terms
+
+Prefer writing models with formulas? The latent components discussed here can be
+constructed via formula terms and assembled automatically into a combined model
+and design matrix. See the Formula Interface reference for details:
+
+- [Formula Interface](@ref) — terms (`IID`, `RandomWalk`, `AR1`, `Besag`) and
+  `build_formula_components`.
+- For a worked example combining Besag + IID + fixed effects under a Poisson
+  likelihood with offset, see the tutorial:
+  [Advanced GMRF modelling for disease mapping](@ref)

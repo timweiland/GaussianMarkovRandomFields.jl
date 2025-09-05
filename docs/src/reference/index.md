@@ -4,6 +4,8 @@
 Pages = [
     "gmrfs.md",
     "latent_models.md",
+    "formula.md",
+    "spatial_utils.md",
     "observation_models.md",
     "gaussian_approximation.md",
     "hard_constraints.md",
