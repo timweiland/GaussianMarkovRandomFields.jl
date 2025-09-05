@@ -160,3 +160,12 @@ function conditional_distribution(ltom::LinearlyTransformedObservationModel, x_f
     η = ltom.design_matrix * x_full
     return conditional_distribution(ltom.base_model, η; kwargs...)
 end
+
+# COV_EXCL_START
+function Base.show(io::IO, model::LinearlyTransformedObservationModel)
+    A = model.design_matrix
+    m, n = size(A)
+    A_kind = A isa SparseArrays.AbstractSparseMatrix ? "sparse" : "dense"
+    return print(io, "LinearlyTransformedObservationModel(base=$(typeof(model.base_model)), A=$(m)×$(n) $(A_kind))")
+end
+# COV_EXCL_STOP
