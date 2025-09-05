@@ -52,4 +52,22 @@ using SparseArrays
         @test length(comp.y) == length(dataB.y)
         @test size(comp.A, 2) == length(unique(dataB.group))
     end
+
+    @testset "Besag (functor carries W)" begin
+        # Simple 3-node chain adjacency
+        W = spzeros(3, 3)
+        W[1, 2] = 1; W[2, 1] = 1
+        W[2, 3] = 1; W[3, 2] = 1
+
+        dataB = (
+            y = randn(6),
+            region = [1, 2, 3, 2, 1, 3],
+        )
+        besag = Besag(W)
+        comp = build_formula_components(@formula(y ~ 0 + besag(region)), dataB; family = Normal)
+        @test size(comp.A) == (length(dataB.y), 3)
+        @test nnz(comp.A) == length(dataB.y)
+        ks = Set(keys(comp.hyperparams))
+        @test :τ_besag in ks
+    end
 end

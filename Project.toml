@@ -85,16 +85,16 @@ julia = "1.10"
 
 [extras]
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 ReTest = "e0db7c4e-2690-44b9-bad6-7687da720f89"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 SparseConnectivityTracer = "9f842d2f-2579-4b1d-911e-f412cf18a3f5"
 SparseMatrixColorings = "0a514795-09f3-496d-8182-132a7b665d35"
+StatsModels = "3eaba693-59b7-5ba5-a881-562e759f1c8d"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
-StatsModels = "3eaba693-59b7-5ba5-a881-562e759f1c8d"
-Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 
 [targets]
 test = ["Aqua", "ForwardDiff", "LinearAlgebra", "ReTest", "SparseArrays", "SparseConnectivityTracer", "SparseMatrixColorings", "Test", "Zygote", "StatsModels", "Distributions"]

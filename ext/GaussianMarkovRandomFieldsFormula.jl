@@ -7,8 +7,8 @@ using SparseArrays
 using LinearAlgebra
 
 import GaussianMarkovRandomFields:
-    IID, RandomWalk, AR1,
-    RW1Model, AR1Model, IIDModel, CombinedModel, FixedEffectsModel,
+    IID, RandomWalk, AR1, Besag,
+    RW1Model, AR1Model, IIDModel, BesagModel, CombinedModel, FixedEffectsModel,
     LinearlyTransformedObservationModel, ExponentialFamily,
     BinomialObservations
 
