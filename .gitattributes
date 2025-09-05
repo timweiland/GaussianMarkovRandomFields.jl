@@ -1,0 +1,4 @@
+docs/data/scotlip.shp filter=lfs diff=lfs merge=lfs -text
+docs/data/lansing_trees.rda filter=lfs diff=lfs merge=lfs -text
+docs/data/scotlip.csv filter=lfs diff=lfs merge=lfs -text
+docs/data/scotlip.dbf filter=lfs diff=lfs merge=lfs -text
