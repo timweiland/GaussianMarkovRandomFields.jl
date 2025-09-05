@@ -43,7 +43,7 @@ function contiguity_adjacency(geoms; rule::Symbol = :queen)
         pi = prep[i]
         for j in (i + 1):n
             # Queen contiguity: boundaries touch (at least a point), interiors do not overlap
-            if LibGEOS.preptouches(pi, g[j])
+            if LibGEOS.touches(pi, g[j])
                 push!(I, i); push!(J, j); push!(V, 1.0)
                 push!(I, j); push!(J, i); push!(V, 1.0)
             end
