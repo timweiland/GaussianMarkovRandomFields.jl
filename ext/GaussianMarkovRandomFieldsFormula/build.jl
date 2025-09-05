@@ -19,6 +19,15 @@ function _latent_model(term::AR1Term, data)
     return AR1Model(length(lvls))
 end
 
+function _latent_model(term::BesagTerm, _)
+    # Pass type-stable Val options to BesagModel
+    return BesagModel(
+        term.adjacency;
+        normalize_var = Val(term.normalize_var),
+        singleton_policy = Val(term.singleton_policy),
+    )
+end
+
 # Column widths for each term (avoid relying on internal StatsModels widths)
 _ncols_for_term(term, data) = size(StatsModels.modelcols(term, data), 2)
 
@@ -105,6 +114,11 @@ function GaussianMarkovRandomFields.build_formula_components(
             fixed = [size(StatsModels.modelcols(t, data), 2) for t in fixed_terms],
         ),
     )
+
+    # Sanity: columns of A must match latent dimension
+    n_cols = size(A, 2)
+    n_lat = length(combined_model)
+    n_cols == n_lat || error("Design matrix columns ($n_cols) do not match latent dimension ($n_lat)")
 
     return (
         A = A,

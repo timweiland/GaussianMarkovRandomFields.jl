@@ -52,6 +52,27 @@ end
 
 StatsModels.termvars(term::AR1Term) = [term.variable]
 
+# Besag(region; W = adjacency)
+struct BesagTerm{M <: AbstractMatrix} <: FormulaRandomEffectTerm
+    variable::Symbol
+    adjacency::M
+    normalize_var::Bool
+    singleton_policy::Symbol
+end
+
+function StatsModels.apply_schema(
+        t::StatsModels.FunctionTerm{<:GaussianMarkovRandomFields.Besag},
+        ::StatsModels.Schema,
+        ::Type
+    )
+    # Functor carries adjacency matrix in t.f.W
+    var_term = only(t.args)
+    W = t.f.W
+    return BesagTerm(var_term.sym, W, t.f.normalize_var, t.f.singleton_policy)
+end
+
+StatsModels.termvars(term::BesagTerm) = [term.variable]
+
 # Sparse mapping helpers
 _getcolumn(data, sym::Symbol) = hasproperty(data, sym) ? getproperty(data, sym) : haskey(data, sym) ? data[sym] : error("Variable $(sym) not found in data")
 
@@ -93,4 +114,14 @@ end
 function StatsModels.modelcols(term::AR1Term, data)
     v = _getcolumn(data, term.variable)
     return _indicator_mapping(v)
+end
+
+function StatsModels.modelcols(term::BesagTerm, data)
+    v = Int.(_getcolumn(data, term.variable))
+    n_obs = length(v)
+    n_nodes = size(term.adjacency, 1)
+    I = collect(1:n_obs)
+    J = v
+    V = ones(Float64, n_obs)
+    return sparse(I, J, V, n_obs, n_nodes)
 end
