@@ -134,7 +134,7 @@ plt = plot(
 )
 plt
 
-# ## Fixed effects summary (β and 95% CI)
+# ## Fixed effects summary (β and 95 CI)
 # Interpreting fixed effects is easy in a log‑link Poisson GLM:
 # - exp(β₀) is the baseline relative risk when AFF=0 and random effects are zero.
 # - exp(β_aff) is the multiplicative change in RR per unit increase in AFF
@@ -182,7 +182,7 @@ plt_iid = plot(
 )
 plot(plt_besag, plt_iid; layout = (1, 2))
 
-# ## Exceedance probability map: P(RR > 1)
+# ## Exceedance probability map: RR greater than 1
 # A very actionable view: the probability that RR exceeds 1 (i.e., rates are
 # elevated vs expectation). Values near 1 indicate strong evidence for elevation;
 # near 0 suggests lower‑than‑expected; around 0.5 is uncertain.
@@ -200,7 +200,7 @@ exceed ./= N
 plt_ex = plot(
     shapes; fill_z = reshape(Float64.(exceed), 1, :), st = :shape, c = :viridis, lc = :gray30,
     legend = false, axis = nothing, aspect_ratio = 1.0,
-    title = "Exceedance P(RR > 1)", cb = :right
+    title = "Exceedance: RR greater than 1", cb = :right
 )
 plt_ex
 
