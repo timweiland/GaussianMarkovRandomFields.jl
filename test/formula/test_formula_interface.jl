@@ -70,4 +70,30 @@ using SparseArrays
         ks = Set(keys(comp.hyperparams))
         @test :τ_besag in ks
     end
+
+    @testset "Besag with id_to_node mapping" begin
+        # 3-node chain adjacency
+        W = spzeros(3, 3)
+        W[1, 2] = 1; W[2, 1] = 1
+        W[2, 3] = 1; W[3, 2] = 1
+
+        # Non-integer region IDs
+        names = ["A", "B", "C", "B", "A", "C"]
+        dataC = (
+            y = randn(length(names)),
+            region_name = names,
+        )
+        idmap = Dict("A" => 1, "B" => 2, "C" => 3)
+        besag = Besag(W; id_to_node = idmap)
+        comp = build_formula_components(@formula(y ~ 0 + besag(region_name)), dataC; family = Normal)
+        @test size(comp.A) == (length(names), 3)
+        @test nnz(comp.A) == length(names)
+        # Check mapping: rows where region_name == "C" should map to column 3
+        rows_C = findall(==("C"), names)
+        for r in rows_C
+            @test comp.A[r, 3] == 1.0
+        end
+        ks = Set(keys(comp.hyperparams))
+        @test :τ_besag in ks
+    end
 end

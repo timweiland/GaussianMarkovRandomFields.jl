@@ -53,9 +53,10 @@ end
 StatsModels.termvars(term::AR1Term) = [term.variable]
 
 # Besag(region; W = adjacency)
-struct BesagTerm{M <: AbstractMatrix} <: FormulaRandomEffectTerm
+struct BesagTerm{M <: AbstractMatrix, MT} <: FormulaRandomEffectTerm
     variable::Symbol
     adjacency::M
+    id_to_node::MT
     normalize_var::Bool
     singleton_policy::Symbol
 end
@@ -68,7 +69,8 @@ function StatsModels.apply_schema(
     # Functor carries adjacency matrix in t.f.W
     var_term = only(t.args)
     W = t.f.W
-    return BesagTerm(var_term.sym, W, t.f.normalize_var, t.f.singleton_policy)
+    idmap = t.f.id_to_node
+    return BesagTerm(var_term.sym, W, idmap, t.f.normalize_var, t.f.singleton_policy)
 end
 
 StatsModels.termvars(term::BesagTerm) = [term.variable]
@@ -117,11 +119,36 @@ function StatsModels.modelcols(term::AR1Term, data)
 end
 
 function StatsModels.modelcols(term::BesagTerm, data)
-    v = Int.(_getcolumn(data, term.variable))
-    n_obs = length(v)
+    raw = _getcolumn(data, term.variable)
+    n_obs = length(raw)
     n_nodes = size(term.adjacency, 1)
+
+    # Resolve node indices J from raw IDs
+    J = Vector{Int}(undef, n_obs)
+    if term.id_to_node !== nothing
+        idmap = term.id_to_node
+        @inbounds for i in 1:n_obs
+            id = raw[i]
+            idx = try
+                idmap[id]
+            catch err
+                throw(ArgumentError("id_to_node has no entry for $(repr(id)) at row $(i)"))
+            end
+            idx isa Integer || throw(ArgumentError("id_to_node must map to 1-based integer node indices; got $(typeof(idx))"))
+            1 <= idx <= n_nodes || throw(ArgumentError("Mapped node index $(idx) out of bounds 1:$(n_nodes)"))
+            J[i] = Int(idx)
+        end
+    else
+        # Expect integers already
+        v = Int.(raw)
+        @inbounds for i in 1:n_obs
+            idx = v[i]
+            1 <= idx <= n_nodes || throw(ArgumentError("Region index $(idx) out of bounds 1:$(n_nodes) at row $(i)"))
+            J[i] = idx
+        end
+    end
+
     I = collect(1:n_obs)
-    J = v
     V = ones(Float64, n_obs)
     return sparse(I, J, V, n_obs, n_nodes)
 end
