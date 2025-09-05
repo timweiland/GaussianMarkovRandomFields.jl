@@ -36,23 +36,29 @@ function AR1(args...)
 end
 
 """
-    Besag(W)
+    Besag(W; id_to_node = nothing, normalize_var = true, singleton_policy = :gaussian)
 
 Formula functor for Besag (intrinsic CAR) random effects.
 
 Usage:
 - Create a functor instance: `besag = Besag(W)`
+- With string/categorical region IDs: `besag = Besag(W; id_to_node = Dict("WesternIsles" => 11, ...))`
 - Use in a formula: `@formula(y ~ 0 + besag(region))`
 
-Note: Calling the functor directly is unsupported outside formula parsing.
+Notes
+- `id_to_node` maps arbitrary region identifiers to integer node indices (1-based) of `W`.
+- Calling the functor directly is unsupported outside formula parsing.
 """
-struct Besag{WT <: AbstractMatrix}
+struct Besag{WT <: AbstractMatrix, MT}
     W::WT
+    id_to_node::MT  # may be Nothing or a mapping supporting getindex
     normalize_var::Bool
     singleton_policy::Symbol
 
-    function Besag(W::WT; normalize_var::Bool = true, singleton_policy::Symbol = :gaussian) where {WT}
-        return new{WT}(W, normalize_var, singleton_policy)
+    function Besag(
+            W::WT; id_to_node = nothing, normalize_var::Bool = true, singleton_policy::Symbol = :gaussian
+        ) where {WT}
+        return new{WT, typeof(id_to_node)}(W, id_to_node, normalize_var, singleton_policy)
     end
 end
 
