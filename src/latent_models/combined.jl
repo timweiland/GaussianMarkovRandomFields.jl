@@ -236,3 +236,22 @@ function _blockdiag(matrices...)
 end
 
 # The (model::LatentModel)(; kwargs...) method is inherited from the abstract type
+
+# COV_EXCL_START
+function Base.show(io::IO, model::CombinedModel)
+    k = length(model.components)
+    print(io, "CombinedModel with $(k) component$(k == 1 ? "" : "s") (total=$(model.total_size)):")
+    offset = 0
+    for (i, comp) in enumerate(model.components)
+        sz = model.component_sizes[i]
+        pname = model_name(comp)
+        params = join(string.(collect(keys(hyperparameters(comp)))), ", ")
+        print(io, "\n  [$i] $(pname) (n=$(sz))")
+        if !isempty(params)
+            print(io, ", hyperparameters = [", params, "]")
+        end
+        offset += sz
+    end
+    return
+end
+# COV_EXCL_STOP
