@@ -1,10 +1,12 @@
 using SparseArrays
 using LinearAlgebra
+using Distributions
+using Graphs
 
 export BesagModel
 
 """
-    BesagModel(adjacency::AbstractMatrix; regularization::Float64 = 1e-5)
+    BesagModel(adjacency::AbstractMatrix; regularization::Float64 = 1e-5, normalize_var::Bool = true, singleton_policy::Symbol = :gaussian)
 
 A Besag model for spatial latent effects on graphs using intrinsic Conditional Autoregressive (CAR) structure.
 
@@ -37,11 +39,20 @@ model = BesagModel(W)
 gmrf = model(τ=1.0)  # Returns ConstrainedGMRF with sum-to-zero constraint
 ```
 """
-struct BesagModel{M <: AbstractMatrix} <: LatentModel
+struct BesagModel{M <: AbstractMatrix, NF, QT <: AbstractMatrix, PT} <: LatentModel
     adjacency::M
     regularization::Float64
+    connected_components::Vector{Vector{Int}}
+    normalization_factor::NF
+    Q::QT
+    singleton_policy::PT
 
-    function BesagModel(adjacency::AbstractMatrix; regularization::Float64 = 1.0e-5)
+    function BesagModel(
+            adjacency::AbstractMatrix;
+            regularization::Float64 = 1.0e-5,
+            normalize_var = Val{true}(),
+            singleton_policy = Val{:gaussian}(),
+        )
         # Convert to appropriate sparse/structured format
         adj = if adjacency isa Matrix
             sparse(Bool.(adjacency))  # Convert Matrix to sparse for efficiency
@@ -59,14 +70,22 @@ struct BesagModel{M <: AbstractMatrix} <: LatentModel
         # Check diagonal is zero
         all(adj[i, i] == 0 for i in 1:n) || throw(ArgumentError("Adjacency matrix must have zero diagonal"))
 
-        # Check for isolated nodes (degree = 0)
-        degrees = vec(sum(adj, dims = 2))
-        all(degrees .> 0) || throw(ArgumentError("Graph cannot have isolated nodes (nodes with degree 0)"))
-
         # Validate regularization
         regularization > 0 || throw(ArgumentError("Regularization must be positive, got $regularization"))
+        # Validate singleton policy
+        singleton_policy in (Val{:gaussian}(), Val{:degenerate}()) ||
+            throw(ArgumentError("singleton_policy must be Val{:gaussian}() or Val{:degenerate}(), got $(singleton_policy)"))
 
-        return new{typeof(adj)}(adj, regularization)
+        D = Diagonal(adj * ones(n))  # Degree matrix
+        Q = (D - adj)                # Base intrinsic precision (per τ)
+
+        G = SimpleGraph(adj)
+        comps = connected_components(G)
+
+        _enforce_singleton_policy_on_Q!(Q, comps, singleton_policy)
+
+        normalization_factor = _compute_normalization(Q, comps, normalize_var, singleton_policy)
+        return new{typeof(adj), typeof(normalization_factor), typeof(Q), typeof(singleton_policy)}(adj, regularization, comps, normalization_factor, Q, singleton_policy)
     end
 end
 
@@ -83,17 +102,62 @@ function _validate_besag_parameters(; τ::Real)
     return nothing
 end
 
+function _get_constraint_matrix(n, connected_comps, ::Val{:degenerate})
+    n_constr = length(connected_comps)
+    A = zeros(n_constr, n)
+    for (i, comp) in enumerate(connected_comps)
+        A[i, comp] .= 1.0
+    end
+    return A
+end
+
+function _get_constraint_matrix(n, connected_comps, ::Val{:gaussian})
+    # No sum-to-zero constraint for singletons
+    comps_no_singletons = filter(c -> length(c) > 1, connected_comps)
+    n_constr = length(comps_no_singletons)
+    A = zeros(n_constr, n)
+    for (i, comp) in enumerate(comps_no_singletons)
+        A[i, comp] .= 1.0
+    end
+    return A
+end
+
+function _enforce_singleton_policy_on_Q!(Q::AbstractMatrix, connected_comps, ::Val{:gaussian})
+    for comp in connected_comps
+        if length(comp) == 1
+            idx = only(comp)
+            Q[idx, idx] = 1.0  # proper Gaussian prior (scaled by τ later)
+        end
+    end
+    return
+end
+_enforce_singleton_policy_on_Q!(::AbstractMatrix, connected_comps, ::Val{:degenerate}) = return
+
+_geomean(x) = exp(mean(log.(x)))
+
+function _compute_normalization(Q::AbstractMatrix, connected_comps, ::Val{true}, singleton_policy; regularization::Float64 = 1.0e-5)
+    n = size(Q, 1)
+    Qreg = Q + regularization * I
+    x_tmp = GMRF(zeros(n), Qreg)
+    A = _get_constraint_matrix(n, connected_comps, singleton_policy)
+    e = zeros(size(A, 1))
+    x_tmp_constr = ConstrainedGMRF(x_tmp, A, e)
+    marginal_vars = var(x_tmp_constr)
+
+    norms = ones(n)
+    for comp in connected_comps
+        if length(comp) > 1
+            norms[comp] .= _geomean(marginal_vars[comp])
+        end
+    end
+    return Diagonal(norms)
+end
+_compute_normalization(::AbstractMatrix, connected_comps, ::Val{false}, singleton_policy; kwargs...) = I
+
 function precision_matrix(model::BesagModel; τ::Real)
     _validate_besag_parameters(; τ = τ)
-
-    W = model.adjacency
-    n = size(W, 1)
-
-    # Compute graph Laplacian: D - W where D is degree matrix
-    D = Diagonal(W * ones(n))  # Degree matrix
-    Q = τ * (D - W)            # Scale by τ first
+    Q = model.normalization_factor * τ * model.Q  # Scale by τ first
     Q += model.regularization * I  # Add regularization
-
     return Q
 end
 
@@ -106,8 +170,8 @@ function constraints(model::BesagModel; kwargs...)
     # Sum-to-zero constraint: sum(x) = 0
     # A is 1×n matrix of all ones, e is [0]
     n = size(model.adjacency, 1)
-    A = ones(1, n)  # 1×n matrix
-    e = [0.0]       # Constraint vector
+    A = _get_constraint_matrix(n, model.connected_components, model.singleton_policy)
+    e = zeros(size(A, 1))       # Constraint vector
     return (A, e)
 end
 
