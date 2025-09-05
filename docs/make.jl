@@ -16,6 +16,7 @@ makedocs(
             "tutorials/spatiotemporal_modelling.md",
             "tutorials/boundary_conditions.md",
             "tutorials/bernoulli_spatial_classification.md",
+            "tutorials/bym_scotland_lip_cancer.md",
         ],
         "API Reference" => [
             "Overview" => "reference/index.md",
