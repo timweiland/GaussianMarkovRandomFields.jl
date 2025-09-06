@@ -26,7 +26,7 @@ using Distributions
         x = [0.1, -0.2]
 
         model = NonlinearLeastSquaresModel(f, n)
-        lik = model(y; σ = σ, x_init = zeros(n))
+        lik = model(y; σ = σ)
 
         # Manual computations
         yhat = f(x)
@@ -51,7 +51,7 @@ using Distributions
         x = [0.3, 0.1]
 
         model = NonlinearLeastSquaresModel(f, n)
-        lik = model(y; σ = σ, x_init = fill(0.1, n))
+        lik = model(y; σ = σ)
 
         yhat = f(x)
         r = y .- yhat
@@ -73,7 +73,16 @@ using Distributions
         # y length inconsistent with f(x) dimension
         model = NonlinearLeastSquaresModel(f, 2)
         y_bad = [1.0, 0.5]  # length 2, but f returns length 3
-        @test_throws ErrorException model(y_bad; σ = 0.2, x_init = zeros(2))
+        lik_bad = model(y_bad; σ = 0.2)
+        @test_throws DimensionMismatch loglik(zeros(2), lik_bad)
+    end
+
+    @testset "Interface hooks" begin
+        n = 2
+        model = NonlinearLeastSquaresModel(f, n)
+        y = [1.0, 0.5, 2.0]
+        @test hyperparameters(model) == (:σ,)
+        @test latent_dimension(model, y) == n
     end
 
     @testset "Conditional distribution" begin
