@@ -185,7 +185,7 @@ y = [1.0, 0.5, 2.0]
 
 # Build model and materialize likelihood
 model = NonlinearLeastSquaresModel(f, 2)
-lik = model(y; σ=σ, x_init=zeros(2))
+lik = model(y; σ=σ)
 
 # Evaluate
 x = [0.1, 0.2]

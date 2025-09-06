@@ -45,7 +45,7 @@ end
 # Factory pattern: make the model callable to materialize a likelihood
 # -------------------------------------------------------------------------------------------------
 
-function (model::NonlinearLeastSquaresModel)(y::AbstractVector; σ, x_init = nothing, rng = nothing)
+function (model::NonlinearLeastSquaresModel)(y::AbstractVector; σ)
     # Validate σ and normalize to vector of inverse variances
     m = length(y)
     σv = _normalize_sigma(σ, m)
@@ -55,18 +55,9 @@ function (model::NonlinearLeastSquaresModel)(y::AbstractVector; σ, x_init = not
     # Precompute constant term: -m/2 * log(2π) - sum(log σ)
     log_const = -0.5 * m * log(2π) - sum(log, σv)
 
-    # Choose x_init
-    n = model.n
-    if x_init === nothing
-        x_init = rng === nothing ? rand(n) : rand(rng, n)
-    end
-    length(x_init) == n || error("x_init must have length n=$(n)")
-
-    # Prepare y and validate output dimension at x_init
+    # Prepare y
     y_vec = collect(Float64, y)
     T = promote_type(eltype(y_vec), eltype(inv_σ²))
-    yhat0 = model.f(x_init)
-    length(yhat0) == m || error("Length of f(x) ($(length(yhat0))) must match y ($(m))")
 
     # Prepare sparse Jacobian backend via extension
     jac_backend = try
