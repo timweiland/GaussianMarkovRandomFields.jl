@@ -159,6 +159,50 @@ hess = loghessian(x, obs_lik)  # May be sparse!
 
 The sparse Hessian features provide dramatic performance improvements for large-scale problems with structured sparsity.
 
+## Nonlinear Least Squares
+
+Use when observations are Gaussian with mean given by an arbitrary (possibly nonlinear) function of the latent field: `y | x ~ Normal(f(x), σ)`.
+
+Key properties
+- Out-of-place `f`: define `f(x)::AbstractVector` with length equal to `length(y)`.
+- Gauss–Newton: gradient and Hessian use the Gauss–Newton approximation (no exact Hessian term).
+  - `∇ℓ(x) = J(x)' (w ⊙ r)`, where `r = y − f(x)`, `w = 1 ./ σ.^2`
+  - `∇²ℓ(x) ≈ − J(x)' Diagonal(w) J(x)`
+- `σ`: accepts a scalar or vector (heteroskedastic), both interpreted as standard deviations.
+- Sparse autodiff: requires loading `SparseConnectivityTracer` and `SparseMatrixColorings` to activate the sparse Jacobian backend.
+
+Example
+```julia
+using GaussianMarkovRandomFields
+using SparseConnectivityTracer, SparseMatrixColorings  # activate sparse Jacobian backend
+
+# Nonlinear mapping f: R^2 -> R^3
+f(x) = [x[1] + 2x[2], sin(x[1]), x[2]^2]
+
+# Observations and noise
+y = [1.0, 0.5, 2.0]
+σ = [0.3, 0.4, 0.5]  # vector sigma allowed
+
+# Build model and materialize likelihood
+model = NonlinearLeastSquaresModel(f, 2)
+lik = model(y; σ=σ, x_init=zeros(2))
+
+# Evaluate
+x = [0.1, 0.2]
+ll = loglik(x, lik)
+g  = loggrad(x, lik)     # uses sparse DI.jacobian under the hood
+H  = loghessian(x, lik)  # Gauss–Newton: -J' W J
+
+# Conditional distribution p(y | x)
+dist = conditional_distribution(model, x; σ=0.3)
+```
+
+API
+```@docs
+NonlinearLeastSquaresModel
+NonlinearLeastSquaresLikelihood
+```
+
 ## Advanced Features
 
 ### Linear Transformations and Design Matrices
