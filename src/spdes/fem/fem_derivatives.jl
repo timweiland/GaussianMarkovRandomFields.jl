@@ -122,8 +122,8 @@ to y at two input points.
 ```@example
 using Ferrite # hide
 grid = generate_grid(Triangle, (20,20)) # hide
-ip = Lagrange{2, RefTetrahedron, 1}() # hide
-qr = QuadratureRule{2, RefTetrahedron}(2) # hide
+ip = Lagrange{RefTriangle, 1}() # hide
+qr = QuadratureRule{RefTriangle}(2) # hide
 disc = FEMDiscretization(grid, ip, qr)
 X = [Tensors.Vec(0.11, 0.22), Tensors.Vec(-0.1, 0.4)]
 
@@ -205,8 +205,8 @@ two input points.
 ```@example
 using Ferrite # hide
 grid = generate_grid(Triangle, (20,20)) # hide
-ip = Lagrange{2, RefTetrahedron, 1}() # hide
-qr = QuadratureRule{2, RefTetrahedron}(2) # hide
+ip = Lagrange{RefTriangle, 1}() # hide
+qr = QuadratureRule{RefTriangle}(2) # hide
 disc = FEMDiscretization(grid, ip, qr)
 X = [Tensors.Vec(0.11, 0.22), Tensors.Vec(-0.1, 0.4)]
 

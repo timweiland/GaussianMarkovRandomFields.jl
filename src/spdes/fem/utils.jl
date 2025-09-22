@@ -8,11 +8,11 @@ export assemble_mass_matrix,
     apply_soft_constraints!
 
 """
-    lump_matrix(A::AbstractMatrix, ::Lagrange{D, S, 1}) where {D, S}
+    lump_matrix(A::AbstractMatrix, ::Lagrange{S, 1}) where {S}
 
 Lump a matrix by summing over the rows.
 """
-function lump_matrix(A::AbstractMatrix, ::Lagrange{D, S, 1}) where {D, S}
+function lump_matrix(A::AbstractMatrix, ::Lagrange{S, 1}) where {S}
     return spdiagm(0 => reshape(sum(A, dims = 2), (size(A)[1],)))
 end
 
