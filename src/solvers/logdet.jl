@@ -42,6 +42,12 @@ function _logdet_cov_impl(linsolve, ::LinearSolve.DiagonalFactorization)
     return -logdet(linsolve.A)
 end
 
+function _logdet_cov_impl(linsolve, ::LinearSolve.LDLtFactorization)
+    factorization = LinearSolve.@get_cacheval(linsolve, :LDLtFactorization)
+    # Log determinant of covariance = -log determinant of precision
+    return -logdet(factorization)
+end
+
 function _logdet_cov_impl(linsolve, ::LinearSolve.PardisoJL)
     # Pardiso logdet - will be implemented in extension
     error("Pardiso logdet implementation requires the Pardiso extension")
