@@ -67,20 +67,12 @@ function precision_matrix(model::RW1Model; τ::Real)
     n = model.n
     T = promote_type(typeof(τ), Float64)  # Ensure Float64 for regularization
 
-    # Build the base RW1 precision matrix structure
-    # Main diagonal: 1 at endpoints, 2 in the middle
-    main_diag = Vector{T}(undef, n)
-    main_diag[1] = 1
-    main_diag[end] = 1
-    for i in 2:(n - 1)
-        main_diag[i] = 2
+    # Build the main diagonal: 1 at endpoints, 2 in the middle
+    # Scale by τ and add regularization (using map to avoid Zygote mutation issues)
+    main_diag = map(1:n) do i
+        base_val = (i == 1 || i == n) ? T(1) : T(2)
+        base_val * τ + model.regularization
     end
-
-    # Scale by precision parameter first
-    main_diag .*= τ
-
-    # Then add regularization to avoid singularity
-    main_diag .+= model.regularization
 
     # Off-diagonal: -1 (scaled by τ)
     off_diag = fill(-T(τ), n - 1)

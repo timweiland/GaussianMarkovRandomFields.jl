@@ -63,22 +63,13 @@ function precision_matrix(model::AR1Model; τ::Real, ρ::Real)
     n = model.n
     T = promote_type(typeof(τ), typeof(ρ))
 
-    if n == 1
-        # Single element case
-        main_diag = [T(τ)]
-        off_diag = T[]
-    else
-        # Main diagonal: τ at endpoints, (1 + ρ²)τ in the middle
-        main_diag = Vector{T}(undef, n)
-        main_diag[1] = τ
-        main_diag[end] = τ
-        for i in 2:(n - 1)
-            main_diag[i] = (1 + ρ^2) * τ
-        end
-
-        # Off-diagonal: -ρτ for all off-diagonal elements
-        off_diag = fill(-ρ * τ, n - 1)
+    # Main diagonal: τ at endpoints, (1 + ρ²)τ in the middle
+    main_diag = map(1:n) do i
+        (i == 1 || i == n) ? T(τ) : T((1 + ρ^2) * τ)
     end
+
+    # Off-diagonal: -ρτ for all off-diagonal elements
+    off_diag = fill(-T(ρ * τ), n - 1)
 
     return SymTridiagonal(main_diag, off_diag)
 end
