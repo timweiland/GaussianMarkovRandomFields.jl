@@ -1,6 +1,5 @@
 using LinearAlgebra
 using SparseArrays
-using NonlinearSolve
 using LinearMaps
 
 export gaussian_approximation
@@ -17,45 +16,135 @@ function ∇²ₓ_neg_log_posterior(prior_gmrf::AbstractGMRF, obs_lik::Observati
     return precision_matrix(prior_gmrf) - loghessian(x, obs_lik)
 end
 
+# Private dispatch: extract constraints if present
+_extract_constraints(::GMRF) = nothing
+_extract_constraints(constrained::ConstrainedGMRF) = (A = constrained.constraint_matrix, e = constrained.constraint_vector)
+
+# Private dispatch: apply constraints to result
+_apply_constraints(gmrf::GMRF, ::Nothing) = gmrf
+_apply_constraints(gmrf::GMRF, constraints::NamedTuple) = ConstrainedGMRF(gmrf, constraints.A, constraints.e)
+
+# Private dispatch: extract base GMRF for optimization
+_base_gmrf(gmrf::GMRF) = gmrf
+_base_gmrf(constrained::ConstrainedGMRF) = constrained.base_gmrf
+
+# Set the matrix in the linsolve cache to Q
+_update_linsolve_cache!(cache, Q) = _update_linsolve_cache_inner!(cache, Q, cache.alg)
+
+function _update_linsolve_cache_inner!(cache, Q, alg)
+    return cache.A = Q
+end
+
+function _update_linsolve_cache_inner!(cache, Q, alg::LinearSolve.DefaultLinearSolver)
+    actual_alg = LinearSolve.algchoice_to_alg(Symbol(alg.alg))
+    return _update_linsolve_cache_inner(cache, Q, actual_alg)
+end
+
+function _update_linsolve_cache_inner!(cache, Q, alg::LinearSolve.LDLtFactorization)
+    # LDLtFactorization mutates the original matrix, so we need to copy it
+    # Causes super nasty and sneaky bugs if we don't do this!
+    return cache.A = copy(Q)
+end
+
 """
-    gaussian_approximation(prior_gmrf, obs_lik) -> AbstractGMRF
+    gaussian_approximation(prior_gmrf, obs_lik; kwargs...) -> AbstractGMRF
 
 Find Gaussian approximation to the posterior using Fisher scoring.
 
 This function finds the mode of the posterior distribution and constructs a Gaussian
 approximation around it using Fisher scoring (Newton-Raphson with Fisher information matrix).
 
+Works for both regular `GMRF` and `ConstrainedGMRF` priors, automatically handling
+constraint projection when needed.
+
 # Arguments
-- `prior_gmrf`: Prior GMRF distribution for the latent field
+- `prior_gmrf`: Prior GMRF distribution for the latent field (GMRF or ConstrainedGMRF)
 - `obs_lik`: Materialized observation likelihood (contains data and hyperparameters)
 
+# Keyword Arguments
+- `max_iter::Int=50`: Maximum number of Fisher scoring iterations
+- `mean_change_tol::Real=1e-4`: Convergence tolerance for mean change
+- `newton_dec_tol::Real=1e-5`: Newton decrement convergence tolerance
+- `verbose::Bool=false`: Print iteration information
+
 # Returns
-- `posterior_gmrf::GMRF`: Gaussian approximation to the posterior p(x | θ, y)
+- Gaussian approximation to the posterior p(x | θ, y) (same type as input prior)
 
 # Example
 ```julia
-# Set up components (done at higher level)
+# Set up components
 prior_gmrf = GMRF(μ_prior, Q_prior)
 obs_model = ExponentialFamily(Poisson)
-obs_lik = obs_model(y)  # Materialized once
+obs_lik = obs_model(y)
 
 # Find Gaussian approximation - returns a GMRF
 posterior_gmrf = gaussian_approximation(prior_gmrf, obs_lik)
 ```
 """
-function gaussian_approximation(prior_gmrf::GMRF, obs_lik::ObservationLikelihood; initial_guess = mean(prior_gmrf))
-    nlf = NonlinearFunction{true}(
-        (dg, u, p) -> (dg .= ∇ₓ_neg_log_posterior(p[1], p[2], u)),
-        jac = (dh, u, p) -> (dh .= ∇²ₓ_neg_log_posterior(p[1], p[2], u)),
-        jac_prototype = precision_matrix(prior_gmrf)
+function gaussian_approximation(
+        prior_gmrf::Union{GMRF, ConstrainedGMRF},
+        obs_lik::ObservationLikelihood;
+        max_iter::Int = 50,
+        mean_change_tol::Real = 1.0e-4,
+        newton_dec_tol::Real = 1.0e-5,
+        verbose::Bool = false
     )
-    prob = NonlinearProblem(nlf, initial_guess, (prior_gmrf, obs_lik))
-    sol = solve(
-        prob,
-        NewtonRaphson(linsolve = prior_gmrf.linsolve_cache.alg), abstol = 1.0e-6, reltol = 1.0e-6
-    )
-    x_star = sol.u
-    return GMRF(x_star, ∇²ₓ_neg_log_posterior(prior_gmrf, obs_lik, x_star))
+    # Extract base GMRF and constraints (nothing for regular GMRF)
+    base_gmrf = _base_gmrf(prior_gmrf)
+    constraints = _extract_constraints(prior_gmrf)
+
+    # Initialize with prior mean
+    x_k = mean(prior_gmrf)
+
+    cache = deepcopy(linsolve_cache(base_gmrf))
+    Q_base = cache.A
+
+    verbose && println("Starting Fisher scoring...")
+
+    for iter in 1:max_iter
+        # Compute observation likelihood derivatives at current point
+        H_k = loghessian(x_k, obs_lik)  # Hessian: ∇²ₓ log p(y|x)
+
+        # Update precision: Q_new = Q_base - H_k (note: H_k contains negative of Hessian)
+        Q_new = prepare_for_linsolve(Q_base - H_k, cache.alg)
+
+        _update_linsolve_cache!(cache, Q_new)
+        neg_score_k = ∇ₓ_neg_log_posterior(base_gmrf, obs_lik, x_k)
+        cache.b = neg_score_k
+        step = solve!(cache).u
+        μ_new = x_k - step
+        newton_decrement = dot(neg_score_k, step)
+
+        # Update cache matrix and create new GMRF with updated precision
+        new_gmrf = GMRF(μ_new, Q_new; linsolve_cache = cache)
+
+        # Apply constraints if present (no-op for regular GMRF)
+        result = _apply_constraints(new_gmrf, constraints)
+
+        # Get mean for convergence check (projects if constrained)
+        x_new = mean(result)
+
+        mean_change = norm(x_new - x_k)
+        mean_change_rel = mean_change / norm(x_k)
+
+        verbose && println("  Iter $iter: Newton decrement = $(newton_decrement)")
+        if (newton_decrement < newton_dec_tol) || (mean_change < mean_change_tol) || (mean_change_rel < mean_change_tol)
+            verbose && println("  Converged after $iter iterations")
+            return result
+        end
+
+        # Update for next iteration
+        x_k = x_new
+    end
+
+    verbose && println("  Reached max_iter = $max_iter without convergence")
+
+    # Return current best approximation
+    H_k = loghessian(x_k, obs_lik)
+    Q_final = prepare_for_linsolve(Q_base - H_k, cache.alg)
+    cache.A = Q_final
+    final_gmrf = GMRF(x_k, Q_final; linsolve_cache = cache)
+    return _apply_constraints(final_gmrf, constraints)
 end
 
 # Specialized dispatch for Normal observation likelihoods with identity link (conjugate prior case)
@@ -146,96 +235,6 @@ function gaussian_approximation(prior_constrained::ConstrainedGMRF, obs_lik::Lin
         y = base_lik.y,
         b = zeros(length(base_lik.y))
     )
-end
-
-# ConstrainedGMRF dispatch - Newton method with constraint projection
-"""
-    gaussian_approximation(prior_constrained::ConstrainedGMRF, obs_lik::ObservationLikelihood; kwargs...)
-
-Find Gaussian approximation to the constrained posterior using Newton optimization with constraint projection.
-
-Alternates between Newton/Fisher scoring steps and projecting onto the constraint manifold,
-which is mathematically equivalent to using Schur complements in the KKT approach for
-constrained Newton optimization.
-
-# Arguments
-- `prior_constrained::ConstrainedGMRF`: Prior constrained GMRF distribution  
-- `obs_lik::ObservationLikelihood`: Materialized observation likelihood
-
-# Keyword Arguments
-- `max_iter::Int=50`: Maximum number of Newton iterations
-- `mean_change_tol::Real=1e-4`: Convergence tolerance for mean change
-- `newton_dec_tol::Real=1e-5`: Newton decrement convergence tolerance  
-- `verbose::Bool=false`: Print iteration information
-
-# Returns
-- `posterior_constrained::ConstrainedGMRF`: Constrained Gaussian approximation to posterior
-"""
-function gaussian_approximation(
-        prior_constrained::ConstrainedGMRF,
-        obs_lik::ObservationLikelihood;
-        max_iter::Int = 50,
-        mean_change_tol::Real = 1.0e-4,
-        newton_dec_tol::Real = 1.0e-5,
-        verbose::Bool = false
-    )
-    # Extract components from constrained prior
-    base_gmrf = prior_constrained.base_gmrf
-    A = prior_constrained.constraint_matrix
-    e = prior_constrained.constraint_vector
-
-    # Initialize with constrained prior mean
-    x_k = mean(prior_constrained)
-
-    cache = deepcopy(linsolve_cache(base_gmrf))
-    Q_base = cache.A
-
-    verbose && println("Starting Fisher scoring for ConstrainedGMRF...")
-
-    for iter in 1:max_iter
-        # Compute observation likelihood derivatives at current point
-        H_k = loghessian(x_k, obs_lik)  # Hessian: ∇²ₓ log p(y|x)
-
-        # Update precision: Q_new = Q_base - H_k (note: H_k contains negative of Hessian)
-        Q_new = prepare_for_linsolve(Q_base - H_k, cache.alg)
-
-        cache.A = Q_new
-        neg_score_k = ∇ₓ_neg_log_posterior(base_gmrf, obs_lik, x_k)
-        cache.b = neg_score_k
-        step = solve!(cache).u
-        μ_new = x_k - step
-        newton_decrement = dot(neg_score_k, step)
-
-        # Update cache matrix and create new GMRF with updated precision and information
-        new_gmrf = GMRF(μ_new, Q_new; linsolve_cache = cache)
-
-        # Wrap in ConstrainedGMRF with same constraints
-        new_constrained = ConstrainedGMRF(new_gmrf, A, e)
-
-        # Check convergence
-        x_new = mean(new_constrained)
-
-        mean_change = norm(x_new - x_k)
-        mean_change_rel = mean_change / norm(x_k)
-
-        verbose && println("  Iter $iter: Newton decrement = $(newton_decrement)")
-        if (newton_decrement < newton_dec_tol) || (mean_change < mean_change_tol) || (mean_change_rel < mean_change_tol)
-            verbose && println("  Converged after $iter iterations")
-            return new_constrained
-        end
-
-        # Update for next iteration
-        x_k = x_new
-    end
-
-    verbose && println("  Reached max_iter = $max_iter without convergence")
-
-    # Return current best approximation
-    H_k = loghessian(x_k, obs_lik)
-    Q_final = prepare_for_linsolve(Q_base - H_k, cache.alg)
-    cache.A = Q_final
-    final_gmrf = GMRF(x_k, Q_final; linsolve_cache = cache)
-    return ConstrainedGMRF(final_gmrf, A, e)
 end
 
 # MetaGMRF dispatches - preserve wrapper type and metadata
