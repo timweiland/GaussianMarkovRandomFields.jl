@@ -37,7 +37,7 @@ end
 
 function _update_linsolve_cache_inner!(cache, Q, alg::LinearSolve.DefaultLinearSolver)
     actual_alg = LinearSolve.algchoice_to_alg(Symbol(alg.alg))
-    return _update_linsolve_cache_inner(cache, Q, actual_alg)
+    return _update_linsolve_cache_inner!(cache, Q, actual_alg)
 end
 
 function _update_linsolve_cache_inner!(cache, Q, alg::LinearSolve.LDLtFactorization)
