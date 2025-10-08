@@ -41,17 +41,15 @@ function ChainRulesCore.rrule(::typeof(logpdf), x::AbstractGMRF, z::AbstractVect
             # Gradients
             μ̄ = ȳ * Qr                    # ∂logpdf/∂μ = Q(z - μ) → chain rule
 
-            # Compute sparse gradient w.r.t. precision matrix
-            # Only compute for nonzero structure of Q⁻¹
-            rows, cols, vals = findnz(Qinv)
-            rr_vals = r[rows] .* r[cols]
-            Q̄ = sparse(rows, cols, (0.5 * ȳ) .* (vals .- rr_vals), size(Q)...)
+            # Compute gradient w.r.t. precision matrix
+            # Uses dispatch to handle different matrix types from selinv
+            Q̄ = compute_precision_gradient(Qinv, r, ȳ)
 
             # Tangent for GMRF - use new structure
             x̄ = Tangent{typeof(x)}(
                 linsolve_cache = NoTangent(),  # LinearSolve cache is not differentiable
-                mean = μ̄,                     # ∂L/∂μ = Q(z - μ) → ∂L/∂mean = -Q(z - μ)
-                precision = Q̄,                # ∂L/∂Q
+                mean = μ̄,                     # Chain rule propagates μ̄ = ȳ * Q(z - μ)
+                precision = Q̄,                # ∂logpdf/∂Q
                 information_vector = NoTangent(),
                 Q_sqrt = NoTangent(),
                 rbmc_strategy = NoTangent()

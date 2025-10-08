@@ -17,4 +17,5 @@ using ChainRulesCore
 
 # Include specific autodiff rule implementations
 include("constructors.jl")
+include("precision_gradient.jl")  # Helper for computing precision gradients
 include("logpdf.jl")
