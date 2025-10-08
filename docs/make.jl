@@ -17,6 +17,7 @@ makedocs(
             "tutorials/boundary_conditions.md",
             "tutorials/bernoulli_spatial_classification.md",
             "tutorials/bym_scotland_lip_cancer.md",
+            "tutorials/automatic_differentiation.md",
         ],
         "API Reference" => [
             "Overview" => "reference/index.md",
