@@ -1,75 +1,54 @@
-# Automatic Differentiation
+# Automatic Differentiation Reference
 
-GaussianMarkovRandomFields.jl provides automatic differentiation (AD) support for parameter estimation, Bayesian inference, and optimization workflows involving GMRFs. Two complementary approaches are available, each with distinct strengths and use cases.
+GaussianMarkovRandomFields.jl provides automatic differentiation support for gradient-based inference and optimization. This page documents the capabilities and limitations.
 
-## Zygote with custom chainrules
+## Supported AD Backends
 
-The primary AD implementation uses ChainRulesCore.jl to provide efficient reverse-mode automatic differentiation rules.
-Zygote.jl will automatically load and use these rules.
-The implementation leverages [SelectedInversion.jl](https://github.com/timweiland/SelectedInversion.jl) to compute gradients efficiently without materializing full covariance matrices. 
+We support the following AD backends:
 
-### Supported Operations
+- **Zygote.jl**: General-purpose, good first choice, works in most cases
+- **Enzyme.jl**: Often 2-5× faster than Zygote, but requires attention to type stability
+- **ForwardDiff.jl**: Fast in the right situations (i.e. for functions with few inputs), but support is limited. See below.
 
-**GMRF Construction**: Differentiation through `GMRF(μ, Q, solver_blueprint)` and `GMRF(μ, Q)` constructors, enabling gradients to flow back to mean vectors and precision matrices.
+All backends produce mathematically identical gradients.
 
-**Log-probability Density**: Efficient differentiation of `logpdf(gmrf, z)` computations using selected inverses.
+## Supported Operations
 
-### Current Limitations
+The package provides custom AD rules for the following operations:
 
-**Conditional GMRFs**: Chain rules do not currently support `condition_on_observations`. For workflows requiring conditional inference with AD, use the LDLFactorizations approach below. Contributions to extend chain rules support to conditional operations are welcome.
+1. **GMRF construction**: `GMRF(μ, Q, algorithm)` - gradients flow through mean μ and precision matrix Q
+2. **Log-probability density**: `logpdf(gmrf, z)` - uses selected inversion for efficient gradient computation
+3. **Gaussian approximation**: `gaussian_approximation(prior_gmrf, obs_lik)` - uses Implicit Function Theorem to avoid differentiating through the optimization loop. **NOTE: We do not have a custom rule for ForwardDiff for this yet. Help is appreciated!**
 
-### Solver Compatibility
+These three operations cover most common GMRF workflows. If you need AD support for other operations, please open an issue on GitHub.
 
-Chain rules work with any Cholesky-based solver backend:
-- **CHOLMOD** (default): Fast sparse Cholesky via SuiteSparse
-- **Pardiso**: Pardiso solver (via package extension)
-- **LDLFactorizations**: Pure Julia implementation of a Cholesky solver
+## Linear Solver Type Stability
 
-### Basic Usage Example
+When using Enzyme, type stability is critical. The default two-argument GMRF constructor uses a runtime dispatch to select an appropriate linear solver based on the precision matrix type. This is not type-stable and can cause issues with Enzyme.
 
-```julia
-using GaussianMarkovRandomFields, Zygote, SparseArrays
-
-# Define precision matrix
-Q = spdiagm(-1 => -0.5*ones(99), 0 => ones(100), 1 => -0.5*ones(99))
-
-# Sample point for evaluation
-z = randn(100)
-
-# Define function to differentiate
-gmrf_from_mean = θ -> GMRF(θ, Q)
-logpdf_from_mean = θ -> logpdf(gmrf_from_mean(θ), z)
-
-# Differentiate
-θ_eval = zeros(100)
-gradient(logpdf_from_mean, θ_eval)[1]
-```
-
-## LDLFactorizations Approach
-
-The alternative approach uses LDLFactorizations.jl, a plain Julia implementation of sparse Cholesky factorization that supports automatic differentiation through all Julia AD libraries.
-This "just works", but you're limited to LDLFactorizations.jl.
-This may be fine for moderately sized problems, but CHOLMOD and Pardiso will generally scale much more efficiently.
-
-### When to Use
-
-- **Conditional GMRFs**: (Currently) required for `condition_on_observations` with AD
-- **Forward-mode AD**: Efficient for problems with few parameters
-
-### Solver Configuration
-
-Use the `:autodiffable` solver variant:
+To avoid these problems, always explicitly specify a linear solver when using Enzyme:
 
 ```julia
-# Configure autodiffable solver
-blueprint = CholeskySolverBlueprint{:autodiffable}()
-gmrf = GMRF(μ, Q, blueprint)
+# For general sparse matrices
+gmrf = GMRF(μ, Q, LinearSolve.CHOLMODFactorization())
+
+# For SymTridiagonal matrices (AR1, RW1)
+gmrf = GMRF(μ, Q, LinearSolve.LDLtFactorization())
+
+# For diagonal matrices (IID)
+gmrf = GMRF(μ, Q, LinearSolve.DiagonalFactorization())
 ```
 
-## Troubleshooting
+See the [Automatic Differentiation Tutorial](../tutorials/automatic_differentiation.md) for a complete example.
 
-**Error: "Automatic differentiation through logpdf currently only supports Cholesky-based solvers"**
-- Solution: Ensure your GMRF uses a Cholesky-based solver, not CGSolver or other iterative methods
+## Current Limitations
 
-**Poor performance with chain rules**
-- Check if you're accidentally using `:autodiffable` solver when chain rules would work with default solver
+- **ForwardDiff**: Currently only has custom rules for the constructor and `logpdf`. AD through a Gaussian approximation is going to fail.
+
+If you encounter AD issues or need support for additional operations, please open an issue on GitHub.
+
+## See Also
+
+- [Automatic Differentiation for GMRF Hyperparameters](@ref): Practical examples and workflows
+- [ChainRulesCore.jl docs](https://juliadiff.org/ChainRulesCore.jl/stable/)
+- [Enzyme.jl docs](https://enzyme.mit.edu/julia/stable/)
