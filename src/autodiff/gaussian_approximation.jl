@@ -1,6 +1,5 @@
 using ChainRulesCore
 using LinearAlgebra
-using FiniteDiff
 
 """
     _is_zero_tangent(x) -> Bool
