@@ -1,6 +1,5 @@
 using Distributions
 using ForwardDiff
-using DifferentiationInterface: AutoForwardFromPrimitive
 using DifferentiationInterface
 
 @testset "ObsModel Type Stability" begin
