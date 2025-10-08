@@ -141,79 +141,84 @@ optimization strategies (selected inversion, backward solve) are available. When
 inversion is not supported, marginal variances are computed using the configured RBMC strategy.
 Providing an existing `linsolve_cache` enables factorization reuse in iterative algorithms.
 """
-struct GMRF{T <: Real, PrecisionMap <: Union{LinearMap{T}, AbstractMatrix{T}}, QSqrt, Cache <: LinearSolve.LinearCache, RBMCStrat} <: AbstractGMRF{T, PrecisionMap}
-    mean::Vector{T}
-    information_vector::Union{Nothing, Vector{T}}
+struct GMRF{
+        T <: Real, VMean <: AbstractVector{T},
+        VInfo <: Union{Nothing, AbstractVector{T}},
+        PrecisionMap <: Union{LinearMap{T}, AbstractMatrix{T}}, QSqrt,
+        Cache <: LinearSolve.LinearCache, RBMCStrat,
+    } <: AbstractGMRF{T, PrecisionMap}
+    mean::VMean
+    information_vector::VInfo
     precision::PrecisionMap
     Q_sqrt::QSqrt
     linsolve_cache::Cache
     rbmc_strategy::RBMCStrat
-
-    # Constructor 1: From mean vector
-    function GMRF(
-            mean::AbstractVector,
-            precision::PrecisionMap,
-            alg = nothing;
-            Q_sqrt = nothing,
-            rbmc_strategy = RBMCStrategy(1000),
-            linsolve_cache = nothing
-        ) where {PrecisionMap <: Union{LinearMap, AbstractMatrix}}
-        n = length(mean)
-        n == size(precision, 1) == size(precision, 2) ||
-            throw(ArgumentError("size mismatch"))
-        T = promote_type(eltype(mean), eltype(precision))
-        if eltype(mean) != T
-            mean = convert(AbstractVector{T}, mean)
-        end
-        if eltype(precision) != T
-            if precision isa LinearMap
-                precision = LinearMap{T}(convert(AbstractMatrix{T}, to_matrix(precision)))
-            else
-                precision = convert(AbstractMatrix{T}, precision)
-            end
-        end
-
-        # Set up LinearSolve cache
-        if linsolve_cache === nothing
-            # Configure algorithm with optimal defaults for GMRF operations
-            configured_alg = configure_algorithm(alg)
-            # Prepare matrix for LinearSolve based on algorithm requirements
-            prob = LinearProblem(prepare_for_linsolve(precision, configured_alg), copy(mean))
-            linsolve_cache = init(prob, configured_alg)
-        end
-
-        return new{T, typeof(precision), typeof(Q_sqrt), typeof(linsolve_cache), typeof(rbmc_strategy)}(mean, nothing, precision, Q_sqrt, linsolve_cache, rbmc_strategy)
-    end
-
-    # Constructor 2: From information vector
-    function GMRF(
-            information::InformationVector{T},
-            precision::PrecisionMap,
-            alg = nothing;
-            Q_sqrt = nothing,
-            rbmc_strategy = RBMCStrategy(1000),
-            linsolve_cache = nothing
-        ) where {T <: Real, PrecisionMap <: Union{LinearMap{T}, AbstractMatrix{T}}}
-        n = length(information)
-        n == size(precision, 1) == size(precision, 2) ||
-            throw(ArgumentError("size mismatch"))
-
-        # Set up LinearSolve cache and solve for mean
-        if linsolve_cache === nothing
-            # Configure algorithm with optimal defaults for GMRF operations
-            configured_alg = configure_algorithm(alg)
-            prob = LinearProblem(prepare_for_linsolve(precision, configured_alg), copy(information.data))
-            linsolve_cache = init(prob, configured_alg)
-        else
-            # Reuse provided cache but update RHS for solving
-            linsolve_cache.b .= information.data
-        end
-        mean = copy(solve!(linsolve_cache).u)
-
-        return new{T, typeof(precision), typeof(Q_sqrt), typeof(linsolve_cache), typeof(rbmc_strategy)}(mean, information.data, precision, Q_sqrt, linsolve_cache, rbmc_strategy)
-    end
-
 end
+
+# Constructor 1: From mean vector
+function GMRF(
+        mean::AbstractVector,
+        precision::PrecisionMap,
+        alg = nothing;
+        Q_sqrt = nothing,
+        rbmc_strategy = RBMCStrategy(1000),
+        linsolve_cache = nothing
+    ) where {PrecisionMap <: Union{LinearMap, AbstractMatrix}}
+    n = length(mean)
+    n == size(precision, 1) == size(precision, 2) ||
+        throw(ArgumentError("size mismatch"))
+    T = promote_type(eltype(mean), eltype(precision))
+    if eltype(mean) != T
+        mean = convert(AbstractVector{T}, mean)
+    end
+    if eltype(precision) != T
+        if precision isa LinearMap
+            precision = LinearMap{T}(convert(AbstractMatrix{T}, to_matrix(precision)))
+        else
+            precision = convert(AbstractMatrix{T}, precision)
+        end
+    end
+
+    # Set up LinearSolve cache
+    if linsolve_cache === nothing
+        # Configure algorithm with optimal defaults for GMRF operations
+        configured_alg = configure_algorithm(alg)
+        # Prepare matrix for LinearSolve based on algorithm requirements
+        prob = LinearProblem(prepare_for_linsolve(precision, configured_alg), copy(mean))
+        linsolve_cache = init(prob, configured_alg)
+    end
+
+    return GMRF{T, typeof(mean), Nothing, typeof(precision), typeof(Q_sqrt), typeof(linsolve_cache), typeof(rbmc_strategy)}(mean, nothing, precision, Q_sqrt, linsolve_cache, rbmc_strategy)
+end
+
+# Constructor 2: From information vector
+function GMRF(
+        information::InformationVector{T},
+        precision::PrecisionMap,
+        alg = nothing;
+        Q_sqrt = nothing,
+        rbmc_strategy = RBMCStrategy(1000),
+        linsolve_cache = nothing
+    ) where {T <: Real, PrecisionMap <: Union{LinearMap{T}, AbstractMatrix{T}}}
+    n = length(information)
+    n == size(precision, 1) == size(precision, 2) ||
+        throw(ArgumentError("size mismatch"))
+
+    # Set up LinearSolve cache and solve for mean
+    if linsolve_cache === nothing
+        # Configure algorithm with optimal defaults for GMRF operations
+        configured_alg = configure_algorithm(alg)
+        prob = LinearProblem(prepare_for_linsolve(precision, configured_alg), copy(information.data))
+        linsolve_cache = init(prob, configured_alg)
+    else
+        # Reuse provided cache but update RHS for solving
+        linsolve_cache.b .= information.data
+    end
+    mean = copy(solve!(linsolve_cache).u)
+
+    return GMRF{T, typeof(mean), typeof(information.data), typeof(precision), typeof(Q_sqrt), typeof(linsolve_cache), typeof(rbmc_strategy)}(mean, information.data, precision, Q_sqrt, linsolve_cache, rbmc_strategy)
+end
+
 
 length(d::GMRF) = length(d.mean)
 mean(d::GMRF) = d.mean
