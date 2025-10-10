@@ -191,3 +191,100 @@ using Enzyme, FiniteDiff, Zygote
         end
     end
 end
+
+@testset "Precision gradient computation tests" begin
+    using GaussianMarkovRandomFields: compute_precision_gradient
+
+    @testset "SymTridiagonal precision gradient" begin
+        # Test compute_precision_gradient with SymTridiagonal matrix
+        n = 5
+        dv = [2.0, 3.0, 2.5, 3.5, 2.8]
+        ev = [0.5, 0.6, 0.55, 0.62]
+        Qinv = SymTridiagonal(dv, ev)
+        r = [0.1, -0.2, 0.3, -0.1, 0.15]
+        ȳ = 2.0
+
+        grad = compute_precision_gradient(Qinv, r, ȳ)
+
+        # Should return SymTridiagonal
+        @test grad isa SymTridiagonal
+
+        # Check diagonal elements: 0.5 * ȳ * (Qinv.dv - r .* r)
+        @test grad.dv ≈ 0.5 .* ȳ .* (Qinv.dv .- r .* r)
+
+        # Check off-diagonal: 0.5 * ȳ * (Qinv.ev - r[1:n-1] .* r[2:n])
+        @test grad.ev ≈ 0.5 .* ȳ .* (Qinv.ev .- r[1:(n - 1)] .* r[2:n])
+    end
+
+    @testset "Sparse precision gradient" begin
+        # Test compute_precision_gradient with SparseMatrixCSC
+        using SparseArrays
+
+        n = 4
+        Qinv = sparse(
+            [
+                1.0 0.5 0.0 0.0;
+                0.5 2.0 0.3 0.0;
+                0.0 0.3 1.5 0.4;
+                0.0 0.0 0.4 1.8
+            ]
+        )
+        r = [0.2, -0.1, 0.15, -0.05]
+        ȳ = 1.5
+
+        grad = compute_precision_gradient(Qinv, r, ȳ)
+
+        # Should return sparse matrix
+        @test grad isa SparseMatrixCSC
+
+        # Verify it has same sparsity pattern
+        @test nnz(grad) == nnz(Qinv)
+
+        # Check a few values
+        @test grad[1, 1] ≈ 0.5 * ȳ * (Qinv[1, 1] - r[1]^2)
+        @test grad[1, 2] ≈ 0.5 * ȳ * (Qinv[1, 2] - r[1] * r[2])
+    end
+
+    @testset "Symmetric sparse precision gradient" begin
+        # Test compute_precision_gradient with Symmetric{SparseMatrixCSC}
+        using SparseArrays, LinearAlgebra
+
+        n = 3
+        data = sparse(
+            [
+                2.0 0.5 0.0;
+                0.5 3.0 0.6;
+                0.0 0.6 2.5
+            ]
+        )
+        Qinv = Symmetric(data)
+        r = [0.1, -0.15, 0.2]
+        ȳ = 1.0
+
+        grad = compute_precision_gradient(Qinv, r, ȳ)
+
+        # Should return Symmetric sparse
+        @test grad isa Symmetric
+        @test grad.data isa SparseMatrixCSC
+
+        # Check symmetry is preserved
+        @test grad[1, 2] ≈ grad[2, 1]
+        @test grad[2, 3] ≈ grad[3, 2]
+    end
+
+    @testset "Generic fallback with warning" begin
+        # Test generic fallback path (should trigger warning)
+        # Use a dense Matrix which will use the generic method
+        Qinv_dense = [2.0 0.5; 0.5 3.0]
+        r = [0.1, -0.2]
+        ȳ = 1.0
+
+        # Should warn about using generic fallback
+        @test_logs (:warn, r"Using generic fallback") compute_precision_gradient(Qinv_dense, r, ȳ)
+
+        # Should still compute correct result
+        grad = compute_precision_gradient(Qinv_dense, r, ȳ)
+        expected = 0.5 .* ȳ .* (Qinv_dense .- r * r')
+        @test grad ≈ expected
+    end
+end

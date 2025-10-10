@@ -1,3 +1,4 @@
+# COV_EXCL_START
 """
     GaussianMarkovRandomFieldsEnzyme
 
@@ -364,3 +365,4 @@ function EnzymeRules.reverse(
 end
 
 end
+# COV_EXCL_STOP
