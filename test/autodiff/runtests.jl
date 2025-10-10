@@ -1,3 +1,5 @@
+include("test_helper_functions.jl")
+include("test_forwarddiff_extension.jl")
 include("test_logpdf.jl")
 include("test_constructors.jl")
 include("test_gaussian_approximation.jl")

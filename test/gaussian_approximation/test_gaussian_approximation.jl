@@ -234,4 +234,89 @@ using Distributions
         @test result.metadata === metadata
         @test length(mean(result)) == n
     end
+
+    @testset "Non-convergence path (max_iter reached)" begin
+        # Test with max_iter = 1 to force non-convergence
+        n = 5
+        prior_gmrf = GMRF(zeros(n), sparse(I, n, n))
+
+        # Poisson likelihood with data far from prior
+        obs_model = ExponentialFamily(Poisson)
+        y = [10, 15, 8, 12, 20]  # High counts, far from prior mean of 0
+        obs_lik = obs_model(y)
+
+        # Force non-convergence by using max_iter = 1
+        result = gaussian_approximation(prior_gmrf, obs_lik; max_iter = 1)
+
+        # Should still return a GMRF (best approximation so far)
+        @test result isa GMRF
+        @test length(mean(result)) == n
+        @test all(isfinite.(mean(result)))
+    end
+
+    @testset "Internal helper functions" begin
+        # Test ∇²ₓ_neg_log_posterior
+        n = 3
+        prior_gmrf = GMRF(zeros(n), 2.0 * sparse(I, n, n))
+        obs_model = ExponentialFamily(Normal)
+        y = [0.5, -0.3, 0.2]
+        obs_lik = obs_model(y; σ = 1.0)
+
+        x_test = [0.1, -0.1, 0.2]
+
+        # Test the Hessian function
+        H = GaussianMarkovRandomFields.∇²ₓ_neg_log_posterior(prior_gmrf, obs_lik, x_test)
+        @test H isa AbstractMatrix
+        @test size(H) == (n, n)
+        @test issymmetric(H)
+
+        # Should be positive definite for this setup
+        @test all(eigvals(Array(H)) .> 0)
+    end
+
+    @testset "LDLtFactorization with gaussian_approximation" begin
+        # Test that LDLtFactorization is properly handled
+        using LinearSolve
+
+        n = 5
+        Q = SymTridiagonal(ones(n), fill(-0.4, n - 1))
+        μ = zeros(n)
+        prior_gmrf = GMRF(μ, Q, LinearSolve.LDLtFactorization())
+
+        # Poisson likelihood
+        obs_model = ExponentialFamily(Poisson)
+        y = [2, 1, 3, 2, 1]
+        obs_lik = obs_model(y)
+
+        result = gaussian_approximation(prior_gmrf, obs_lik)
+
+        # Should work correctly
+        @test result isa GMRF
+        @test length(mean(result)) == n
+        @test all(isfinite.(mean(result)))
+
+        # Precision should be symmetric tridiagonal
+        @test precision_matrix(result) isa SymTridiagonal
+    end
+
+    @testset "Convergence tolerance tests" begin
+        # Test different convergence criteria
+        n = 4
+        prior_gmrf = GMRF(zeros(n), sparse(I, n, n))
+
+        obs_model = ExponentialFamily(Normal)
+        y = [0.1, -0.1, 0.2, -0.2]
+        obs_lik = obs_model(y; σ = 0.5)
+
+        # Test with strict newton_dec_tol
+        result1 = gaussian_approximation(prior_gmrf, obs_lik; newton_dec_tol = 1.0e-10)
+        @test result1 isa GMRF
+
+        # Test with strict mean_change_tol
+        result2 = gaussian_approximation(prior_gmrf, obs_lik; mean_change_tol = 1.0e-8)
+        @test result2 isa GMRF
+
+        # Results should be very similar
+        @test norm(mean(result1) - mean(result2)) < 1.0e-6
+    end
 end
