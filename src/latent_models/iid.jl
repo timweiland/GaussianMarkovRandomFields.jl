@@ -55,7 +55,7 @@ function _validate_iid_parameters(; τ::Real)
     return nothing
 end
 
-function precision_matrix(model::IIDModel; τ::Real)
+function precision_matrix(model::IIDModel; τ::Real, kwargs...)
     _validate_iid_parameters(; τ = τ)
 
     n = model.n

@@ -61,7 +61,7 @@ function _validate_rw1_parameters(; τ::Real)
     return nothing
 end
 
-function precision_matrix(model::RW1Model; τ::Real)
+function precision_matrix(model::RW1Model; τ::Real, kwargs...)
     _validate_rw1_parameters(; τ = τ)
 
     n = model.n

@@ -131,7 +131,7 @@ function _validate_matern_parameters(; range::Real)
     return nothing
 end
 
-function precision_matrix(model::MaternModel{F, S}; range::Real) where {F, S}
+function precision_matrix(model::MaternModel{F, S}; range::Real, kwargs...) where {F, S}
     _validate_matern_parameters(; range = range)
 
     # Extract dimension from discretization

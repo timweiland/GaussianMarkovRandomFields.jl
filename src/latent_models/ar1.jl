@@ -57,7 +57,7 @@ function _validate_ar1_parameters(; τ::Real, ρ::Real)
     return nothing
 end
 
-function precision_matrix(model::AR1Model; τ::Real, ρ::Real)
+function precision_matrix(model::AR1Model; τ::Real, ρ::Real, kwargs...)
     _validate_ar1_parameters(; τ = τ, ρ = ρ)
 
     n = model.n
