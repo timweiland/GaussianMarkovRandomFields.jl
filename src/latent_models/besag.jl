@@ -154,7 +154,7 @@ function _compute_normalization(Q::AbstractMatrix, connected_comps, ::Val{true},
 end
 _compute_normalization(::AbstractMatrix, connected_comps, ::Val{false}, singleton_policy; kwargs...) = I
 
-function precision_matrix(model::BesagModel; τ::Real)
+function precision_matrix(model::BesagModel; τ::Real, kwargs...)
     _validate_besag_parameters(; τ = τ)
     Q = model.normalization_factor * τ * model.Q  # Scale by τ first
     Q += model.regularization * I  # Add regularization

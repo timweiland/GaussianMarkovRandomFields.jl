@@ -45,7 +45,7 @@ end
 # Factory pattern: make the model callable to materialize a likelihood
 # -------------------------------------------------------------------------------------------------
 
-function (model::NonlinearLeastSquaresModel)(y::AbstractVector; σ)
+function (model::NonlinearLeastSquaresModel)(y::AbstractVector; σ, kwargs...)
     # Validate σ and normalize to vector of inverse variances
     m = length(y)
     σv = _normalize_sigma(σ, m)
@@ -107,7 +107,7 @@ function loghessian(x::AbstractVector, lik::NonlinearLeastSquaresLikelihood)
     return Symmetric(H)
 end
 
-function conditional_distribution(model::NonlinearLeastSquaresModel, x::AbstractVector; σ)
+function conditional_distribution(model::NonlinearLeastSquaresModel, x::AbstractVector; σ, kwargs...)
     ŷ = model.f(x)
     if σ isa AbstractVector
         length(σ) == length(ŷ) || error("Length of σ vector must match f(x)")
