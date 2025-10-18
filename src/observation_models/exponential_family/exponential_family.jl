@@ -181,7 +181,7 @@ function _conditional_distribution_family(::Type{<:Binomial}, μ; n, kwargs...)
     return product_distribution(Binomial.(n, μ))
 end
 
-function conditional_distribution(obs_model::ExponentialFamily{Poisson}, x; offset = nothing)
+function conditional_distribution(obs_model::ExponentialFamily{Poisson}, x; offset = nothing, kwargs...)
     # Offsets are only supported for Poisson with LogLink (log-exposure)
     if (offset !== nothing) && !(obs_model.link isa LogLink)
         throw(ArgumentError("offset is only supported for Poisson with LogLink"))
