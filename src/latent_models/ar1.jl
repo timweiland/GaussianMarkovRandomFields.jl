@@ -1,14 +1,15 @@
 using SparseArrays
 using LinearAlgebra
+using LinearSolve
 
 export AR1Model
 
 """
-    AR1Model(n::Int)
+    AR1Model(n::Int; alg=LDLtFactorization())
 
 A first-order autoregressive (AR1) latent model for constructing AR1 GMRFs.
 
-The AR1 model represents a temporal process where each observation depends on 
+The AR1 model represents a temporal process where each observation depends on
 the previous observation with some correlation ρ and precision τ.
 
 # Mathematical Description
@@ -17,7 +18,7 @@ For n observations, the AR1 process has:
 - Zero mean: μ = 0
 - Precision matrix Q with tridiagonal structure:
   - Q[1,1] = τ
-  - Q[i,i] = (1 + ρ²)τ for i = 2,...,n-1  
+  - Q[i,i] = (1 + ρ²)τ for i = 2,...,n-1
   - Q[n,n] = τ
   - Q[i,i+1] = Q[i+1,i] = -ρτ for i = 1,...,n-1
 
@@ -27,20 +28,30 @@ For n observations, the AR1 process has:
 
 # Fields
 - `n::Int`: Length of the AR1 process
+- `alg::Alg`: LinearSolve algorithm for solving linear systems
 
 # Example
 ```julia
 model = AR1Model(100)
-gmrf = model(τ=2.0, ρ=0.8)  # Construct AR1 GMRF
+gmrf = model(τ=2.0, ρ=0.8)  # Construct AR1 GMRF with LDLtFactorization
+
+# Or specify custom algorithm
+model = AR1Model(100, alg=CHOLMODFactorization())
+gmrf = model(τ=2.0, ρ=0.8)
 ```
 """
-struct AR1Model <: LatentModel
+struct AR1Model{Alg} <: LatentModel
     n::Int
+    alg::Alg
 
-    function AR1Model(n::Int)
+    function AR1Model{Alg}(n::Int, alg::Alg) where {Alg}
         n > 0 || throw(ArgumentError("Length n must be positive, got n=$n"))
-        return new(n)
+        return new{Alg}(n, alg)
     end
+end
+
+function AR1Model(n::Int; alg = LDLtFactorization())
+    return AR1Model{typeof(alg)}(n, alg)
 end
 
 function Base.length(model::AR1Model)

@@ -1,10 +1,11 @@
 using SparseArrays
 using LinearAlgebra
+using LinearSolve
 
 export IIDModel
 
 """
-    IIDModel(n::Int)
+    IIDModel(n::Int; alg=DiagonalFactorization())
 
 An independent and identically distributed (IID) latent model for constructing simple diagonal GMRFs.
 
@@ -24,22 +25,32 @@ This model is useful for:
 # Hyperparameters
 - `τ`: Precision parameter (τ > 0)
 
-# Fields  
+# Fields
 - `n::Int`: Length of the IID process
+- `alg::Alg`: LinearSolve algorithm for solving linear systems
 
 # Example
 ```julia
 model = IIDModel(100)
-gmrf = model(τ=2.0)  # Returns GMRF with precision 2.0 * I(100)
+gmrf = model(τ=2.0)  # Returns GMRF with precision 2.0 * I(100) using DiagonalFactorization
+
+# Or specify custom algorithm
+model = IIDModel(100, alg=CHOLMODFactorization())
+gmrf = model(τ=2.0)
 ```
 """
-struct IIDModel <: LatentModel
+struct IIDModel{Alg} <: LatentModel
     n::Int
+    alg::Alg
 
-    function IIDModel(n::Int)
+    function IIDModel{Alg}(n::Int, alg::Alg) where {Alg}
         n > 0 || throw(ArgumentError("Length n must be positive, got n=$n"))
-        return new(n)
+        return new{Alg}(n, alg)
     end
+end
+
+function IIDModel(n::Int; alg = DiagonalFactorization())
+    return IIDModel{typeof(alg)}(n, alg)
 end
 
 function Base.length(model::IIDModel)

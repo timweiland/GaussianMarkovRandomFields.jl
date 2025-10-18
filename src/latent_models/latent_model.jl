@@ -148,10 +148,10 @@ function (model::LatentModel)(; kwargs...)
     constraint_info = constraints(model; kwargs...)
 
     if constraint_info === nothing
-        return GMRF(μ, Q)
+        return GMRF(μ, Q, model.alg)
     else
         A, e = constraint_info
-        base_gmrf = GMRF(μ, Q)
+        base_gmrf = GMRF(μ, Q, model.alg)
         return ConstrainedGMRF(base_gmrf, A, e)
     end
 end

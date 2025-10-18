@@ -1,14 +1,15 @@
 using SparseArrays
 using LinearAlgebra
+using LinearSolve
 
 export RW1Model
 
 """
-    RW1Model(n::Int)
+    RW1Model(n::Int; regularization=1e-5, alg=LDLtFactorization())
 
 A first-order random walk (RW1) latent model for constructing intrinsic GMRFs.
 
-The RW1 model represents a non-stationary temporal process where each observation 
+The RW1 model represents a non-stationary temporal process where each observation
 is the previous observation plus Gaussian noise. This creates a smooth trend model
 that's popular for temporal smoothing and time-varying effects.
 
@@ -16,7 +17,7 @@ that's popular for temporal smoothing and time-varying effects.
 
 The RW1 process defines increments: x[i+1] - x[i] ~ N(0, τ⁻¹) for i = 1,...,n-1.
 This leads to a singular precision matrix with the tridiagonal structure:
-- Q[1,1] = 1, Q[n,n] = 1  
+- Q[1,1] = 1, Q[n,n] = 1
 - Q[i,i] = 2 for i = 2,...,n-1
 - Q[i,i+1] = Q[i+1,i] = -1 for i = 1,...,n-1
 
@@ -27,25 +28,35 @@ Since this matrix is singular (rank n-1), we handle it as an intrinsic GMRF by:
 # Hyperparameters
 - `τ`: Precision parameter (τ > 0)
 
-# Fields  
+# Fields
 - `n::Int`: Length of the RW1 process
 - `regularization::Float64`: Small value added to diagonal after scaling (default 1e-5)
+- `alg::Alg`: LinearSolve algorithm for solving linear systems
 
 # Example
 ```julia
 model = RW1Model(100)
-gmrf = model(τ=1.0)  # Returns ConstrainedGMRF with sum-to-zero constraint
+gmrf = model(τ=1.0)  # Returns ConstrainedGMRF with sum-to-zero constraint using LDLtFactorization
+
+# Or specify custom algorithm
+model = RW1Model(100, alg=CHOLMODFactorization())
+gmrf = model(τ=1.0)
 ```
 """
-struct RW1Model <: LatentModel
+struct RW1Model{Alg} <: LatentModel
     n::Int
     regularization::Float64
+    alg::Alg
 
-    function RW1Model(n::Int; regularization::Float64 = 1.0e-5)
+    function RW1Model{Alg}(n::Int, regularization::Float64, alg::Alg) where {Alg}
         n > 1 || throw(ArgumentError("RW1 requires length n > 1, got n=$n"))
         regularization > 0 || throw(ArgumentError("Regularization must be positive, got $regularization"))
-        return new(n, regularization)
+        return new{Alg}(n, regularization, alg)
     end
+end
+
+function RW1Model(n::Int; regularization::Float64 = 1.0e-5, alg = LDLtFactorization())
+    return RW1Model{typeof(alg)}(n, regularization, alg)
 end
 
 function Base.length(model::RW1Model)

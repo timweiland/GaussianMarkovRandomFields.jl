@@ -1,16 +1,17 @@
 using Ferrite
 using GeometryBasics
+using LinearSolve
 
 export MaternModel
 
 """
-    MaternModel{F<:FEMDiscretization,S<:Integer}(discretization::F, smoothness::S)
+    MaternModel{F<:FEMDiscretization,S<:Integer,Alg}(discretization::F, smoothness::S, alg::Alg)
 
 A Matérn latent model for constructing spatial GMRFs from discretized Matérn SPDEs.
 
 The MaternModel provides a structured way to define Matérn Gaussian Markov Random Fields
-by discretizing the Matérn SPDE using finite element methods. The model stores the 
-discretization and smoothness parameter, while the range parameter is provided at 
+by discretizing the Matérn SPDE using finite element methods. The model stores the
+discretization and smoothness parameter, while the range parameter is provided at
 GMRF construction time.
 
 # Mathematical Description
@@ -31,6 +32,7 @@ This leads to a Matérn covariance function with range and smoothness parameters
 # Fields
 - `discretization::F`: The finite element discretization
 - `smoothness::S`: The smoothness parameter (Integer, controls differentiability)
+- `alg::Alg`: LinearSolve algorithm for solving linear systems
 
 # Examples
 ```julia
@@ -43,34 +45,40 @@ gmrf = model(range=2.0)
 points = [0.0 0.0; 1.0 0.0; 0.5 1.0]  # N×2 matrix
 model = MaternModel(points; smoothness = 1, element_order = 1)
 gmrf = model(range=2.0)
+
+# With custom algorithm
+model = MaternModel(disc; smoothness = 2, alg = LDLtFactorization())
+gmrf = model(range=2.0)
 ```
 """
-struct MaternModel{F <: FEMDiscretization, S <: Integer} <: LatentModel
+struct MaternModel{F <: FEMDiscretization, S <: Integer, Alg} <: LatentModel
     discretization::F
     smoothness::S
+    alg::Alg
 
-    function MaternModel{F, S}(discretization::F, smoothness::S) where {F <: FEMDiscretization, S <: Integer}
+    function MaternModel{F, S, Alg}(discretization::F, smoothness::S, alg::Alg) where {F <: FEMDiscretization, S <: Integer, Alg}
         smoothness >= 0 || throw(ArgumentError("Smoothness must be non-negative, got smoothness=$smoothness"))
-        return new{F, S}(discretization, smoothness)
+        return new{F, S, Alg}(discretization, smoothness, alg)
     end
 end
 
 """
-    MaternModel(discretization::F; smoothness::S) where {F<:FEMDiscretization, S<:Integer}
+    MaternModel(discretization::F; smoothness::S, alg=CHOLMODFactorization()) where {F<:FEMDiscretization, S<:Integer}
 
 Direct construction with a pre-built FEMDiscretization.
 """
-function MaternModel(discretization::F; smoothness::S) where {F <: FEMDiscretization, S <: Integer}
-    return MaternModel{F, S}(discretization, smoothness)
+function MaternModel(discretization::F; smoothness::S, alg = CHOLMODFactorization()) where {F <: FEMDiscretization, S <: Integer}
+    return MaternModel{F, S, typeof(alg)}(discretization, smoothness, alg)
 end
 
 """
-    MaternModel(points::AbstractMatrix; smoothness::Integer, 
+    MaternModel(points::AbstractMatrix; smoothness::Integer,
                 element_order::Int = 1,
                 interpolation = nothing,
-                quadrature = nothing)
+                quadrature = nothing,
+                alg = CHOLMODFactorization())
 
-Automatic construction: creates a convex hull around the 2D points and builds an appropriate 
+Automatic construction: creates a convex hull around the 2D points and builds an appropriate
 FEMDiscretization automatically.
 
 # Arguments
@@ -79,13 +87,15 @@ FEMDiscretization automatically.
 - `element_order`: Order of finite element basis functions (default: 1)
 - `interpolation`: Ferrite interpolation (default: Lagrange based on element_order)
 - `quadrature`: Ferrite quadrature rule (default: based on element_order)
+- `alg`: LinearSolve algorithm (default: CHOLMODFactorization())
 """
 function MaternModel(
         points::AbstractMatrix;
         smoothness::S,
         element_order::Int = 1,
         interpolation = nothing,
-        quadrature = nothing
+        quadrature = nothing,
+        alg = CHOLMODFactorization()
     ) where {S <: Integer}
 
     # Input validation
@@ -115,7 +125,7 @@ function MaternModel(
     # Create FEMDiscretization
     discretization = FEMDiscretization(grid, interpolation, quadrature)
 
-    return MaternModel(discretization; smoothness = smoothness)
+    return MaternModel(discretization; smoothness = smoothness, alg = alg)
 end
 
 function Base.length(model::MaternModel)

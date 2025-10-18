@@ -1,5 +1,6 @@
 using GaussianMarkovRandomFields
 using LinearAlgebra
+using LinearSolve
 
 @testset "AR1Model" begin
     @testset "Constructor" begin
@@ -147,5 +148,21 @@ using LinearAlgebra
         # Test type stability of construction
         gmrf = model(τ = 1.0, ρ = 0.5)
         @test gmrf isa GMRF{Float64}
+    end
+
+    @testset "Algorithm Storage and Passing" begin
+        # Test default algorithm (LDLtFactorization for SymTridiagonal)
+        model = AR1Model(10)
+        @test model.alg isa LDLtFactorization
+
+        # Test algorithm is passed to GMRF
+        gmrf = model(τ = 1.0, ρ = 0.5)
+        @test gmrf.linsolve_cache.alg isa LDLtFactorization
+
+        # Test custom algorithm
+        custom_model = AR1Model(10, alg = CHOLMODFactorization())
+        @test custom_model.alg isa CHOLMODFactorization
+        custom_gmrf = custom_model(τ = 1.0, ρ = 0.5)
+        @test custom_gmrf.linsolve_cache.alg isa CHOLMODFactorization
     end
 end

@@ -2,11 +2,12 @@ using SparseArrays
 using LinearAlgebra
 using Distributions
 using Graphs
+using LinearSolve
 
 export BesagModel
 
 """
-    BesagModel(adjacency::AbstractMatrix; regularization::Float64 = 1e-5, normalize_var::Bool = true, singleton_policy::Symbol = :gaussian)
+    BesagModel(adjacency::AbstractMatrix; regularization::Float64 = 1e-5, normalize_var::Bool = true, singleton_policy::Symbol = :gaussian, alg=CHOLMODFactorization())
 
 A Besag model for spatial latent effects on graphs using intrinsic Conditional Autoregressive (CAR) structure.
 
@@ -17,7 +18,7 @@ This creates a graph Laplacian precision structure that's widely used for spatia
 
 For a graph with adjacency matrix W, the precision matrix follows:
 - Q[i,j] = -τ if nodes i and j are neighbors (W[i,j] = 1)
-- Q[i,i] = τ * degree[i] where degree[i] = sum(W[i,:])  
+- Q[i,i] = τ * degree[i] where degree[i] = sum(W[i,:])
 - All other entries are 0
 
 Since this matrix is singular (rank n-1), we handle it as an intrinsic GMRF by:
@@ -30,28 +31,35 @@ Since this matrix is singular (rank n-1), we handle it as an intrinsic GMRF by:
 # Fields
 - `adjacency::M`: Adjacency matrix W (preserves input structure - sparse, SymTridiagonal, etc.)
 - `regularization::Float64`: Small value added to diagonal after scaling (default 1e-5)
+- `alg::Alg`: LinearSolve algorithm for solving linear systems
 
 # Example
 ```julia
 # 4-node cycle graph - can use sparse, SymTridiagonal, or Matrix
 W = sparse(Bool[0 1 0 1; 1 0 1 0; 0 1 0 1; 1 0 1 0])
 model = BesagModel(W)
-gmrf = model(τ=1.0)  # Returns ConstrainedGMRF with sum-to-zero constraint
+gmrf = model(τ=1.0)  # Returns ConstrainedGMRF with sum-to-zero constraint using CHOLMODFactorization
+
+# Or specify custom algorithm
+model = BesagModel(W, alg=LDLtFactorization())
+gmrf = model(τ=1.0)
 ```
 """
-struct BesagModel{M <: AbstractMatrix, NF, QT <: AbstractMatrix, PT} <: LatentModel
+struct BesagModel{M <: AbstractMatrix, NF, QT <: AbstractMatrix, PT, Alg} <: LatentModel
     adjacency::M
     regularization::Float64
     connected_components::Vector{Vector{Int}}
     normalization_factor::NF
     Q::QT
     singleton_policy::PT
+    alg::Alg
 
     function BesagModel(
             adjacency::AbstractMatrix;
             regularization::Float64 = 1.0e-5,
             normalize_var = Val{true}(),
             singleton_policy = Val{:gaussian}(),
+            alg = CHOLMODFactorization(),
         )
         # Convert to appropriate sparse/structured format
         adj = if adjacency isa Matrix
@@ -85,7 +93,7 @@ struct BesagModel{M <: AbstractMatrix, NF, QT <: AbstractMatrix, PT} <: LatentMo
         _enforce_singleton_policy_on_Q!(Q, comps, singleton_policy)
 
         normalization_factor = _compute_normalization(Q, comps, normalize_var, singleton_policy)
-        return new{typeof(adj), typeof(normalization_factor), typeof(Q), typeof(singleton_policy)}(adj, regularization, comps, normalization_factor, Q, singleton_policy)
+        return new{typeof(adj), typeof(normalization_factor), typeof(Q), typeof(singleton_policy), typeof(alg)}(adj, regularization, comps, normalization_factor, Q, singleton_policy, alg)
     end
 end
 

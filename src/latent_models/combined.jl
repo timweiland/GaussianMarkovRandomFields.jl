@@ -1,21 +1,22 @@
 using SparseArrays
 using LinearAlgebra
+using LinearSolve
 
 export CombinedModel
 
 """
-    CombinedModel(components::Vector{<:LatentModel})
+    CombinedModel(components::Vector{<:LatentModel}; alg=CHOLMODFactorization())
 
 A combination of multiple LatentModel instances into a single block-structured GMRF.
 
-This enables modeling with multiple latent components, such as the popular BYM model 
+This enables modeling with multiple latent components, such as the popular BYM model
 (Besag-York-Mollié) which combines spatial (Besag) and independent (IID) effects.
 
 # Mathematical Description
 
 Given k component models with sizes n₁, n₂, ..., nₖ:
 - Combined precision matrix: Q = blockdiag(Q₁, Q₂, ..., Qₖ)
-- Combined mean vector: μ = vcat(μ₁, μ₂, ..., μₖ)  
+- Combined mean vector: μ = vcat(μ₁, μ₂, ..., μₖ)
 - Combined constraints: Block-diagonal constraint structure preserving individual constraints
 
 # Parameter Naming
@@ -26,15 +27,16 @@ parameters are automatically prefixed with model names:
 - Multiple occurrences: τ_besag, τ_besag_2, τ_besag_3
 
 # Fields
-- `components::Vector{<:LatentModel}`: The individual latent models  
+- `components::Vector{<:LatentModel}`: The individual latent models
 - `component_sizes::Vector{Int}`: Cached sizes of each component
 - `total_size::Int`: Total size of the combined model
+- `alg::Alg`: LinearSolve algorithm for solving linear systems
 
 # Example - BYM Model
 ```julia
 # BYM model: spatial Besag + independent IID effects
 W = sparse(adjacency_matrix)  # Spatial adjacency
-besag = BesagModel(W)         # Spatial component  
+besag = BesagModel(W)         # Spatial component
 iid = IIDModel(n)            # Independent component
 
 # Vector constructor
@@ -42,29 +44,37 @@ bym = CombinedModel([besag, iid])
 # Or variadic constructor (syntactic sugar)
 bym = CombinedModel(besag, iid)
 
+# With custom algorithm
+bym = CombinedModel([besag, iid], alg=LDLtFactorization())
+
 # Usage with automatically prefixed parameters
 gmrf = bym(τ_besag=1.0, τ_iid=2.0)
 ```
 """
-struct CombinedModel <: LatentModel
+struct CombinedModel{Alg} <: LatentModel
     components::Vector{<:LatentModel}
     component_sizes::Vector{Int}
     total_size::Int
+    alg::Alg
 
-    function CombinedModel(components::Vector{<:LatentModel})
+    function CombinedModel{Alg}(components::Vector{<:LatentModel}, alg::Alg) where {Alg}
         isempty(components) && throw(ArgumentError("Cannot create CombinedModel with empty components"))
 
         # Cache component sizes for efficiency
         sizes = [length(comp) for comp in components]
         total = sum(sizes)
 
-        return new(components, sizes, total)
+        return new{Alg}(components, sizes, total, alg)
     end
 end
 
+function CombinedModel(components::Vector{<:LatentModel}; alg = CHOLMODFactorization())
+    return CombinedModel{typeof(alg)}(components, alg)
+end
+
 # Convenience constructor for variadic arguments
-function CombinedModel(components::LatentModel...)
-    return CombinedModel(collect(components))
+function CombinedModel(components::LatentModel...; alg = CHOLMODFactorization())
+    return CombinedModel(collect(components); alg = alg)
 end
 
 function Base.length(model::CombinedModel)

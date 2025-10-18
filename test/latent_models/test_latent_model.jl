@@ -1,11 +1,14 @@
 using GaussianMarkovRandomFields
 using LinearAlgebra
+using LinearSolve
 
 
 # Model with constraints
-struct ConstrainedTestModel <: LatentModel
+struct ConstrainedTestModel{Alg} <: LatentModel
     n::Int
+    alg::Alg
 end
+ConstrainedTestModel(n::Int; alg = nothing) = ConstrainedTestModel{typeof(alg)}(n, alg)
 
 @testset "LatentModel Interface" begin
     # Test that the abstract interface methods throw appropriate errors
@@ -22,9 +25,11 @@ end
 
 @testset "LatentModel Call Interface" begin
     # Create a concrete test model that implements the interface
-    struct TestLatentModel <: LatentModel
+    struct TestLatentModel{Alg} <: LatentModel
         n::Int
+        alg::Alg
     end
+    TestLatentModel(n::Int; alg = nothing) = TestLatentModel{typeof(alg)}(n, alg)
 
     GaussianMarkovRandomFields.hyperparameters(::TestLatentModel) = (τ = Real,)
 

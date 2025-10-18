@@ -1,5 +1,6 @@
 using GaussianMarkovRandomFields
 using LinearAlgebra
+using LinearSolve
 
 @testset "IIDModel" begin
     @testset "Constructor" begin
@@ -57,5 +58,21 @@ using LinearAlgebra
 
         gmrf = model(τ = 1.0)
         @test gmrf isa GMRF{Float64}
+    end
+
+    @testset "Algorithm Storage and Passing" begin
+        # Test default algorithm (DiagonalFactorization for Diagonal)
+        model = IIDModel(10)
+        @test model.alg isa DiagonalFactorization
+
+        # Test algorithm is passed to GMRF
+        gmrf = model(τ = 1.0)
+        @test gmrf.linsolve_cache.alg isa DiagonalFactorization
+
+        # Test custom algorithm
+        custom_model = IIDModel(10, alg = CHOLMODFactorization())
+        @test custom_model.alg isa CHOLMODFactorization
+        custom_gmrf = custom_model(τ = 1.0)
+        @test custom_gmrf.linsolve_cache.alg isa CHOLMODFactorization
     end
 end

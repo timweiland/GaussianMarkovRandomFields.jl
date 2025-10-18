@@ -1,5 +1,6 @@
 using SparseArrays
 using LinearAlgebra
+using LinearSolve
 using GaussianMarkovRandomFields
 
 @testset "CombinedModel" begin
@@ -89,5 +90,25 @@ using GaussianMarkovRandomFields
 
     @testset "Model name" begin
         @test model_name(CombinedModel([IIDModel(2)])) == :combined
+    end
+
+    @testset "Algorithm Storage and Passing" begin
+        # Create simple components
+        iid = IIDModel(5)
+        ar1 = AR1Model(5)
+
+        # Test default algorithm (CHOLMODFactorization for block-diagonal sparse)
+        model = CombinedModel(iid, ar1)
+        @test model.alg isa CHOLMODFactorization
+
+        # Test algorithm is passed to GMRF
+        gmrf = model(τ_iid = 1.0, τ_ar1 = 1.0, ρ_ar1 = 0.5)
+        @test gmrf.linsolve_cache.alg isa CHOLMODFactorization
+
+        # Test custom algorithm
+        custom_model = CombinedModel(iid, ar1, alg = LDLtFactorization())
+        @test custom_model.alg isa LDLtFactorization
+        custom_gmrf = custom_model(τ_iid = 1.0, τ_ar1 = 1.0, ρ_ar1 = 0.5)
+        @test custom_gmrf.linsolve_cache.alg isa LDLtFactorization
     end
 end

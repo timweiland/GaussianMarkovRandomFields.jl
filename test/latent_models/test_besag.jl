@@ -1,6 +1,7 @@
 using GaussianMarkovRandomFields
 using LinearAlgebra
 using SparseArrays
+using LinearSolve
 
 @testset "BesagModel" begin
     @testset "Constructor" begin
@@ -140,5 +141,22 @@ using SparseArrays
         x_d2 = m_d2(τ = τ)
         v_d2 = var(x_d2)
         @test all(isapprox.(v_d2, zeros(2); atol = 1.0e-10))
+    end
+
+    @testset "Algorithm Storage and Passing" begin
+        # Create simple adjacency matrix
+        W = sparse([0 1 0; 1 0 1; 0 1 0])
+
+        # Test default algorithm (CHOLMODFactorization for sparse general)
+        model = BesagModel(W)
+        @test model.alg isa CHOLMODFactorization
+
+        # Test algorithm is passed to GMRF (Besag creates ConstrainedGMRF)
+        constrained_gmrf = model(τ = 1.0)
+        @test constrained_gmrf.base_gmrf.linsolve_cache.alg isa CHOLMODFactorization
+
+        # Test custom algorithm
+        custom_model = BesagModel(W, alg = LDLtFactorization())
+        @test custom_model.alg isa LDLtFactorization
     end
 end
