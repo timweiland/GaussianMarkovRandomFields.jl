@@ -43,13 +43,8 @@ priors.
 
 ## Installation
 
-GaussianMarkovRandomFields.jl is not yet a registered Julia package.
-Until it is, you can install it from this GitHub repository.
-To do so:
-
-1. [Download Julia (>= version 1.10)](https://julialang.org/downloads/).
-
-2. Launch the Julia REPL and type `] add https://github.com/timweiland/GaussianMarkovRandomFields.jl`. 
+GaussianMarkovRandomFields.jl is a registered Julia package.
+To install it, launch the Julia REPL and type `] add GaussianMarkovRandomFields`. 
 
 ## Your first GMRF
 
