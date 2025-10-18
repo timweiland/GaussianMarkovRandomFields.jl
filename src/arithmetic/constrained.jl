@@ -3,6 +3,7 @@ using SparseArrays
 using Random
 using LinearSolve
 using Distributions: mean, var, _rand!
+import Distributions: logpdf
 
 export ConstrainedGMRF
 
@@ -185,6 +186,29 @@ function var(d::ConstrainedGMRF{T}) where {T}
     σ_constrained .= max.(σ_constrained, zero(T))
 
     return σ_constrained
+end
+
+function Distributions.logpdf(d::ConstrainedGMRF, z::AbstractVector)
+    # Check if constraint is satisfied: A*z ≈ e
+    # Points that violate the constraint have zero probability
+    constraint_residual = d.constraint_matrix * z - d.constraint_vector
+    if !isapprox(constraint_residual, zero(constraint_residual), atol = 1.0e-10)
+        return -Inf
+    end
+
+    # Prior logpdf
+    res = Distributions.logpdf(d.base_gmrf, z)
+
+    # Constraint logpdf
+    resid = d.constraint_vector - d.constraint_matrix * mean(d.base_gmrf)
+    r = length(resid)
+    neg_logpdf_e = 0.5 * (r * log(2π) + logdet(d.L_c) + dot(resid, d.L_c \ resid))
+    res += neg_logpdf_e
+
+    # Degenerate constraint likelihood
+    # Rue and Held (2005), Section 2.3.3
+    res -= 0.5 * logdet(cholesky(Symmetric(d.constraint_matrix * d.constraint_matrix')))
+    return res
 end
 
 # Display methods

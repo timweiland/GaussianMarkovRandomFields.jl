@@ -145,4 +145,53 @@ using Random
             @test sum(mean(constrained_small)) ≈ 0.0 atol = 1.0e-10
         end
     end
+
+    @testset "logpdf" begin
+        # Sum-to-zero constraint: sum(x) = 0
+        A = ones(1, 4)
+        e = [0.0]
+        constrained = ConstrainedGMRF(base_gmrf, A, e)
+
+        @testset "Valid points (satisfy constraint)" begin
+            # Sample from the constrained distribution (should satisfy constraint)
+            rng_test = Random.MersenneTwister(42)
+            sample = rand(rng_test, constrained)
+
+            # Verify constraint is satisfied
+            @test A * sample ≈ e atol = 1.0e-10
+
+            # logpdf should be finite for valid points
+            lpdf = logpdf(constrained, sample)
+            @test isfinite(lpdf)
+
+            # Test at the constrained mean
+            lpdf_mean = logpdf(constrained, mean(constrained))
+            @test isfinite(lpdf_mean)
+        end
+
+        @testset "Invalid points (violate constraint)" begin
+            # Create a point that doesn't satisfy the constraint
+            invalid_point = [1.0, 2.0, 3.0, 4.0]  # sum = 10, not 0
+            @test !(A * invalid_point ≈ e)
+
+            # logpdf should be -Inf for points that violate constraints
+            lpdf_invalid = logpdf(constrained, invalid_point)
+            @test lpdf_invalid == -Inf
+        end
+
+        @testset "Relative probabilities" begin
+            # Points closer to the mean should have higher logpdf
+            rng_test = Random.MersenneTwister(123)
+            samples = [rand(rng_test, constrained) for _ in 1:5]
+
+            logpdfs = [logpdf(constrained, s) for s in samples]
+
+            # All should be finite
+            @test all(isfinite.(logpdfs))
+
+            # logpdf at mean should be highest (or among the highest)
+            lpdf_at_mean = logpdf(constrained, mean(constrained))
+            @test lpdf_at_mean >= minimum(logpdfs)
+        end
+    end
 end
