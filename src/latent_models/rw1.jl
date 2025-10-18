@@ -5,7 +5,7 @@ using LinearSolve
 export RW1Model
 
 """
-    RW1Model(n::Int; regularization=1e-5, alg=LDLtFactorization())
+    RW1Model(n::Int; regularization=1e-5, alg=LDLtFactorization(), additional_constraints=nothing)
 
 A first-order random walk (RW1) latent model for constructing intrinsic GMRFs.
 
@@ -23,7 +23,7 @@ This leads to a singular precision matrix with the tridiagonal structure:
 
 Since this matrix is singular (rank n-1), we handle it as an intrinsic GMRF by:
 1. Scaling by τ first, then adding small regularization (1e-5) to diagonal for numerical stability
-2. Adding sum-to-zero constraint: sum(x) = 0
+2. **Always** adding sum-to-zero constraint: sum(x) = 0 (required for identifiability)
 
 # Hyperparameters
 - `τ`: Precision parameter (τ > 0)
@@ -32,31 +32,43 @@ Since this matrix is singular (rank n-1), we handle it as an intrinsic GMRF by:
 - `n::Int`: Length of the RW1 process
 - `regularization::Float64`: Small value added to diagonal after scaling (default 1e-5)
 - `alg::Alg`: LinearSolve algorithm for solving linear systems
+- `additional_constraints::C`: Optional additional constraints beyond the required sum-to-zero
 
 # Example
 ```julia
 model = RW1Model(100)
-gmrf = model(τ=1.0)  # Returns ConstrainedGMRF with sum-to-zero constraint using LDLtFactorization
+gmrf = model(τ=1.0)  # Returns ConstrainedGMRF with sum-to-zero constraint
 
-# Or specify custom algorithm
-model = RW1Model(100, alg=CHOLMODFactorization())
-gmrf = model(τ=1.0)
+# Add additional constraint (e.g., fix first element to 0)
+A_add = reshape([1.0; zeros(99)], 1, 100)
+e_add = [0.0]
+model = RW1Model(100, additional_constraints=(A_add, e_add))
+gmrf = model(τ=1.0)  # Returns ConstrainedGMRF with both sum-to-zero AND additional constraint
 ```
 """
-struct RW1Model{Alg} <: LatentModel
+struct RW1Model{Alg, C} <: LatentModel
     n::Int
     regularization::Float64
     alg::Alg
+    additional_constraints::C
 
-    function RW1Model{Alg}(n::Int, regularization::Float64, alg::Alg) where {Alg}
+    function RW1Model{Alg, C}(n::Int, regularization::Float64, alg::Alg, additional_constraints::C) where {Alg, C}
         n > 1 || throw(ArgumentError("RW1 requires length n > 1, got n=$n"))
         regularization > 0 || throw(ArgumentError("Regularization must be positive, got $regularization"))
-        return new{Alg}(n, regularization, alg)
+        return new{Alg, C}(n, regularization, alg, additional_constraints)
     end
 end
 
-function RW1Model(n::Int; regularization::Float64 = 1.0e-5, alg = LDLtFactorization())
-    return RW1Model{typeof(alg)}(n, regularization, alg)
+function RW1Model(n::Int; regularization::Float64 = 1.0e-5, alg = LDLtFactorization(), additional_constraints = nothing)
+    # Check for :sumtozero (redundant for RW1)
+    if additional_constraints === :sumtozero
+        throw(ArgumentError("RW1Model already includes a sum-to-zero constraint by default. Use additional_constraints for extra constraints beyond sum-to-zero."))
+    end
+
+    # Process additional constraints using helper
+    processed_additional = _process_constraint(additional_constraints, n)
+
+    return RW1Model{typeof(alg), typeof(processed_additional)}(n, regularization, alg, processed_additional)
 end
 
 function Base.length(model::RW1Model)
@@ -96,12 +108,21 @@ function mean(model::RW1Model; kwargs...)
 end
 
 function constraints(model::RW1Model; kwargs...)
-    # Sum-to-zero constraint: sum(x) = 0
-    # A is 1×n matrix of all ones, e is [0]
+    # RW1 always has a sum-to-zero constraint (required for identifiability)
     n = model.n
-    A = ones(1, n)  # 1×n matrix
-    e = [0.0]       # Constraint vector
-    return (A, e)
+    A_sumtozero = ones(1, n)
+    e_sumtozero = [0.0]
+
+    # If no additional constraints, return just sum-to-zero
+    if model.additional_constraints === nothing
+        return (A_sumtozero, e_sumtozero)
+    end
+
+    # Otherwise stack constraints
+    A_add, e_add = model.additional_constraints
+    A_combined = vcat(A_sumtozero, A_add)
+    e_combined = vcat(e_sumtozero, e_add)
+    return (A_combined, e_combined)
 end
 
 function model_name(::RW1Model)

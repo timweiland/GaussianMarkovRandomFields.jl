@@ -51,24 +51,27 @@ model = MaternModel(disc; smoothness = 2, alg = LDLtFactorization())
 gmrf = model(range=2.0)
 ```
 """
-struct MaternModel{F <: FEMDiscretization, S <: Integer, Alg} <: LatentModel
+struct MaternModel{F <: FEMDiscretization, S <: Integer, Alg, C} <: LatentModel
     discretization::F
     smoothness::S
     alg::Alg
+    constraint::C
 
-    function MaternModel{F, S, Alg}(discretization::F, smoothness::S, alg::Alg) where {F <: FEMDiscretization, S <: Integer, Alg}
+    function MaternModel{F, S, Alg, C}(discretization::F, smoothness::S, alg::Alg, constraint::C) where {F <: FEMDiscretization, S <: Integer, Alg, C}
         smoothness >= 0 || throw(ArgumentError("Smoothness must be non-negative, got smoothness=$smoothness"))
-        return new{F, S, Alg}(discretization, smoothness, alg)
+        return new{F, S, Alg, C}(discretization, smoothness, alg, constraint)
     end
 end
 
 """
-    MaternModel(discretization::F; smoothness::S, alg=CHOLMODFactorization()) where {F<:FEMDiscretization, S<:Integer}
+    MaternModel(discretization::F; smoothness::S, alg=CHOLMODFactorization(), constraint=nothing) where {F<:FEMDiscretization, S<:Integer}
 
 Direct construction with a pre-built FEMDiscretization.
 """
-function MaternModel(discretization::F; smoothness::S, alg = CHOLMODFactorization()) where {F <: FEMDiscretization, S <: Integer}
-    return MaternModel{F, S, typeof(alg)}(discretization, smoothness, alg)
+function MaternModel(discretization::F; smoothness::S, alg = CHOLMODFactorization(), constraint = nothing) where {F <: FEMDiscretization, S <: Integer}
+    n = ndofs(discretization)
+    processed_constraint = _process_constraint(constraint, n)
+    return MaternModel{F, S, typeof(alg), typeof(processed_constraint)}(discretization, smoothness, alg, processed_constraint)
 end
 
 """
@@ -76,7 +79,8 @@ end
                 element_order::Int = 1,
                 interpolation = nothing,
                 quadrature = nothing,
-                alg = CHOLMODFactorization())
+                alg = CHOLMODFactorization(),
+                constraint = nothing)
 
 Automatic construction: creates a convex hull around the 2D points and builds an appropriate
 FEMDiscretization automatically.
@@ -88,6 +92,7 @@ FEMDiscretization automatically.
 - `interpolation`: Ferrite interpolation (default: Lagrange based on element_order)
 - `quadrature`: Ferrite quadrature rule (default: based on element_order)
 - `alg`: LinearSolve algorithm (default: CHOLMODFactorization())
+- `constraint`: Optional constraint (default: nothing)
 """
 function MaternModel(
         points::AbstractMatrix;
@@ -95,7 +100,8 @@ function MaternModel(
         element_order::Int = 1,
         interpolation = nothing,
         quadrature = nothing,
-        alg = CHOLMODFactorization()
+        alg = CHOLMODFactorization(),
+        constraint = nothing
     ) where {S <: Integer}
 
     # Input validation
@@ -125,7 +131,7 @@ function MaternModel(
     # Create FEMDiscretization
     discretization = FEMDiscretization(grid, interpolation, quadrature)
 
-    return MaternModel(discretization; smoothness = smoothness, alg = alg)
+    return MaternModel(discretization; smoothness = smoothness, alg = alg, constraint = constraint)
 end
 
 function Base.length(model::MaternModel)
@@ -162,7 +168,7 @@ function mean(model::MaternModel; kwargs...)
 end
 
 function constraints(model::MaternModel; kwargs...)
-    return nothing  # Matérn models have no constraints
+    return model.constraint
 end
 
 function model_name(::MaternModel)

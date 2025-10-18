@@ -45,7 +45,7 @@ model = BesagModel(W, alg=LDLtFactorization())
 gmrf = model(τ=1.0)
 ```
 """
-struct BesagModel{M <: AbstractMatrix, NF, QT <: AbstractMatrix, PT, Alg} <: LatentModel
+struct BesagModel{M <: AbstractMatrix, NF, QT <: AbstractMatrix, PT, Alg, C} <: LatentModel
     adjacency::M
     regularization::Float64
     connected_components::Vector{Vector{Int}}
@@ -53,6 +53,7 @@ struct BesagModel{M <: AbstractMatrix, NF, QT <: AbstractMatrix, PT, Alg} <: Lat
     Q::QT
     singleton_policy::PT
     alg::Alg
+    additional_constraints::C
 
     function BesagModel(
             adjacency::AbstractMatrix;
@@ -60,6 +61,7 @@ struct BesagModel{M <: AbstractMatrix, NF, QT <: AbstractMatrix, PT, Alg} <: Lat
             normalize_var = Val{true}(),
             singleton_policy = Val{:gaussian}(),
             alg = CHOLMODFactorization(),
+            additional_constraints = nothing,
         )
         # Convert to appropriate sparse/structured format
         adj = if adjacency isa Matrix
@@ -84,6 +86,14 @@ struct BesagModel{M <: AbstractMatrix, NF, QT <: AbstractMatrix, PT, Alg} <: Lat
         singleton_policy in (Val{:gaussian}(), Val{:degenerate}()) ||
             throw(ArgumentError("singleton_policy must be Val{:gaussian}() or Val{:degenerate}(), got $(singleton_policy)"))
 
+        # Check for :sumtozero (redundant for Besag)
+        if additional_constraints === :sumtozero
+            throw(ArgumentError("BesagModel already includes sum-to-zero constraints by default. Use additional_constraints for extra constraints beyond sum-to-zero."))
+        end
+
+        # Process additional constraints using helper
+        processed_additional = _process_constraint(additional_constraints, n)
+
         D = Diagonal(adj * ones(n))  # Degree matrix
         Q = (D - adj)                # Base intrinsic precision (per τ)
 
@@ -93,7 +103,7 @@ struct BesagModel{M <: AbstractMatrix, NF, QT <: AbstractMatrix, PT, Alg} <: Lat
         _enforce_singleton_policy_on_Q!(Q, comps, singleton_policy)
 
         normalization_factor = _compute_normalization(Q, comps, normalize_var, singleton_policy)
-        return new{typeof(adj), typeof(normalization_factor), typeof(Q), typeof(singleton_policy), typeof(alg)}(adj, regularization, comps, normalization_factor, Q, singleton_policy, alg)
+        return new{typeof(adj), typeof(normalization_factor), typeof(Q), typeof(singleton_policy), typeof(alg), typeof(processed_additional)}(adj, regularization, comps, normalization_factor, Q, singleton_policy, alg, processed_additional)
     end
 end
 
@@ -175,12 +185,21 @@ function mean(model::BesagModel; kwargs...)
 end
 
 function constraints(model::BesagModel; kwargs...)
-    # Sum-to-zero constraint: sum(x) = 0
-    # A is 1×n matrix of all ones, e is [0]
+    # Besag always has built-in constraints based on connected components and singleton policy
     n = size(model.adjacency, 1)
-    A = _get_constraint_matrix(n, model.connected_components, model.singleton_policy)
-    e = zeros(size(A, 1))       # Constraint vector
-    return (A, e)
+    A_builtin = _get_constraint_matrix(n, model.connected_components, model.singleton_policy)
+    e_builtin = zeros(size(A_builtin, 1))
+
+    # If no additional constraints, return just built-in
+    if model.additional_constraints === nothing
+        return (A_builtin, e_builtin)
+    end
+
+    # Otherwise stack constraints
+    A_add, e_add = model.additional_constraints
+    A_combined = vcat(A_builtin, A_add)
+    e_combined = vcat(e_builtin, e_add)
+    return (A_combined, e_combined)
 end
 
 function model_name(::BesagModel)

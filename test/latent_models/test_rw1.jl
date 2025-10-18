@@ -150,4 +150,22 @@ using LinearSolve
         custom_constrained = custom_model(τ = 1.0)
         @test custom_constrained.base_gmrf.linsolve_cache.alg isa CHOLMODFactorization
     end
+
+    @testset "Additional Constraints" begin
+        # Test that additional_constraints stacks with built-in sum-to-zero
+        A_add = [1.0 0.0 0.0 0.0 0.0]  # Fix first element to 0
+        e_add = [0.0]
+        model = RW1Model(5, additional_constraints = (A_add, e_add))
+
+        A, e = constraints(model)
+        # Should have 2 constraints: sum-to-zero + additional
+        @test size(A, 1) == 2
+        @test A[1, :] ≈ ones(5)  # Sum-to-zero
+        @test e[1] ≈ 0.0
+        @test A[2, :] ≈ vec(A_add)  # Additional
+        @test e[2] ≈ e_add[1]
+
+        gmrf = model(τ = 1.0)
+        @test gmrf isa ConstrainedGMRF
+    end
 end

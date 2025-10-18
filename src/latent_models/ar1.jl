@@ -5,7 +5,7 @@ using LinearSolve
 export AR1Model
 
 """
-    AR1Model(n::Int; alg=LDLtFactorization())
+    AR1Model(n::Int; alg=LDLtFactorization(), constraint=nothing)
 
 A first-order autoregressive (AR1) latent model for constructing AR1 GMRFs.
 
@@ -29,29 +29,38 @@ For n observations, the AR1 process has:
 # Fields
 - `n::Int`: Length of the AR1 process
 - `alg::Alg`: LinearSolve algorithm for solving linear systems
+- `constraint::C`: Optional constraint, either `nothing` or `(A, e)` tuple
 
 # Example
 ```julia
 model = AR1Model(100)
-gmrf = model(τ=2.0, ρ=0.8)  # Construct AR1 GMRF with LDLtFactorization
+gmrf = model(τ=2.0, ρ=0.8)  # Construct unconstrained AR1 GMRF
 
-# Or specify custom algorithm
-model = AR1Model(100, alg=CHOLMODFactorization())
+# With sum-to-zero constraint
+model = AR1Model(100, constraint=:sumtozero)
+gmrf = model(τ=2.0, ρ=0.8)  # Returns ConstrainedGMRF
+
+# With custom constraint
+A = [1.0 1.0 zeros(98)...]
+e = [0.0]
+model = AR1Model(100, constraint=(A, e))
 gmrf = model(τ=2.0, ρ=0.8)
 ```
 """
-struct AR1Model{Alg} <: LatentModel
+struct AR1Model{Alg, C} <: LatentModel
     n::Int
     alg::Alg
+    constraint::C
 
-    function AR1Model{Alg}(n::Int, alg::Alg) where {Alg}
+    function AR1Model{Alg, C}(n::Int, alg::Alg, constraint::C) where {Alg, C}
         n > 0 || throw(ArgumentError("Length n must be positive, got n=$n"))
-        return new{Alg}(n, alg)
+        return new{Alg, C}(n, alg, constraint)
     end
 end
 
-function AR1Model(n::Int; alg = LDLtFactorization())
-    return AR1Model{typeof(alg)}(n, alg)
+function AR1Model(n::Int; alg = LDLtFactorization(), constraint = nothing)
+    processed_constraint = _process_constraint(constraint, n)
+    return AR1Model{typeof(alg), typeof(processed_constraint)}(n, alg, processed_constraint)
 end
 
 function Base.length(model::AR1Model)
@@ -90,7 +99,7 @@ function mean(model::AR1Model; kwargs...)
 end
 
 function constraints(model::AR1Model; kwargs...)
-    return nothing  # AR1 has no constraints
+    return model.constraint
 end
 
 function model_name(::AR1Model)

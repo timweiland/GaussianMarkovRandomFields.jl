@@ -5,7 +5,7 @@ using LinearSolve
 export IIDModel
 
 """
-    IIDModel(n::Int; alg=DiagonalFactorization())
+    IIDModel(n::Int; alg=DiagonalFactorization(), constraint=nothing)
 
 An independent and identically distributed (IID) latent model for constructing simple diagonal GMRFs.
 
@@ -28,29 +28,32 @@ This model is useful for:
 # Fields
 - `n::Int`: Length of the IID process
 - `alg::Alg`: LinearSolve algorithm for solving linear systems
+- `constraint::C`: Optional constraint, either `nothing` or `(A, e)` tuple
 
 # Example
 ```julia
 model = IIDModel(100)
-gmrf = model(τ=2.0)  # Returns GMRF with precision 2.0 * I(100) using DiagonalFactorization
+gmrf = model(τ=2.0)  # Returns unconstrained GMRF
 
-# Or specify custom algorithm
-model = IIDModel(100, alg=CHOLMODFactorization())
-gmrf = model(τ=2.0)
+# With sum-to-zero constraint (common in INLA for separating global offset)
+model = IIDModel(100, constraint=:sumtozero)
+gmrf = model(τ=2.0)  # Returns ConstrainedGMRF with sum-to-zero constraint
 ```
 """
-struct IIDModel{Alg} <: LatentModel
+struct IIDModel{Alg, C} <: LatentModel
     n::Int
     alg::Alg
+    constraint::C
 
-    function IIDModel{Alg}(n::Int, alg::Alg) where {Alg}
+    function IIDModel{Alg, C}(n::Int, alg::Alg, constraint::C) where {Alg, C}
         n > 0 || throw(ArgumentError("Length n must be positive, got n=$n"))
-        return new{Alg}(n, alg)
+        return new{Alg, C}(n, alg, constraint)
     end
 end
 
-function IIDModel(n::Int; alg = DiagonalFactorization())
-    return IIDModel{typeof(alg)}(n, alg)
+function IIDModel(n::Int; alg = DiagonalFactorization(), constraint = nothing)
+    processed_constraint = _process_constraint(constraint, n)
+    return IIDModel{typeof(alg), typeof(processed_constraint)}(n, alg, processed_constraint)
 end
 
 function Base.length(model::IIDModel)
@@ -81,7 +84,7 @@ function mean(model::IIDModel; kwargs...)
 end
 
 function constraints(model::IIDModel; kwargs...)
-    return nothing  # IID has no constraints
+    return model.constraint
 end
 
 function model_name(::IIDModel)

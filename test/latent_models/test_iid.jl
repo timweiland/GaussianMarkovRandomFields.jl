@@ -75,4 +75,18 @@ using LinearSolve
         custom_gmrf = custom_model(τ = 1.0)
         @test custom_gmrf.linsolve_cache.alg isa CHOLMODFactorization
     end
+
+    @testset "Custom Constraint" begin
+        # Test that custom constraint works
+        A_custom = [1.0 1.0 0.0 0.0 0.0]
+        e_custom = [1.0]
+        model = IIDModel(5, constraint = (A_custom, e_custom))
+
+        A, e = constraints(model)
+        @test A ≈ A_custom
+        @test e ≈ e_custom
+
+        gmrf = model(τ = 1.0)
+        @test gmrf isa ConstrainedGMRF
+    end
 end

@@ -30,20 +30,22 @@ model = FixedEffectsModel(10, alg=CHOLMODFactorization())
 gmrf = model()
 ```
 """
-struct FixedEffectsModel{Alg} <: LatentModel
+struct FixedEffectsModel{Alg, C} <: LatentModel
     n::Int
     λ::Float64
     alg::Alg
+    constraint::C
 
-    function FixedEffectsModel{Alg}(n::Int, λ::Float64, alg::Alg) where {Alg}
+    function FixedEffectsModel{Alg, C}(n::Int, λ::Float64, alg::Alg, constraint::C) where {Alg, C}
         n ≥ 0 || throw(ArgumentError("Length n must be nonnegative, got n=$n"))
         λ > 0 || throw(ArgumentError("Regularization λ must be positive, got λ=$λ"))
-        return new{Alg}(n, λ, alg)
+        return new{Alg, C}(n, λ, alg, constraint)
     end
 end
 
-function FixedEffectsModel(n::Int; λ::Real = 1.0e-6, alg = DiagonalFactorization())
-    return FixedEffectsModel{typeof(alg)}(n, Float64(λ), alg)
+function FixedEffectsModel(n::Int; λ::Real = 1.0e-6, alg = DiagonalFactorization(), constraint = nothing)
+    processed_constraint = _process_constraint(constraint, n)
+    return FixedEffectsModel{typeof(alg), typeof(processed_constraint)}(n, Float64(λ), alg, processed_constraint)
 end
 
 function Base.length(model::FixedEffectsModel)
@@ -62,8 +64,8 @@ function mean(model::FixedEffectsModel; kwargs...)
     return zeros(model.n)
 end
 
-function constraints(::FixedEffectsModel; kwargs...)
-    return nothing
+function constraints(model::FixedEffectsModel; kwargs...)
+    return model.constraint
 end
 
 function model_name(::FixedEffectsModel)

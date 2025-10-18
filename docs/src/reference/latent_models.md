@@ -139,6 +139,45 @@ rw1 = RW1Model(10)     # Sum-to-zero constraint → ConstrainedGMRF
 mixed = CombinedModel(ar1, rw1)  # Inherits constraints → ConstrainedGMRF
 ```
 
+### Custom Constraints
+
+Latent models support adding custom linear equality constraints `Ax = e`. This is particularly useful for INLA-style modeling where you want to learn a global offset separately from the latent field.
+
+#### Models with Optional Constraints
+
+For models without built-in constraints (AR1, IID, FixedEffects, Matern), use the `constraint` parameter:
+
+```julia
+# Sum-to-zero constraint (shorthand)
+ar1 = AR1Model(100, constraint=:sumtozero)
+gmrf = ar1(τ=1.0, ρ=0.8)  # Returns ConstrainedGMRF
+
+# Custom constraint: fix first two elements to sum to 1
+A = [1.0 1.0 0.0 0.0 0.0]  # 1×n constraint matrix
+e = [1.0]                   # Constraint value
+iid = IIDModel(5, constraint=(A, e))
+gmrf = iid(τ=2.0)          # x[1] + x[2] = 1.0
+```
+
+#### Intrinsic Models with Additional Constraints
+
+Intrinsic models (RW1, Besag) already have built-in constraints. Use `additional_constraints` to add extra constraints without removing the built-in ones:
+
+```julia
+# RW1 already has sum-to-zero; add constraint to fix first element
+A_extra = [1.0 0.0 0.0 0.0 0.0]  # Fix x[1] = 0
+e_extra = [0.0]
+rw1 = RW1Model(5, additional_constraints=(A_extra, e_extra))
+gmrf = rw1(τ=1.0)  # Both sum(x) = 0 AND x[1] = 0
+
+# Besag with additional constraint
+besag = BesagModel(W, additional_constraints=(A_extra, e_extra))
+gmrf = besag(τ=1.0)  # Component-wise sum-to-zero + extra constraint
+```
+
+!!! warning "Don't Remove Required Constraints"
+    Intrinsic models like RW1 and Besag **require** their built-in constraints for identifiability. Attempting to use `constraint=:sumtozero` on RW1Model will throw an error since it already has this constraint. Always use `additional_constraints` for these models.
+
 ### Parameter Validation
 
 All models include built-in parameter validation:

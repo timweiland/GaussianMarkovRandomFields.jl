@@ -1,4 +1,5 @@
 include("latent_model.jl")
+include("utils.jl")
 include("ar1.jl")
 include("rw1.jl")
 include("iid.jl")
