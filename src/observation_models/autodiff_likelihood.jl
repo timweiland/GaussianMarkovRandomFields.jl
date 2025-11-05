@@ -3,7 +3,7 @@ import DifferentiationInterface as DI
 export AutoDiffLikelihood, AutoDiffObservationModel
 
 """
-    AutoDiffLikelihood{F, B, SB, GP, HP} <: ObservationLikelihood
+    AutoDiffLikelihood{F, B, SB, GP, HP, PF} <: ObservationLikelihood
 
 Automatic differentiation-based observation likelihood that wraps a user-provided log-likelihood function.
 
@@ -16,6 +16,7 @@ function is typically a closure that already includes hyperparameters and data.
 - `SB`: Type of the AD backend for Hessians
 - `GP`: Type of the gradient preparation object
 - `HP`: Type of the Hessian preparation object
+- `PF`: Type of the pointwise log-likelihood function (Union{Nothing, Function})
 
 # Fields
 - `loglik_func::F`: Log-likelihood function with signature `(x) -> Real`
@@ -23,6 +24,7 @@ function is typically a closure that already includes hyperparameters and data.
 - `hess_backend::SB`: AD backend for Hessian computation
 - `grad_prep::GP`: Preparation object for gradient computation
 - `hess_prep::HP`: Preparation object for Hessian computation
+- `pointwise_loglik_func::PF`: Optional pointwise log-likelihood function with signature `(x) -> Vector{Real}`
 
 # Usage
 Typically created via AutoDiffObservationModel factory:
@@ -55,28 +57,30 @@ The Hessian computation automatically:
 
 See also: [`loglik`](@ref), [`loggrad`](@ref), [`loghessian`](@ref)
 """
-struct AutoDiffLikelihood{F, B, SB, GP, HP} <: GaussianMarkovRandomFields.ObservationLikelihood
+struct AutoDiffLikelihood{F, B, SB, GP, HP, PF} <: GaussianMarkovRandomFields.ObservationLikelihood
     loglik_func::F
     grad_backend::B
     hess_backend::SB
     grad_prep::GP
     hess_prep::HP
+    pointwise_loglik_func::PF  # Union{Nothing, Function}
 end
 
 """
-    AutoDiffObservationModel{F, B, SB, H} <: ObservationModel
+    AutoDiffObservationModel{F, B, SB, H, PF} <: ObservationModel
 
 Observation model that uses automatic differentiation for a user-provided log-likelihood function.
 
-This serves as a factory for creating AutoDiffLikelihood instances. The user provides a 
+This serves as a factory for creating AutoDiffLikelihood instances. The user provides a
 log-likelihood function that can accept hyperparameters, and when materialized, creates
 a closure with the hyperparameters baked in.
 
 # Type Parameters
-- `F`: Type of the log-likelihood function  
+- `F`: Type of the log-likelihood function
 - `B`: Type of the AD backend for gradients
 - `SB`: Type of the AD backend for Hessians
 - `H`: Type of the hyperparameters tuple
+- `PF`: Type of the pointwise log-likelihood function (Union{Nothing, Function})
 
 # Fields
 - `loglik_func::F`: User-provided log-likelihood function with signature `(x; kwargs...) -> Real`
@@ -84,6 +88,7 @@ a closure with the hyperparameters baked in.
 - `grad_backend::B`: AD backend for gradient computation
 - `hess_backend::SB`: AD backend for Hessian computation
 - `hyperparams::H`: Tuple of hyperparameter names that this model expects
+- `pointwise_loglik_func::PF`: Optional pointwise log-likelihood function with signature `(x; kwargs...) -> Vector{Real}`
 
 # Usage
 ```julia
@@ -107,12 +112,13 @@ hess = loghessian(x, obs_lik)
 
 See also: [`AutoDiffLikelihood`](@ref), [`ObservationModel`](@ref)
 """
-struct AutoDiffObservationModel{F, B, SB, H} <: GaussianMarkovRandomFields.ObservationModel
+struct AutoDiffObservationModel{F, B, SB, H, PF} <: GaussianMarkovRandomFields.ObservationModel
     loglik_func::F
     n_latent::Int
     grad_backend::B
     hess_backend::SB
     hyperparams::H
+    pointwise_loglik_func::PF  # Union{Nothing, Function}
 end
 
 const AD_PREFERRED_ORDER = (DI.AutoEnzyme(), DI.AutoMooncake(), DI.AutoZygote(), DI.AutoForwardDiff())
@@ -128,7 +134,7 @@ function default_grad_backend()
 end
 
 """
-    AutoDiffObservationModel(loglik_func; n_latent, hyperparams=(), grad_backend, hessian_backend) -> AutoDiffObservationModel
+    AutoDiffObservationModel(loglik_func; n_latent, hyperparams=(), grad_backend, hessian_backend, pointwise_loglik_func=nothing) -> AutoDiffObservationModel
 
 Construct an AutoDiffObservationModel with the given log-likelihood function and AD backends.
 
@@ -138,6 +144,7 @@ Construct an AutoDiffObservationModel with the given log-likelihood function and
 - `hyperparams`: Tuple of hyperparameter names that this model expects (defaults to empty tuple)
 - `grad_backend`: AD backend for gradient computation (defaults to auto-detected)
 - `hessian_backend`: AD backend for Hessian computation (defaults to sparse when available)
+- `pointwise_loglik_func`: Optional function with signature `(x; kwargs...) -> Vector{Real}` that computes per-observation log-likelihoods (defaults to nothing)
 
 # Returns
 - `AutoDiffObservationModel`: Factory for creating materialized likelihoods
@@ -148,26 +155,32 @@ function poisson_loglik(x; y=[1, 3, 0, 2])
     return sum(y .* x .- exp.(x))
 end
 
-# Model with hyperparameters
-obs_model = AutoDiffObservationModel(poisson_loglik; n_latent=4, hyperparams=(:y,))
+# Optional: provide pointwise log-likelihood for model comparison metrics
+function poisson_pointwise_loglik(x; y=[1, 3, 0, 2])
+    return y .* x .- exp.(x)
+end
+
+# Model with hyperparameters and pointwise support
+obs_model = AutoDiffObservationModel(poisson_loglik;
+                                      n_latent=4,
+                                      hyperparams=(:y,),
+                                      pointwise_loglik_func=poisson_pointwise_loglik)
 obs_lik = obs_model(y=[2, 1, 3, 0])  # Materialize with specific data
 
-# Model without hyperparameters  
-simple_loglik(x) = sum(x.^2)
-simple_model = AutoDiffObservationModel(simple_loglik; n_latent=3)  # hyperparams=() by default
-simple_lik = simple_model()  # No hyperparameters needed
+# Use pointwise log-likelihood for WAIC/LOO-CV
+per_obs = pointwise_loglik(x, obs_lik)
 ```
 """
-function AutoDiffObservationModel(loglik_func; n_latent, hyperparams = (), grad_backend = default_grad_backend(), hessian_backend = default_hessian_backend(grad_backend))
+function AutoDiffObservationModel(loglik_func; n_latent, hyperparams = (), grad_backend = default_grad_backend(), hessian_backend = default_hessian_backend(grad_backend), pointwise_loglik_func = nothing)
     if hessian_backend === nothing
         hessian_backend = grad_backend
         @warn "Hessian backend has type $(typeof(hessian_backend)) which may produce dense Hessians!!"
     end
-    return AutoDiffObservationModel(loglik_func, n_latent, grad_backend, hessian_backend, hyperparams)
+    return AutoDiffObservationModel(loglik_func, n_latent, grad_backend, hessian_backend, hyperparams, pointwise_loglik_func)
 end
 
 """
-    AutoDiffLikelihood(loglik_func; n_latent, grad_backend, hessian_backend) -> AutoDiffLikelihood
+    AutoDiffLikelihood(loglik_func; n_latent, grad_backend, hessian_backend, pointwise_loglik_func=nothing) -> AutoDiffLikelihood
 
 Construct an AutoDiffLikelihood directly with a log-likelihood function.
 
@@ -176,6 +189,7 @@ Construct an AutoDiffLikelihood directly with a log-likelihood function.
 - `n_latent`: Number of latent field components (required for preparation)
 - `grad_backend`: AD backend for gradient computation (defaults to auto-detected)
 - `hessian_backend`: AD backend for Hessian computation (defaults to sparse when available)
+- `pointwise_loglik_func`: Optional function with signature `(x) -> Vector{Real}` that computes per-observation log-likelihoods
 
 # Returns
 - `AutoDiffLikelihood`: Ready-to-use likelihood with prepared AD backends
@@ -187,7 +201,7 @@ poisson_loglik(x) = sum([1, 3, 0, 2] .* x .- exp.(x))  # Closure with data
 obs_lik = AutoDiffLikelihood(poisson_loglik; n_latent=4)
 ```
 """
-function AutoDiffLikelihood(loglik_func; n_latent, grad_backend = default_grad_backend(), hessian_backend = default_hessian_backend(grad_backend))
+function AutoDiffLikelihood(loglik_func; n_latent, grad_backend = default_grad_backend(), hessian_backend = default_hessian_backend(grad_backend), pointwise_loglik_func = nothing)
     if hessian_backend === nothing
         hessian_backend = grad_backend
         @warn "Hessian backend has type $(typeof(hessian_backend)) which may produce dense Hessians!!"
@@ -195,19 +209,27 @@ function AutoDiffLikelihood(loglik_func; n_latent, grad_backend = default_grad_b
     x_proto = zeros(n_latent)
     grad_prep = DI.prepare_gradient(loglik_func, grad_backend, x_proto)
     hess_prep = DI.prepare_hessian(loglik_func, hessian_backend, x_proto)
-    return AutoDiffLikelihood(loglik_func, grad_backend, hessian_backend, grad_prep, hess_prep)
+    return AutoDiffLikelihood(loglik_func, grad_backend, hessian_backend, grad_prep, hess_prep, pointwise_loglik_func)
 end
 
 function (obs_model::AutoDiffObservationModel)(y; kwargs...)
     # Create a closure with hyperparameters baked in
     closure = x -> obs_model.loglik_func(x; y, kwargs...)
 
+    # Create pointwise closure if pointwise function is provided
+    pointwise_closure = if obs_model.pointwise_loglik_func !== nothing
+        x -> obs_model.pointwise_loglik_func(x; y, kwargs...)
+    else
+        nothing
+    end
+
     # Create AutoDiffLikelihood with the closure
     return AutoDiffLikelihood(
         closure;
         n_latent = obs_model.n_latent,
         grad_backend = obs_model.grad_backend,
-        hessian_backend = obs_model.hess_backend
+        hessian_backend = obs_model.hess_backend,
+        pointwise_loglik_func = pointwise_closure
     )
 end
 
@@ -248,6 +270,49 @@ autodiff_gradient_backend(obs_lik::AutoDiffLikelihood) = obs_lik.grad_backend
 autodiff_hessian_backend(obs_lik::AutoDiffLikelihood) = obs_lik.hess_backend
 autodiff_gradient_prep(obs_lik::AutoDiffLikelihood) = obs_lik.grad_prep
 autodiff_hessian_prep(obs_lik::AutoDiffLikelihood) = obs_lik.hess_prep
+
+# =======================================================================================
+# POINTWISE LOG-LIKELIHOOD IMPLEMENTATION
+# =======================================================================================
+
+"""
+    _pointwise_loglik(::ConditionallyIndependent, x, obs_lik::AutoDiffLikelihood) -> Vector{Float64}
+
+Compute pointwise log-likelihood using user-provided pointwise function.
+
+The pointwise function must have been provided when constructing the AutoDiffObservationModel.
+If not provided, this method will error with a helpful message.
+"""
+function _pointwise_loglik(::ConditionallyIndependent, x, obs_lik::AutoDiffLikelihood)
+    if obs_lik.pointwise_loglik_func === nothing
+        error(
+            "pointwise_loglik not available for this AutoDiffLikelihood.\n"
+                * "To enable pointwise log-likelihood computation, provide the `pointwise_loglik_func` keyword argument\n"
+                * "when constructing AutoDiffObservationModel:\n\n"
+                * "    obs_model = AutoDiffObservationModel(loglik_func;\n"
+                * "                                          n_latent=...,\n"
+                * "                                          pointwise_loglik_func=my_pointwise_func)\n\n"
+                * "The pointwise function should have signature `(x; kwargs...) -> Vector{Real}` where\n"
+                * "result[i] = log p(yᵢ | xᵢ) and sum(result) ≈ loglik_func(x; kwargs...)."
+        )
+    end
+    return obs_lik.pointwise_loglik_func(x)
+end
+
+"""
+    _pointwise_loglik!(::ConditionallyIndependent, result, x, obs_lik::AutoDiffLikelihood) -> Vector{Float64}
+
+In-place pointwise log-likelihood for AutoDiffLikelihood.
+
+Falls back to allocating version since user-provided functions typically allocate.
+"""
+function _pointwise_loglik!(::ConditionallyIndependent, result, x, obs_lik::AutoDiffLikelihood)
+    # Call allocating version and copy results
+    # User functions typically allocate anyway, so this is not a major issue
+    per_obs = _pointwise_loglik(ConditionallyIndependent(), x, obs_lik)
+    copyto!(result, per_obs)
+    return result
+end
 
 # =======================================================================================
 # PRETTY PRINTING

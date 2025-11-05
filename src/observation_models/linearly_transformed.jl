@@ -152,6 +152,32 @@ function loghessian(x_full, ltlik::LinearlyTransformedLikelihood)
     return Symmetric(A' * hess_η * A)
 end
 
+"""
+    _pointwise_loglik(::ConditionallyIndependent, x_full, ltlik::LinearlyTransformedLikelihood) -> Vector{Float64}
+
+Compute pointwise log-likelihood by transforming to linear predictors and delegating to base likelihood.
+
+The design matrix A maps the full latent field to observation-specific linear predictors:
+η = A * x_full, then pointwise log-likelihoods are computed from the base likelihood.
+"""
+function _pointwise_loglik(::ConditionallyIndependent, x_full, ltlik::LinearlyTransformedLikelihood)
+    η = ltlik.design_matrix * x_full
+    return pointwise_loglik(η, ltlik.base_likelihood)
+end
+
+"""
+    _pointwise_loglik!(::ConditionallyIndependent, result, x_full, ltlik::LinearlyTransformedLikelihood) -> Vector{Float64}
+
+In-place pointwise log-likelihood for linearly transformed observations.
+
+Computes η = A * x_full and delegates to the base likelihood's in-place method.
+Note: Allocates temporary storage for η (cannot avoid this allocation).
+"""
+function _pointwise_loglik!(::ConditionallyIndependent, result, x_full, ltlik::LinearlyTransformedLikelihood)
+    η = ltlik.design_matrix * x_full  # Allocates - unavoidable
+    return pointwise_loglik!(result, η, ltlik.base_likelihood)
+end
+
 # =======================================================================================
 # CONDITIONAL DISTRIBUTION INTERFACE
 # =======================================================================================

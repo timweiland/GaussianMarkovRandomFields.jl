@@ -133,3 +133,45 @@ end
         error("σ must be a number or a vector")
     end
 end
+
+# -------------------------------------------------------------------------------------------------
+# Pointwise log-likelihood implementation
+# -------------------------------------------------------------------------------------------------
+
+"""
+    _pointwise_loglik(::ConditionallyIndependent, x, lik::NonlinearLeastSquaresLikelihood) -> Vector{Float64}
+
+Compute per-observation log-likelihoods for nonlinear least squares model.
+
+For Gaussian observations y | x ~ Normal(f(x), σ), the pointwise log-likelihood is:
+    log p(yᵢ | xᵢ) = -0.5 * log(2π) - log(σᵢ) - 0.5 * inv_σ²ᵢ * (yᵢ - f(x)ᵢ)²
+"""
+function _pointwise_loglik(::ConditionallyIndependent, x, lik::NonlinearLeastSquaresLikelihood)
+    ŷ = lik.f(x)
+    residuals = lik.y .- ŷ
+
+    # Compute element-wise log-likelihoods
+    # log p(yᵢ | xᵢ) = -0.5*log(2π) - log(σᵢ) - 0.5*inv_σ²ᵢ*(yᵢ - ŷᵢ)²
+    # We precomputed log_const = -m/2*log(2π) - sum(log σ), so per-obs constant is:
+    # -0.5*log(2π) - log(σᵢ) = (log_const + 0.5*m*log(2π)) / m + individual log(σᵢ) term
+
+    # Simpler: compute directly from inv_σ² (which is 1/σᵢ²)
+    σ = 1.0 ./ sqrt.(lik.inv_σ²)
+    return logpdf.(Normal.(ŷ, σ), lik.y)
+end
+
+"""
+    _pointwise_loglik!(::ConditionallyIndependent, result, x, lik::NonlinearLeastSquaresLikelihood) -> Vector{Float64}
+
+In-place pointwise log-likelihood for nonlinear least squares model.
+"""
+function _pointwise_loglik!(::ConditionallyIndependent, result, x, lik::NonlinearLeastSquaresLikelihood)
+    ŷ = lik.f(x)
+    σ = 1.0 ./ sqrt.(lik.inv_σ²)
+
+    @inbounds for i in eachindex(result, ŷ, σ, lik.y)
+        result[i] = logpdf(Normal(ŷ[i], σ[i]), lik.y[i])
+    end
+
+    return result
+end

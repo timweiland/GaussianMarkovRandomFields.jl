@@ -58,3 +58,60 @@ function loghessian(x, composite_lik::CompositeLikelihood)
 
     return total_hess
 end
+
+"""
+    _pointwise_loglik(::ConditionallyIndependent, x, composite_lik::CompositeLikelihood) -> Vector{Float64}
+
+Compute pointwise log-likelihood by concatenating contributions from all components.
+
+Each component must have conditionally independent observations. The result is a vector
+containing all per-observation log-likelihoods from all components concatenated in order.
+
+# Errors
+Throws an error if any component has `ConditionallyDependent` trait.
+"""
+function _pointwise_loglik(::ConditionallyIndependent, x, composite_lik::CompositeLikelihood)
+    # Check all components are conditionally independent
+    for comp in composite_lik.components
+        if observation_independence(comp) != ConditionallyIndependent()
+            error(
+                "CompositeLikelihood contains component with ConditionallyDependent trait.\n"
+                    * "All components must have ConditionallyIndependent observations for pointwise_loglik."
+            )
+        end
+    end
+
+    # Concatenate pointwise log-likelihoods from all components
+    return vcat([pointwise_loglik(x, comp) for comp in composite_lik.components]...)
+end
+
+"""
+    _pointwise_loglik!(::ConditionallyIndependent, result, x, composite_lik::CompositeLikelihood) -> Vector{Float64}
+
+In-place pointwise log-likelihood computation for composite likelihoods.
+
+Fills `result` by writing each component's pointwise log-likelihoods to the appropriate
+slice of the output vector. The `result` vector must have length equal to the total
+number of observations across all components.
+"""
+function _pointwise_loglik!(::ConditionallyIndependent, result, x, composite_lik::CompositeLikelihood)
+    # Check all components are conditionally independent
+    for comp in composite_lik.components
+        if observation_independence(comp) != ConditionallyIndependent()
+            error(
+                "CompositeLikelihood contains component with ConditionallyDependent trait.\n"
+                    * "All components must have ConditionallyIndependent observations for pointwise_loglik!."
+            )
+        end
+    end
+
+    # Fill result by slicing for each component
+    idx = 1
+    for comp in composite_lik.components
+        n_obs = length(comp.y)
+        pointwise_loglik!(view(result, idx:(idx + n_obs - 1)), x, comp)
+        idx += n_obs
+    end
+
+    return result
+end

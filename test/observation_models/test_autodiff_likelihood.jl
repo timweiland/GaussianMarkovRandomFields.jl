@@ -31,18 +31,22 @@ using ForwardDiff
             return -0.5 * sum((x .- y) .^ 2) / σ^2
         end
 
+        # Use Zygote explicitly to avoid Enzyme closure issues
         obs_model = AutoDiffObservationModel(
             test_loglik;
             n_latent = 2,
-            hyperparams = (:σ, :y)
+            hyperparams = (:σ, :y),
+            grad_backend = DI.AutoZygote(),
+            hessian_backend = DI.AutoZygote()
         )
 
         # Test interface methods
         @test latent_dimension(obs_model, [1.0]) == 2
         @test hyperparameters(obs_model) == (:σ, :y)
 
-        # Test materialization with hyperparameters - use positional first arg
-        likelihood = obs_model(nothing, σ = 0.5, y = [1.1, 1.9])
+        # Test materialization with hyperparameters - pass y as positional arg
+        y_data = [1.1, 1.9]
+        likelihood = obs_model(y_data; σ = 0.5)
 
         x = [1.0, 2.0]
         ll = loglik(x, likelihood)
@@ -54,7 +58,7 @@ using ForwardDiff
         @test size(hess) == (2, 2)
 
         # Verify correctness
-        grad_expected = -(x .- [1.1, 1.9]) / 0.25
+        grad_expected = -(x .- y_data) / 0.25
         @test grad ≈ grad_expected
     end
 

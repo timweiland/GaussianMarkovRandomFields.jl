@@ -32,9 +32,49 @@ This pattern eliminates the need to repeatedly pass data and hyperparameters, pr
 
 All materialized observation likelihoods support a common interface:
 
-- `loglik(x, obs_lik)`: Evaluate log-likelihood 
+- `loglik(x, obs_lik)`: Evaluate log-likelihood
 - `loggrad(x, obs_lik)`: Compute gradient with respect to latent field
 - `loghessian(x, obs_lik)`: Compute Hessian matrix
+- `pointwise_loglik(x, obs_lik)`: Compute per-observation log-likelihoods (see below)
+- `pointwise_loglik!(result, x, obs_lik)`: In-place version
+
+### Pointwise Log-Likelihoods
+
+For model comparison metrics like WAIC, LOO-CV, and CPO, you need per-observation log-likelihoods rather than just the total. The `pointwise_loglik` function returns a vector where each element is the log-likelihood of one observation:
+
+```julia
+obs_model = ExponentialFamily(Poisson)
+obs_lik = obs_model([1, 3, 0, 2])
+x = [0.5, 1.2, -0.3, 0.8]
+
+# Total log-likelihood (scalar)
+total_ll = loglik(x, obs_lik)
+
+# Per-observation log-likelihoods (vector)
+per_obs_ll = pointwise_loglik(x, obs_lik)
+
+# These are equivalent
+@assert sum(per_obs_ll) ≈ total_ll
+
+# In-place version for performance-critical code
+result = zeros(4)
+pointwise_loglik!(result, x, obs_lik)
+```
+
+#### Conditional Independence
+
+Pointwise log-likelihoods are only well-defined when observations are **conditionally independent** given the latent field. All current observation models in the package assume this property.
+
+You can check the independence structure using the trait system:
+
+```julia
+obs_independence = observation_independence(obs_lik)
+
+# All current models return ConditionallyIndependent()
+obs_independence isa ConditionallyIndependent  # true
+```
+
+Future extensions might add models with `ConditionallyDependent` observations (e.g., multivariate normal with correlated noise), which would not support `pointwise_loglik`.
 
 ## Exponential Family Models
 
@@ -112,6 +152,36 @@ ll = loglik(x, obs_lik)
 grad = loggrad(x, obs_lik)    # Automatic differentiation
 hess = loghessian(x, obs_lik) # Potentially sparse!
 ```
+
+### Pointwise Log-Likelihoods for AutoDiff Models
+
+For model comparison metrics, you'll need to provide a pointwise log-likelihood function:
+
+```julia
+# Define both total and pointwise log-likelihood
+function custom_loglik(x; y=[1.0, 2.0], σ=1.0)
+    μ = sin.(x)
+    return -0.5 * sum((y .- μ).^2) / σ^2 - length(y) * log(σ)
+end
+
+function custom_pointwise_loglik(x; y=[1.0, 2.0], σ=1.0)
+    μ = sin.(x)
+    return -0.5 .* (y .- μ).^2 / σ^2 .- log(σ)  # Per-observation
+end
+
+# Create model with pointwise support
+obs_model = AutoDiffObservationModel(
+    custom_loglik;
+    n_latent=2,
+    hyperparams=(:y, :σ),
+    pointwise_loglik_func=custom_pointwise_loglik  # Enable pointwise!
+)
+
+obs_lik = obs_model(y=[1.2, 1.8], σ=0.5)
+per_obs = pointwise_loglik(x, obs_lik)  # Now supported!
+```
+
+If you don't provide `pointwise_loglik_func`, attempting to call `pointwise_loglik` will error with a helpful message.
 
 ### Automatic Differentiation Requirements
 
