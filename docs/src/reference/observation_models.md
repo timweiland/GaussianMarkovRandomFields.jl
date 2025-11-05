@@ -343,8 +343,19 @@ ObservationLikelihood
 hyperparameters(::ObservationModel)
 latent_dimension
 loglik
-loggrad 
+loggrad
 loghessian
+pointwise_loglik
+pointwise_loglik!
+```
+
+### Observation Independence
+
+```@docs
+ObservationIndependence
+ConditionallyIndependent
+ConditionallyDependent
+observation_independence
 ```
 
 ### Exponential Family Models
