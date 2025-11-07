@@ -152,22 +152,46 @@ function mean(model::BYM2Model; kwargs...)
 end
 
 function constraints(model::BYM2Model; kwargs...)
-    # Get constraints from Besag component
-    constraint_info = constraints(model.besag; kwargs...)
+    # Get constraints from both components
+    besag_constraints = constraints(model.besag; kwargs...)
+    iid_constraints = constraints(model.iid; kwargs...)
 
-    if constraint_info === nothing
+    # If neither component has constraints, return nothing
+    if besag_constraints === nothing && iid_constraints === nothing
         return nothing
     end
 
-    A_besag, e_besag = constraint_info
-    n_constraints = size(A_besag, 1)
+    # Build combined constraint matrix for 2n-dimensional space
+    # Spatial component: indices 1:n
+    # Unstructured component: indices (n+1):2n
+    A_blocks = []
+    e_blocks = []
 
-    # Expand constraints to 2n-dimensional space
-    # Constraints only apply to spatial component (first n elements)
-    A_expanded = zeros(n_constraints, 2 * model.n)
-    A_expanded[:, 1:model.n] = A_besag
+    if besag_constraints !== nothing
+        A_besag, e_besag = besag_constraints
+        n_besag_constraints = size(A_besag, 1)
+        # Expand to 2n dimensions (constraints on first n components)
+        A_besag_expanded = zeros(n_besag_constraints, 2 * model.n)
+        A_besag_expanded[:, 1:model.n] = A_besag
+        push!(A_blocks, A_besag_expanded)
+        push!(e_blocks, e_besag)
+    end
 
-    return (A_expanded, e_besag)
+    if iid_constraints !== nothing
+        A_iid, e_iid = iid_constraints
+        n_iid_constraints = size(A_iid, 1)
+        # Expand to 2n dimensions (constraints on last n components)
+        A_iid_expanded = zeros(n_iid_constraints, 2 * model.n)
+        A_iid_expanded[:, (model.n + 1):(2 * model.n)] = A_iid
+        push!(A_blocks, A_iid_expanded)
+        push!(e_blocks, e_iid)
+    end
+
+    # Combine all constraints
+    A_combined = vcat(A_blocks...)
+    e_combined = vcat(e_blocks...)
+
+    return (A_combined, e_combined)
 end
 
 function model_name(::BYM2Model)

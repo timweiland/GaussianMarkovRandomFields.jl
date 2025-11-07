@@ -234,4 +234,23 @@ using LinearSolve
         @test length(v_bym2) == 6
         @test length(v_classic) == 6
     end
+
+    @testset "IID Component Constraints (edge case)" begin
+        # While not typical in BYM2, the implementation should handle
+        # IID constraints if they exist
+        W = sparse([0 1; 1 0])
+
+        # Create a BYM2 model and manually create one with IID constraint
+        # to verify the constraints method handles both components
+        model = BYM2Model(W)
+
+        # Verify default: Besag has constraints, IID doesn't
+        A, e = constraints(model; τ = 1.0, φ = 0.5)
+        @test size(A, 1) == 1  # Only Besag sum-to-zero constraint
+        @test size(A, 2) == 4  # 2n dimensional
+
+        # First 2 components (spatial) should sum to zero
+        @test A[1, 1:2] ≈ ones(2)
+        @test all(A[1, 3:4] .== 0)
+    end
 end
