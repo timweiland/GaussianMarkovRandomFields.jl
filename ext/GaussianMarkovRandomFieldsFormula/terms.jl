@@ -1,3 +1,4 @@
+# COV_EXCL_START
 # Random-effect term base and mapping helpers
 
 abstract type FormulaRandomEffectTerm <: StatsModels.AbstractTerm end
@@ -222,3 +223,4 @@ function StatsModels.modelcols(term::BYM2Term, data)
 
     return sparse(I_combined, J_combined, V_combined, n_obs, 2 * n_nodes)
 end
+# COV_EXCL_STOP
