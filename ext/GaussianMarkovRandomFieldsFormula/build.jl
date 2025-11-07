@@ -58,6 +58,25 @@ function _latent_model(term::BesagTerm, _)
     )
 end
 
+function _latent_model(term::BYM2Term, _)
+    # BYM2 always uses normalize_var=true
+    # Validate additional constraints if provided
+    if term.additional_constraints isa Tuple
+        A, e = term.additional_constraints
+        n = size(term.adjacency, 1)
+        if size(A, 2) != n
+            error("Additional constraint matrix for BYM2 term has $(size(A, 2)) columns but adjacency has $(n) nodes")
+        end
+    end
+
+    return BYM2Model(
+        term.adjacency;
+        normalize_var = Val(term.normalize_var),
+        singleton_policy = Val(term.singleton_policy),
+        additional_constraints = term.additional_constraints,
+    )
+end
+
 # Column widths for each term (avoid relying on internal StatsModels widths)
 _ncols_for_term(term, data) = size(StatsModels.modelcols(term, data), 2)
 

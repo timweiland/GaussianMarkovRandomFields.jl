@@ -1,4 +1,4 @@
-export IID, RandomWalk, AR1, Besag, build_formula_components
+export IID, RandomWalk, AR1, Besag, BYM2, build_formula_components
 
 """
     build_formula_components(formula, data; kwargs...)
@@ -160,3 +160,84 @@ struct Besag{WT <: AbstractMatrix, MT}
 end
 
 (::Besag)(args...) = error("Besag(...) functor is only intended for use inside @formula; not callable directly.")
+
+"""
+    BYM2(W; id_to_node = nothing, normalize_var = true, singleton_policy = :gaussian, additional_constraints = nothing)
+
+Formula functor for BYM2 (Besag-York-Mollié with improved parameterization) random effects.
+
+The BYM2 model combines spatial (ICAR) and unstructured (IID) random effects with
+intuitive mixing and precision parameters. It is a reparameterization of the classic
+BYM model that facilitates prior specification (Riebler et al. 2016).
+
+# Arguments
+- `W`: Adjacency matrix for the spatial structure
+- `id_to_node`: Optional mapping from region identifiers to integer node indices (1-based)
+- `normalize_var`: Whether to normalize variance (default: true, required for BYM2)
+- `singleton_policy`: How to handle isolated nodes (`:gaussian` or `:degenerate`)
+- `additional_constraints`: Optional additional constraints beyond built-in sum-to-zero
+
+# Model Structure
+The BYM2 model creates a 2n-dimensional latent field:
+- Components 1:n are spatial effects (variance-normalized ICAR)
+- Components (n+1):2n are unstructured effects (IID)
+- In the linear predictor: η[i] = ... + u*[i] + v*[i]
+
+# Hyperparameters
+- `τ`: Overall precision (τ > 0)
+- `φ`: Mixing parameter (0 < φ < 1), proportion of unstructured variance
+  - φ = 0: pure spatial model
+  - φ = 1: pure unstructured model
+  - φ = 0.5: equal spatial and unstructured variance
+
+# Usage
+```julia
+# Create BYM2 functor with adjacency matrix
+W = adjacency_matrix
+bym2 = BYM2(W)
+@formula(y ~ 0 + bym2(region))
+
+# With categorical region IDs
+id_map = Dict("WesternIsles" => 11, "Highland" => 12, ...)
+bym2_mapped = BYM2(W; id_to_node = id_map)
+@formula(y ~ 0 + bym2_mapped(region))
+
+# With custom singleton policy
+bym2_deg = BYM2(W; singleton_policy = :degenerate)
+@formula(y ~ 0 + bym2_deg(region))
+```
+
+# Notes
+- BYM2 always uses variance normalization (normalize_var = true)
+- Sum-to-zero constraint is automatically applied to the spatial component
+- You must create a BYM2 instance before using it in a formula
+- Calling the functor directly is unsupported outside formula parsing
+
+# References
+Riebler, A., Sørbye, S. H., Simpson, D., & Rue, H. (2016).
+An intuitive Bayesian spatial model for disease mapping that accounts for scaling.
+Statistical Methods in Medical Research, 25(4), 1145-1165.
+"""
+struct BYM2{WT <: AbstractMatrix, MT}
+    W::WT
+    id_to_node::MT  # may be Nothing or a mapping supporting getindex
+    normalize_var::Bool
+    singleton_policy::Symbol
+    additional_constraints::Union{Nothing, Tuple{AbstractMatrix, AbstractVector}}
+
+    function BYM2(
+            W::WT;
+            id_to_node = nothing,
+            normalize_var::Bool = true,
+            singleton_policy::Symbol = :gaussian,
+            additional_constraints = nothing,
+        ) where {WT}
+        # BYM2 requires variance normalization
+        if !normalize_var
+            throw(ArgumentError("BYM2 requires variance normalization (normalize_var must be true)"))
+        end
+        return new{WT, typeof(id_to_node)}(W, id_to_node, normalize_var, singleton_policy, additional_constraints)
+    end
+end
+
+(::BYM2)(args...) = error("BYM2(...) functor is only intended for use inside @formula; not callable directly.")
