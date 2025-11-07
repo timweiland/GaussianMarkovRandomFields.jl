@@ -73,13 +73,14 @@ W
 #
 # In code, we specify:
 # - `besag = Besag(W; id_to_node = Dict(code => i))` for the structured effect.
-# - `IID(code)` for the unstructured effect.
+# - `iid = IID()` for the unstructured effect.
 # - `1 + aff` for fixed effects (intercept + AFF). The fixed block is weakly
 #   regularized internally for numerical stability.
 
 besag = Besag(W; id_to_node = id_to_node, singleton_policy = :degenerate)
+iid = IID()
 
-f = @formula(y ~ 1 + aff + IID(code) + besag(code))
+f = @formula(y ~ 1 + aff + iid(code) + besag(code))
 comp = build_formula_components(f, df; family = Poisson)
 
 # ## Likelihood with offset and Gaussian approximation

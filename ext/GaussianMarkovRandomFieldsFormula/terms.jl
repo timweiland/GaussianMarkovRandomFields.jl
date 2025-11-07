@@ -5,15 +5,17 @@ abstract type FormulaRandomEffectTerm <: StatsModels.AbstractTerm end
 # IID(group)
 struct IIDTerm <: FormulaRandomEffectTerm
     variable::Symbol
+    constraint::Union{Nothing, Symbol, Tuple{AbstractMatrix, AbstractVector}}
 end
 
+# IID instance (e.g., iid = IID(); @formula(y ~ iid(group)) or iid_sz = IID(constraint=:sumtozero); @formula(y ~ iid_sz(group)))
 function StatsModels.apply_schema(
-        t::StatsModels.FunctionTerm{typeof(IID)},
+        t::StatsModels.FunctionTerm{<:GaussianMarkovRandomFields.IID},
         ::StatsModels.Schema,
         ::Type
     )
     var_term = only(t.args)
-    return IIDTerm(var_term.sym)
+    return IIDTerm(var_term.sym, t.f.constraint)
 end
 
 StatsModels.termvars(term::IIDTerm) = [term.variable]
@@ -21,17 +23,19 @@ StatsModels.termvars(term::IIDTerm) = [term.variable]
 # RandomWalk(order, index) → MVP: order == 1
 struct RandomWalkTerm{Order} <: FormulaRandomEffectTerm
     variable::Symbol
+    additional_constraints::Union{Nothing, Tuple{AbstractMatrix, AbstractVector}}
 end
 
+# RandomWalk instance (e.g., rw1 = RandomWalk(); @formula(y ~ rw1(1, time)) or rw1_extra = RandomWalk(additional_constraints=...); @formula(y ~ rw1_extra(1, time)))
 function StatsModels.apply_schema(
-        t::StatsModels.FunctionTerm{typeof(RandomWalk)},
+        t::StatsModels.FunctionTerm{<:GaussianMarkovRandomFields.RandomWalk},
         ::StatsModels.Schema,
         ::Type
     )
     order_term, var_term = t.args
     order = order_term isa StatsModels.ConstantTerm ? order_term.n : order_term
     order isa Integer || error("RandomWalk order must be an integer, got $(typeof(order))")
-    return RandomWalkTerm{Int(order)}(var_term.sym)
+    return RandomWalkTerm{Int(order)}(var_term.sym, t.f.additional_constraints)
 end
 
 StatsModels.termvars(term::RandomWalkTerm) = [term.variable]
@@ -39,15 +43,17 @@ StatsModels.termvars(term::RandomWalkTerm) = [term.variable]
 # AR1(index)
 struct AR1Term <: FormulaRandomEffectTerm
     variable::Symbol
+    constraint::Union{Nothing, Symbol, Tuple{AbstractMatrix, AbstractVector}}
 end
 
+# AR1 instance (e.g., ar1 = AR1(); @formula(y ~ ar1(time)) or ar1_sz = AR1(constraint=:sumtozero); @formula(y ~ ar1_sz(time)))
 function StatsModels.apply_schema(
-        t::StatsModels.FunctionTerm{typeof(AR1)},
+        t::StatsModels.FunctionTerm{<:GaussianMarkovRandomFields.AR1},
         ::StatsModels.Schema,
         ::Type
     )
     var_term = only(t.args)
-    return AR1Term(var_term.sym)
+    return AR1Term(var_term.sym, t.f.constraint)
 end
 
 StatsModels.termvars(term::AR1Term) = [term.variable]

@@ -4,19 +4,49 @@
 function _latent_model(term::IIDTerm, data)
     v = _getcolumn(data, term.variable)
     lvls, _ = _levels_and_index(v)
-    return IIDModel(length(lvls))
+    n = length(lvls)
+
+    # Validate custom constraint dimensions if provided
+    if term.constraint isa Tuple
+        A, e = term.constraint
+        if size(A, 2) != n
+            error("Constraint matrix for $(term.variable) has $(size(A, 2)) columns but variable has $(n) levels")
+        end
+    end
+
+    return IIDModel(n; constraint = term.constraint)
 end
 
 function _latent_model(term::RandomWalkTerm{1}, data)
     v = _getcolumn(data, term.variable)
     lvls, _ = _levels_and_index(v)
-    return RW1Model(length(lvls))
+    n = length(lvls)
+
+    # Validate custom constraint dimensions if provided
+    if term.additional_constraints isa Tuple
+        A, e = term.additional_constraints
+        if size(A, 2) != n
+            error("Additional constraint matrix for $(term.variable) has $(size(A, 2)) columns but variable has $(n) levels")
+        end
+    end
+
+    return RW1Model(n; additional_constraints = term.additional_constraints)
 end
 
 function _latent_model(term::AR1Term, data)
     v = _getcolumn(data, term.variable)
     lvls, _ = _levels_and_index(v)
-    return AR1Model(length(lvls))
+    n = length(lvls)
+
+    # Validate custom constraint dimensions if provided
+    if term.constraint isa Tuple
+        A, e = term.constraint
+        if size(A, 2) != n
+            error("Constraint matrix for $(term.variable) has $(size(A, 2)) columns but variable has $(n) levels")
+        end
+    end
+
+    return AR1Model(n; constraint = term.constraint)
 end
 
 function _latent_model(term::BesagTerm, _)
