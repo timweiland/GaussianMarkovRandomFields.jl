@@ -62,7 +62,7 @@ The BYM (Besag-York-Mollié) model uses sum-to-zero constraints for identifiabil
 # Spatial adjacency matrix
 W = sparse([...])
 
-# Both components need sum-to-zero constraints
+# Classic BYM: Both components need sum-to-zero constraints
 besag = Besag(W)                      # Spatial (built-in constraint)
 iid_sz = IID(constraint=:sumtozero)   # Unstructured (explicit constraint)
 
@@ -71,6 +71,30 @@ comp = build_formula_components(
     data;
     family = Poisson
 )
+```
+
+### BYM2 Model (Recommended)
+
+The BYM2 model offers improved parameterization with a single precision τ and mixing parameter φ:
+
+```julia
+# BYM2 without intercept (no constraint needed)
+bym2 = BYM2(W)
+comp = build_formula_components(
+    @formula(y ~ 0 + x + bym2(region)),
+    data;
+    family = Poisson
+)
+gmrf = comp.combined_model(τ_bym2=1.0, φ_bym2=0.5)
+
+# BYM2 with intercept (constrain IID component for identifiability)
+bym2_constrained = BYM2(W; iid_constraint=:sumtozero)
+comp = build_formula_components(
+    @formula(y ~ 1 + x + bym2_constrained(region)),
+    data;
+    family = Poisson
+)
+gmrf = comp.combined_model(τ_bym2=1.0, φ_bym2=0.5)
 ```
 
 ### Custom Constraints
@@ -101,6 +125,12 @@ comp = build_formula_components(@formula(y ~ 0 + iid_custom(group)), data; famil
 
 - **`Besag(...)`**: Always has built-in sum-to-zero constraints per connected component
 
+- **`BYM2(W; iid_constraint=..., additional_constraints=...)`**:
+  - Spatial component: always has built-in sum-to-zero per connected component
+  - IID component: optional `iid_constraint` parameter (default: unconstrained)
+    - Use `iid_constraint=:sumtozero` when including a fixed intercept for identifiability
+  - Optional `additional_constraints` for spatial component (beyond sum-to-zero)
+
 ### Unconstrained vs. Constrained
 
 ```julia
@@ -122,6 +152,7 @@ GaussianMarkovRandomFields.IID
 GaussianMarkovRandomFields.RandomWalk
 GaussianMarkovRandomFields.AR1
 GaussianMarkovRandomFields.Besag
+GaussianMarkovRandomFields.BYM2
 GaussianMarkovRandomFields.build_formula_components
 ```
 

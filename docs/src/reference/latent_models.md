@@ -45,6 +45,7 @@ RW1Model
 ```@docs
 MaternModel
 BesagModel
+BYM2Model
 ```
 
 ### Independence Models
@@ -83,7 +84,7 @@ gmrf = besag(τ=1.0)  # Returns ConstrainedGMRF with sum-to-zero constraint
 ### Model Composition
 
 ```julia
-# Classic BYM model: spatial + independent effects  
+# Classic BYM model: spatial + independent effects
 W = spatial_adjacency_matrix
 bym = CombinedModel(BesagModel(W), IIDModel(n))
 
@@ -93,9 +94,15 @@ hyperparameters(bym)  # (τ_besag = Real, τ_iid = Real)
 # Construct combined GMRF
 gmrf = bym(τ_besag=1.0, τ_iid=2.0)
 
+# BYM2 model: improved parameterization (recommended)
+# Uses mixing parameter φ instead of separate precisions
+bym2 = BYM2Model(W)
+hyperparameters(bym2)  # (τ = Real, φ = Real)
+gmrf = bym2(τ=1.0, φ=0.5)  # φ ∈ (0,1): proportion unstructured
+
 # Continuous spatial field + independent effects
 points = generate_observation_points()
-spatial_matern = MaternModel(points; smoothness = 1) 
+spatial_matern = MaternModel(points; smoothness = 1)
 independent_effects = IIDModel(length(points))
 combined = CombinedModel(spatial_matern, independent_effects)
 gmrf = combined(range=2.0, τ_iid=0.1)
