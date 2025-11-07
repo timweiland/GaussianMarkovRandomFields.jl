@@ -1,7 +1,7 @@
 name = "GaussianMarkovRandomFields"
 uuid = "d5f06795-35bb-4323-9f0b-405ef76cfc5b"
-authors = ["Tim Weiland <hello@timwei.land> and contributors"]
 version = "0.5.0"
+authors = ["Tim Weiland <hello@timwei.land> and contributors"]
 
 [deps]
 AMD = "14f7f29c-3bd6-536c-9a0b-7339e30b5a3e"
@@ -83,7 +83,7 @@ SparseMatrixColorings = "0.4"
 SpecialFunctions = "2"
 StatsFuns = "1"
 StatsModels = "0.7"
-Symbolics = "5"
+Symbolics = "5, 7"
 Tensors = "1.16"
 Test = "<0.0.1, 1"
 Zygote = "0.6"
