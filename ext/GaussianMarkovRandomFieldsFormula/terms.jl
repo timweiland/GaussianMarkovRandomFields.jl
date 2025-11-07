@@ -89,6 +89,7 @@ struct BYM2Term{M <: AbstractMatrix, MT} <: FormulaRandomEffectTerm
     normalize_var::Bool
     singleton_policy::Symbol
     additional_constraints::Union{Nothing, Tuple{AbstractMatrix, AbstractVector}}
+    iid_constraint::Union{Nothing, Symbol, Tuple{AbstractMatrix, AbstractVector}}
 end
 
 function StatsModels.apply_schema(
@@ -100,7 +101,7 @@ function StatsModels.apply_schema(
     var_term = only(t.args)
     W = t.f.W
     idmap = t.f.id_to_node
-    return BYM2Term(var_term.sym, W, idmap, t.f.normalize_var, t.f.singleton_policy, t.f.additional_constraints)
+    return BYM2Term(var_term.sym, W, idmap, t.f.normalize_var, t.f.singleton_policy, t.f.additional_constraints, t.f.iid_constraint)
 end
 
 StatsModels.termvars(term::BYM2Term) = [term.variable]

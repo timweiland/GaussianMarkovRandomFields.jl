@@ -5,7 +5,7 @@ using LinearSolve
 export BYM2Model
 
 """
-    BYM2Model(adjacency::AbstractMatrix; regularization::Float64 = 1e-5, normalize_var::Bool = true, singleton_policy::Symbol = :gaussian, alg=CHOLMODFactorization(), additional_constraints=nothing)
+    BYM2Model(adjacency::AbstractMatrix; regularization::Float64 = 1e-5, normalize_var::Bool = true, singleton_policy::Symbol = :gaussian, alg=CHOLMODFactorization(), additional_constraints=nothing, iid_constraint=nothing)
 
 Besag-York-Mollié model with improved BYM2 parameterization (Riebler et al. 2016).
 
@@ -45,15 +45,28 @@ This parameterization ensures:
 - `n::Int`: Number of spatial units
 - `alg::Alg`: LinearSolve algorithm for solving linear systems
 
+# Identifiability and Constraints
+
+When using BYM2 with a fixed intercept, the model can be unidentifiable because the
+unstructured component v* can absorb any constant shift. To handle this:
+
+1. **No intercept** (recommended): Use `y ~ 0 + bym2(region)` in formulas
+2. **Constrain IID**: Pass `iid_constraint=:sumtozero` to ensure identifiability
+
+The spatial component u* always has a sum-to-zero constraint (one per connected component).
+
 # Example
 ```julia
 # 4-node cycle graph
 W = sparse(Bool[0 1 0 1; 1 0 1 0; 0 1 0 1; 1 0 1 0])
-model = BYM2Model(W)
 
-# Returns 2n-dimensional ConstrainedGMRF with sum-to-zero constraint on spatial component
-# Components 1:n are spatial (u*), components (n+1):2n are unstructured (v*)
+# Standard BYM2 (use with y ~ 0 + ...)
+model = BYM2Model(W)
 gmrf = model(τ=1.0, φ=0.5)  # Equal spatial and unstructured variance
+
+# BYM2 with IID constraint (use with y ~ 1 + ... to include intercept)
+model_constrained = BYM2Model(W; iid_constraint=:sumtozero)
+gmrf = model_constrained(τ=1.0, φ=0.5)  # Both components sum to zero
 
 # More spatial smoothing (90% spatial, 10% unstructured)
 gmrf = model(τ=1.0, φ=0.1)
@@ -80,6 +93,7 @@ struct BYM2Model{Alg} <: LatentModel
             singleton_policy = Val{:gaussian}(),
             alg = CHOLMODFactorization(),
             additional_constraints = nothing,
+            iid_constraint = nothing,
         )
         # Validate normalize_var - BYM2 requires variance normalization
         if normalize_var !== Val{true}()
@@ -98,8 +112,8 @@ struct BYM2Model{Alg} <: LatentModel
 
         n = length(besag)
 
-        # Create IID component (no constraint - Besag handles sum-to-zero)
-        iid = IIDModel(n; alg = alg, constraint = nothing)
+        # Create IID component with optional constraint for identifiability
+        iid = IIDModel(n; alg = alg, constraint = iid_constraint)
 
         return new{typeof(alg)}(besag, iid, n, alg)
     end

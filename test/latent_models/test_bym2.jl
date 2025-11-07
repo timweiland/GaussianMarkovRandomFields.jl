@@ -235,22 +235,39 @@ using LinearSolve
         @test length(v_classic) == 6
     end
 
-    @testset "IID Component Constraints (edge case)" begin
-        # While not typical in BYM2, the implementation should handle
-        # IID constraints if they exist
+    @testset "IID Component Constraints (identifiability)" begin
         W = sparse([0 1; 1 0])
 
-        # Create a BYM2 model and manually create one with IID constraint
-        # to verify the constraints method handles both components
-        model = BYM2Model(W)
-
-        # Verify default: Besag has constraints, IID doesn't
-        A, e = constraints(model; τ = 1.0, φ = 0.5)
+        # Default: Only Besag has constraints, IID doesn't
+        model_unconstrained = BYM2Model(W)
+        A, e = constraints(model_unconstrained; τ = 1.0, φ = 0.5)
         @test size(A, 1) == 1  # Only Besag sum-to-zero constraint
         @test size(A, 2) == 4  # 2n dimensional
-
         # First 2 components (spatial) should sum to zero
         @test A[1, 1:2] ≈ ones(2)
         @test all(A[1, 3:4] .== 0)
+
+        # With IID constraint: Both components should be constrained
+        model_constrained = BYM2Model(W; iid_constraint = :sumtozero)
+        A2, e2 = constraints(model_constrained; τ = 1.0, φ = 0.5)
+        @test size(A2, 1) == 2  # Two sum-to-zero constraints
+        @test size(A2, 2) == 4  # 2n dimensional
+
+        # First constraint: spatial component sums to zero
+        @test A2[1, 1:2] ≈ ones(2)
+        @test all(A2[1, 3:4] .== 0)
+
+        # Second constraint: IID component sums to zero
+        @test all(A2[2, 1:2] .== 0)
+        @test A2[2, 3:4] ≈ ones(2)
+
+        # Verify GMRFs are created correctly
+        gmrf_unconstrained = model_unconstrained(τ = 1.0, φ = 0.5)
+        gmrf_constrained = model_constrained(τ = 1.0, φ = 0.5)
+
+        @test gmrf_unconstrained isa ConstrainedGMRF
+        @test gmrf_constrained isa ConstrainedGMRF
+        @test size(gmrf_unconstrained.constraint_matrix, 1) == 1
+        @test size(gmrf_constrained.constraint_matrix, 1) == 2
     end
 end

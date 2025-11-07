@@ -69,11 +69,21 @@ function _latent_model(term::BYM2Term, _)
         end
     end
 
+    # Validate IID constraint if provided
+    if term.iid_constraint isa Tuple
+        A, e = term.iid_constraint
+        n = size(term.adjacency, 1)
+        if size(A, 2) != n
+            error("IID constraint matrix for BYM2 term has $(size(A, 2)) columns but adjacency has $(n) nodes")
+        end
+    end
+
     return BYM2Model(
         term.adjacency;
         normalize_var = Val(term.normalize_var),
         singleton_policy = Val(term.singleton_policy),
         additional_constraints = term.additional_constraints,
+        iid_constraint = term.iid_constraint,
     )
 end
 

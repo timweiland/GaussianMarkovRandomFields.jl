@@ -162,7 +162,7 @@ end
 (::Besag)(args...) = error("Besag(...) functor is only intended for use inside @formula; not callable directly.")
 
 """
-    BYM2(W; id_to_node = nothing, normalize_var = true, singleton_policy = :gaussian, additional_constraints = nothing)
+    BYM2(W; id_to_node = nothing, normalize_var = true, singleton_policy = :gaussian, additional_constraints = nothing, iid_constraint = nothing)
 
 Formula functor for BYM2 (Besag-York-Mollié with improved parameterization) random effects.
 
@@ -175,7 +175,8 @@ BYM model that facilitates prior specification (Riebler et al. 2016).
 - `id_to_node`: Optional mapping from region identifiers to integer node indices (1-based)
 - `normalize_var`: Whether to normalize variance (default: true, required for BYM2)
 - `singleton_policy`: How to handle isolated nodes (`:gaussian` or `:degenerate`)
-- `additional_constraints`: Optional additional constraints beyond built-in sum-to-zero
+- `additional_constraints`: Optional additional constraints on spatial component (beyond sum-to-zero)
+- `iid_constraint`: Optional constraint on unstructured component (e.g., `:sumtozero` for identifiability with intercept)
 
 # Model Structure
 The BYM2 model creates a 2n-dimensional latent field:
@@ -190,12 +191,23 @@ The BYM2 model creates a 2n-dimensional latent field:
   - φ = 1: pure unstructured model
   - φ = 0.5: equal spatial and unstructured variance
 
+# Identifiability
+
+When including a fixed intercept, the model can be unidentifiable because the IID component
+can absorb constant shifts. Handle this by either:
+1. Not including an intercept: `@formula(y ~ 0 + bym2(region))`
+2. Constraining the IID component: `BYM2(W; iid_constraint=:sumtozero)`
+
 # Usage
 ```julia
-# Create BYM2 functor with adjacency matrix
+# Standard BYM2 without intercept (recommended)
 W = adjacency_matrix
 bym2 = BYM2(W)
 @formula(y ~ 0 + bym2(region))
+
+# BYM2 with intercept (constrain IID for identifiability)
+bym2_constrained = BYM2(W; iid_constraint=:sumtozero)
+@formula(y ~ 1 + bym2_constrained(region))
 
 # With categorical region IDs
 id_map = Dict("WesternIsles" => 11, "Highland" => 12, ...)
@@ -224,6 +236,7 @@ struct BYM2{WT <: AbstractMatrix, MT}
     normalize_var::Bool
     singleton_policy::Symbol
     additional_constraints::Union{Nothing, Tuple{AbstractMatrix, AbstractVector}}
+    iid_constraint::Union{Nothing, Symbol, Tuple{AbstractMatrix, AbstractVector}}
 
     function BYM2(
             W::WT;
@@ -231,12 +244,13 @@ struct BYM2{WT <: AbstractMatrix, MT}
             normalize_var::Bool = true,
             singleton_policy::Symbol = :gaussian,
             additional_constraints = nothing,
+            iid_constraint = nothing,
         ) where {WT}
         # BYM2 requires variance normalization
         if !normalize_var
             throw(ArgumentError("BYM2 requires variance normalization (normalize_var must be true)"))
         end
-        return new{WT, typeof(id_to_node)}(W, id_to_node, normalize_var, singleton_policy, additional_constraints)
+        return new{WT, typeof(id_to_node)}(W, id_to_node, normalize_var, singleton_policy, additional_constraints, iid_constraint)
     end
 end
 
