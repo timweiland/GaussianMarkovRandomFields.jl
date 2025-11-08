@@ -4,7 +4,7 @@ using Distributions
 using GaussianMarkovRandomFields
 using SparseArrays
 
-@testset "Formula Interface (MVP)" begin
+@testset "Formula Interface" begin
     # Common small dataset
     n = 10
     data = (
@@ -16,11 +16,11 @@ using SparseArrays
 
     # Create functor instances
     iid = IID()
-    rw1 = RandomWalk()
+    rw1 = RandomWalk(1)
     ar1 = AR1()
 
     @testset "IID + RW1 (no intercept)" begin
-        comp = build_formula_components(@formula(y ~ 0 + iid(group) + rw1(1, time)), data; family = Normal)
+        comp = build_formula_components(@formula(y ~ 0 + iid(group) + rw1(time)), data; family = Normal)
         @test size(comp.A) == (n, 2 + n)
         @test nnz(comp.A) == n + n  # one indicator per block per row
         @test comp.meta.n_random == 2
@@ -143,8 +143,8 @@ end
     end
 
     @testset "RandomWalk with built-in sum-to-zero" begin
-        rw1 = RandomWalk()
-        comp = build_formula_components(@formula(y ~ 0 + rw1(1, time)), data; family = Normal)
+        rw1 = RandomWalk(1)
+        comp = build_formula_components(@formula(y ~ 0 + rw1(time)), data; family = Normal)
 
         # RW1 always has built-in sum-to-zero constraint
         gmrf = comp.combined_model(τ_rw1 = 1.0)
@@ -192,9 +192,9 @@ end
 
     @testset "Combined model with multiple constrained terms" begin
         iid_sz = IID(constraint = :sumtozero)
-        rw1 = RandomWalk()
+        rw1 = RandomWalk(1)
 
-        comp = build_formula_components(@formula(y ~ 0 + iid_sz(group) + rw1(1, time)), data; family = Normal)
+        comp = build_formula_components(@formula(y ~ 0 + iid_sz(group) + rw1(time)), data; family = Normal)
         gmrf = comp.combined_model(τ_iid = 1.0, τ_rw1 = 1.0)
 
         # Combined model should be constrained
