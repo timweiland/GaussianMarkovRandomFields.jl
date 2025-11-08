@@ -1,3 +1,4 @@
+# COV_EXCL_START
 # Random-effect term base and mapping helpers
 
 abstract type FormulaRandomEffectTerm <: StatsModels.AbstractTerm end
@@ -81,6 +82,31 @@ end
 
 StatsModels.termvars(term::BesagTerm) = [term.variable]
 
+# BYM2(region; W = adjacency)
+struct BYM2Term{M <: AbstractMatrix, MT} <: FormulaRandomEffectTerm
+    variable::Symbol
+    adjacency::M
+    id_to_node::MT
+    normalize_var::Bool
+    singleton_policy::Symbol
+    additional_constraints::Union{Nothing, Tuple{AbstractMatrix, AbstractVector}}
+    iid_constraint::Union{Nothing, Symbol, Tuple{AbstractMatrix, AbstractVector}}
+end
+
+function StatsModels.apply_schema(
+        t::StatsModels.FunctionTerm{<:GaussianMarkovRandomFields.BYM2},
+        ::StatsModels.Schema,
+        ::Type
+    )
+    # Functor carries adjacency matrix in t.f.W
+    var_term = only(t.args)
+    W = t.f.W
+    idmap = t.f.id_to_node
+    return BYM2Term(var_term.sym, W, idmap, t.f.normalize_var, t.f.singleton_policy, t.f.additional_constraints, t.f.iid_constraint)
+end
+
+StatsModels.termvars(term::BYM2Term) = [term.variable]
+
 # Sparse mapping helpers
 _getcolumn(data, sym::Symbol) = hasproperty(data, sym) ? getproperty(data, sym) : haskey(data, sym) ? data[sym] : error("Variable $(sym) not found in data")
 
@@ -158,3 +184,43 @@ function StatsModels.modelcols(term::BesagTerm, data)
     V = ones(Float64, n_obs)
     return sparse(I, J, V, n_obs, n_nodes)
 end
+
+function StatsModels.modelcols(term::BYM2Term, data)
+    raw = _getcolumn(data, term.variable)
+    n_obs = length(raw)
+    n_nodes = size(term.adjacency, 1)
+
+    # Resolve node indices J from raw IDs (same as Besag)
+    J = Vector{Int}(undef, n_obs)
+    if term.id_to_node !== nothing
+        idmap = term.id_to_node
+        @inbounds for i in 1:n_obs
+            id = raw[i]
+            idx = try
+                idmap[id]
+            catch err
+                throw(ArgumentError("id_to_node has no entry for $(repr(id)) at row $(i)"))
+            end
+            idx isa Integer || throw(ArgumentError("id_to_node must map to 1-based integer node indices; got $(typeof(idx))"))
+            1 <= idx <= n_nodes || throw(ArgumentError("Mapped node index $(idx) out of bounds 1:$(n_nodes)"))
+            J[i] = Int(idx)
+        end
+    else
+        # Expect integers already
+        v = Int.(raw)
+        @inbounds for i in 1:n_obs
+            idx = v[i]
+            1 <= idx <= n_nodes || throw(ArgumentError("Region index $(idx) out of bounds 1:$(n_nodes) at row $(i)"))
+            J[i] = idx
+        end
+    end
+
+    # BYM2 model has 2n components: [u* (spatial); v* (unstructured)]
+    # Each observation maps to both: spatial component j and unstructured component n+j
+    I_combined = vcat(collect(1:n_obs), collect(1:n_obs))
+    J_combined = vcat(J, J .+ n_nodes)  # First half maps to 1:n, second half to (n+1):2n
+    V_combined = ones(Float64, 2 * n_obs)
+
+    return sparse(I_combined, J_combined, V_combined, n_obs, 2 * n_nodes)
+end
+# COV_EXCL_STOP

@@ -83,6 +83,43 @@ iid = IID()
 f = @formula(y ~ 1 + aff + iid(code) + besag(code))
 comp = build_formula_components(f, df; family = Poisson)
 
+# ### Alternative: BYM2 model with improved parameterization
+# The BYM2 model (Riebler et al. 2016) offers an improved reparameterization of BYM
+# with more interpretable hyperparameters:
+# - τ: overall precision (total variance = 1/τ)
+# - φ ∈ (0,1): mixing parameter (proportion of variance that is unstructured)
+#
+# BYM2 is often preferred because:
+# 1. Easier to set informative priors (single precision scale)
+# 2. Direct control over spatial vs unstructured mixing
+# 3. Better identifiability properties
+#
+# **Important**: When using BYM2 with an intercept, you should constrain the IID
+# component to avoid identifiability issues:
+
+bym2_constrained = BYM2(
+    W; id_to_node = id_to_node,
+    singleton_policy = :degenerate,
+    iid_constraint = :sumtozero
+)
+
+f_bym2 = @formula(y ~ 1 + aff + bym2_constrained(code))
+comp_bym2 = build_formula_components(f_bym2, df; family = Poisson)
+
+# With BYM2, you specify τ (overall precision) and φ (mixing: 0=pure spatial, 1=pure IID):
+lik_bym2 = comp_bym2.obs_model(df.y; offset = df.offset)
+prior_bym2 = comp_bym2.combined_model(; τ_bym2 = 2.0, φ_bym2 = 0.4)
+post_bym2 = gaussian_approximation(prior_bym2, lik_bym2)
+
+# The BYM2 effects live in a 2n-dimensional space: [u* (spatial); v* (IID)]
+# In the linear predictor, they're added: η = β₀ + β_aff·AFF + u*ᵢ + v*ᵢ
+η_bym2 = comp_bym2.A * mean(post_bym2)
+RR_bym2 = exp.(η_bym2)
+(minimum(RR_bym2), median(RR_bym2), maximum(RR_bym2))
+
+# For the remainder of this tutorial, we'll continue with the classic BYM formulation
+# to demonstrate component decomposition, but BYM2 is recommended for new analyses.
+
 # ## Likelihood with offset and Gaussian approximation
 # The Poisson observation model uses the log‑link by default. Passing
 # `offset = log(E)` encodes exposure and turns the linear predictor into log RR.
@@ -212,5 +249,8 @@ plt_ex
 # - Intrinsic Besag imposes sum-to-zero constraints per connected component.
 # - Isolated islands (with no edges) receive a degenerate prior, such that only the IID
 #   part has an effect there.
-# - For more realism, you can tune `τ_besag` and `τ_iid` and add further
-#   covariates to the fixed-effects part of the formula.
+# - For more realism, you can tune `τ_besag` and `τ_iid` (or `τ` and `φ` for BYM2)
+#   and add further covariates to the fixed-effects part of the formula.
+# - **BYM2 is recommended for new analyses**: It has more interpretable parameters
+#   (τ for overall precision, φ for mixing) and facilitates prior specification.
+#   When using BYM2 with an intercept, add `iid_constraint=:sumtozero` for identifiability.
