@@ -21,20 +21,20 @@ end
 
 StatsModels.termvars(term::IIDTerm) = [term.variable]
 
-# RandomWalk(order, index) → MVP: order == 1
+# RandomWalk(index) → order stored in functor
 struct RandomWalkTerm{Order} <: FormulaRandomEffectTerm
     variable::Symbol
     additional_constraints::Union{Nothing, Tuple{AbstractMatrix, AbstractVector}}
 end
 
-# RandomWalk instance (e.g., rw1 = RandomWalk(); @formula(y ~ rw1(1, time)) or rw1_extra = RandomWalk(additional_constraints=...); @formula(y ~ rw1_extra(1, time)))
+# RandomWalk instance (e.g., rw1 = RandomWalk(); @formula(y ~ rw1(time)) or rw1 = RandomWalk(1); @formula(y ~ rw1(time)))
 function StatsModels.apply_schema(
         t::StatsModels.FunctionTerm{<:GaussianMarkovRandomFields.RandomWalk},
         ::StatsModels.Schema,
         ::Type
     )
-    order_term, var_term = t.args
-    order = order_term isa StatsModels.ConstantTerm ? order_term.n : order_term
+    var_term = only(t.args)
+    order = t.f.order
     order isa Integer || error("RandomWalk order must be an integer, got $(typeof(order))")
     return RandomWalkTerm{Int(order)}(var_term.sym, t.f.additional_constraints)
 end
@@ -223,4 +223,94 @@ function StatsModels.modelcols(term::BYM2Term, data)
 
     return sparse(I_combined, J_combined, V_combined, n_obs, 2 * n_nodes)
 end
+
+# Separable(component1, component2, ..., componentN)
+struct SeparableTerm{T <: Tuple} <: FormulaRandomEffectTerm
+    component_terms::T  # Stores the actual term objects (IIDTerm, AR1Term, etc.)
+end
+
+# Separable instance (e.g., st = Separable(RW1(), Besag(W)); @formula(y ~ st(time, region)))
+function StatsModels.apply_schema(
+        t::StatsModels.FunctionTerm{<:GaussianMarkovRandomFields.Separable},
+        sch::StatsModels.Schema,
+        Typ::Type
+    )
+    # Extract variable terms and component functors
+    var_terms = t.args
+    component_functors = t.f.components
+
+    # Validate: length(variables) == length(component_functors)
+    length(var_terms) == length(component_functors) ||
+        error("Number of variables ($(length(var_terms))) must match number of components ($(length(component_functors)))")
+
+    # For each component, create a proper FunctionTerm and apply schema to it
+    # This properly leverages StatsModels' existing apply_schema methods for each functor type
+    component_terms = Tuple(
+        StatsModels.apply_schema(
+                # Create a FunctionTerm(functor, [var_term], expr)
+                # The expr is a dummy since we're constructing this synthetically
+                StatsModels.FunctionTerm(functor, [var_term], :($(Symbol("dummy_", i))($(var_term.sym)))),
+                sch,
+                Typ
+            )
+            for (i, (functor, var_term)) in enumerate(zip(component_functors, var_terms))
+    )
+
+    return SeparableTerm(component_terms)
+end
+
+StatsModels.termvars(term::SeparableTerm) = vcat([StatsModels.termvars(t) for t in term.component_terms]...)
+
+# Row-wise Kronecker (Khatri-Rao) product for separable indicator mapping
+function _khatri_rao(A::AbstractMatrix, B::AbstractMatrix)
+    size(A, 1) == size(B, 1) || error("Matrices must have same number of rows")
+    n = size(A, 1)
+    p, q = size(A, 2), size(B, 2)
+
+    # For sparse matrices, construct via IJV
+    if A isa SparseMatrixCSC && B isa SparseMatrixCSC
+        I_out = Int[]
+        J_out = Int[]
+        V_out = Float64[]
+
+        for i in 1:n
+            # Get nonzeros in row i of A and B
+            A_row_nz = [(j, A[i, j]) for j in 1:p if A[i, j] != 0]
+            B_row_nz = [(k, B[i, k]) for k in 1:q if B[i, k] != 0]
+
+            # Kronecker product of the two rows
+            for (j_A, v_A) in A_row_nz
+                for (j_B, v_B) in B_row_nz
+                    # Column index in result: (j_A - 1) * q + j_B
+                    j_out = (j_A - 1) * q + j_B
+                    push!(I_out, i)
+                    push!(J_out, j_out)
+                    push!(V_out, v_A * v_B)
+                end
+            end
+        end
+
+        return sparse(I_out, J_out, V_out, n, p * q)
+    else
+        # Fallback for dense matrices
+        C = zeros(n, p * q)
+        for i in 1:n
+            C[i, :] = kron(A[i, :], B[i, :])
+        end
+        return C
+    end
+end
+
+# Kronecker indicator mapping for separable models
+function StatsModels.modelcols(term::SeparableTerm, data)
+    # Get indicator matrix for each component using its modelcols method
+    indicators = [StatsModels.modelcols(comp_term, data) for comp_term in term.component_terms]
+
+    # Result is row-wise Kronecker product (Khatri-Rao) of all indicators
+    # For SeparableTerm([term1, term2]), we compute: KhatriRao(I1, I2)
+    # This gives n_obs × (n_1 * n_2 * ... * n_N) with rightmost component varying fastest
+    # Each row is the Kronecker product of the corresponding rows from each indicator
+    return foldl(_khatri_rao, indicators)
+end
+
 # COV_EXCL_STOP

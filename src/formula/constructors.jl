@@ -1,4 +1,4 @@
-export IID, RandomWalk, AR1, Besag, BYM2, build_formula_components
+export IID, RandomWalk, AR1, Besag, BYM2, Separable, build_formula_components
 
 """
     build_formula_components(formula, data; kwargs...)
@@ -51,11 +51,12 @@ end
 (::IID)(args...) = error("IID(...) functor is only intended for use inside @formula; not callable directly.")
 
 """
-    RandomWalk(; additional_constraints = nothing)
+    RandomWalk(order=1; additional_constraints = nothing)
 
-Formula functor for RandomWalk random effects (order=1 supported).
+Formula functor for RandomWalk random effects.
 
 # Arguments
+- `order`: Order of the random walk (default: 1). Currently only order=1 is supported.
 - `additional_constraints`: Optional additional constraints beyond the built-in sum-to-zero constraint.
   Can be:
   - `nothing` (default): Only the built-in sum-to-zero constraint
@@ -63,28 +64,40 @@ Formula functor for RandomWalk random effects (order=1 supported).
 
 # Usage
 ```julia
-# RW1 with built-in sum-to-zero constraint
+# RW1 with built-in sum-to-zero constraint (order can be omitted, defaults to 1)
 rw1 = RandomWalk()
-@formula(y ~ 0 + rw1(1, time))
+@formula(y ~ 0 + rw1(time))
+
+# Explicitly specifying order=1
+rw1 = RandomWalk(1)
+@formula(y ~ 0 + rw1(time))
+
+# Used in separable models
+rw1 = RandomWalk()
+besag = Besag(W)
+st = Separable(rw1, besag)
+@formula(y ~ 1 + st(time, region))
 
 # RW1 with additional constraints
 A = [1.0 0.0 1.0 zeros(7)...]  # x1 + x3 = 0 (in addition to sum-to-zero)
 e = [0.0]
-rw1_extra = RandomWalk(additional_constraints=(A, e))
-@formula(y ~ 0 + rw1_extra(1, time))
+rw1_extra = RandomWalk(1, additional_constraints=(A, e))
+@formula(y ~ 0 + rw1_extra(time))
 ```
 
 # Notes
 - RW1 always has a built-in sum-to-zero constraint for identifiability
 - Use `additional_constraints` to specify constraints beyond sum-to-zero
+- When used in Separable models, order is specified in constructor, not in formula
 - You must create a RandomWalk instance before using it in a formula
 - Calling the functor directly is unsupported outside formula parsing
 """
 struct RandomWalk
+    order::Int
     additional_constraints::Union{Nothing, Tuple{AbstractMatrix, AbstractVector}}
 
-    function RandomWalk(; additional_constraints = nothing)
-        return new(additional_constraints)
+    function RandomWalk(order::Integer = 1; additional_constraints = nothing)
+        return new(Int(order), additional_constraints)
     end
 end
 
@@ -255,3 +268,52 @@ struct BYM2{WT <: AbstractMatrix, MT}
 end
 
 (::BYM2)(args...) = error("BYM2(...) functor is only intended for use inside @formula; not callable directly.")
+
+"""
+    Separable(components...)
+
+Formula functor for separable (Kronecker product) random effects.
+
+Creates a multi-dimensional random effect where the precision matrix is a Kronecker
+product of the component precision matrices. Useful for space-time models, age-period-cohort
+models, and other separable multi-dimensional processes.
+
+# Arguments
+- `components`: Two or more formula term functors (IID, AR1, RandomWalk, Besag, etc.)
+
+# Usage
+```julia
+# Space-time separable model: Q = Q_time ⊗ Q_space
+rw1 = RandomWalk()
+besag = Besag(W)
+st = Separable(rw1, besag)
+@formula(y ~ 1 + st(time, region))
+
+# Three-way separable model: Q = Q_time ⊗ Q_space ⊗ Q_age
+rw_time = RandomWalk()
+besag_space = Besag(W)
+iid_age = IID()
+model3d = Separable(rw_time, besag_space, iid_age)
+@formula(y ~ 1 + model3d(time, region, age))
+```
+
+# Notes
+- Requires at least 2 components
+- Formula variables must match component order and count
+- Component ordering: Q = Q_1 ⊗ Q_2 ⊗ ... ⊗ Q_N (rightmost varies fastest)
+- Follows R-INLA convention: Q = Q_group ⊗ Q_main
+- Hyperparameters are named: `τ_{modelname}_separable`, with indices for duplicates
+- Constraints from each component are automatically composed via Kronecker products
+- Redundant constraints are removed to ensure identifiability
+"""
+struct Separable{T <: Tuple}
+    components::T
+
+    function Separable(components...)
+        length(components) >= 2 ||
+            error("Separable requires at least 2 components, got $(length(components))")
+        return new{typeof(components)}(components)
+    end
+end
+
+(::Separable)(args...) = error("Separable(...) functor is only intended for use inside @formula; not callable directly.")

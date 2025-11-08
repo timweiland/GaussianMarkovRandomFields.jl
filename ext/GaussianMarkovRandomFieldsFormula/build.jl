@@ -88,6 +88,15 @@ function _latent_model(term::BYM2Term, _)
     )
 end
 
+# Separable model construction
+function _latent_model(term::SeparableTerm, data)
+    # Convert each component term to a LatentModel
+    component_models = [_latent_model(comp_term, data) for comp_term in term.component_terms]
+
+    # Wrap in SeparableModel
+    return SeparableModel(component_models...)
+end
+
 # Column widths for each term (avoid relying on internal StatsModels widths)
 _ncols_for_term(term, data) = size(StatsModels.modelcols(term, data), 2)
 
