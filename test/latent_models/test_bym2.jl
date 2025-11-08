@@ -76,8 +76,6 @@ using LinearSolve
         @test Matrix(Q_unstructured) ≈ Matrix(expected_unstructured)
 
         # Spatial block should be τ/(1-φ) times the scaled Besag precision
-        # (We can't easily verify the exact structure due to normalization,
-        # but we can check it's the right scaling)
         Q_besag_unit = precision_matrix(model.besag; τ = 1.0)
         expected_spatial = (τ / (1 - φ)) * Q_besag_unit
         @test Matrix(Q_spatial) ≈ Matrix(expected_spatial)
