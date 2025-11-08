@@ -80,9 +80,9 @@ Riebler, A., Sørbye, S. H., Simpson, D., & Rue, H. (2016).
 An intuitive Bayesian spatial model for disease mapping that accounts for scaling.
 Statistical Methods in Medical Research, 25(4), 1145-1165.
 """
-struct BYM2Model{Alg} <: LatentModel
-    besag::BesagModel
-    iid::IIDModel
+struct BYM2Model{B <: BesagModel, I <: IIDModel, Alg} <: LatentModel
+    besag::B
+    iid::I
     n::Int
     alg::Alg
 
@@ -115,7 +115,7 @@ struct BYM2Model{Alg} <: LatentModel
         # Create IID component with optional constraint for identifiability
         iid = IIDModel(n; alg = alg, constraint = iid_constraint)
 
-        return new{typeof(alg)}(besag, iid, n, alg)
+        return new{typeof(besag), typeof(iid), typeof(alg)}(besag, iid, n, alg)
     end
 end
 
