@@ -58,31 +58,12 @@ end
 
 # LatentModel interface implementation
 
-"""
-    Base.length(model::SeparableModel)
-
-Return the total dimension of the separable model (product of all component sizes).
-"""
 function Base.length(model::SeparableModel)
     return prod(length(c) for c in model.components)
 end
 
-"""
-    model_name(model::SeparableModel)
-
-Return `:separable` as the model identifier.
-"""
 model_name(model::SeparableModel) = :separable
 
-"""
-    hyperparameters(model::SeparableModel)
-
-Collect hyperparameters from all components with appropriate suffixing.
-
-Hyperparameters are named as `{param}_{modelname}` with an index suffix
-for duplicate model types (e.g., `τ_rw1_1`, `τ_rw1_2`).
-When used within CombinedModel, an additional `_separable` suffix is added by the parent.
-"""
 function hyperparameters(model::SeparableModel)
     # Collect all component hyperparameters
     all_params = NamedTuple[]
@@ -110,14 +91,6 @@ function hyperparameters(model::SeparableModel)
     return merge(all_params...)
 end
 
-"""
-    mean(model::SeparableModel; kwargs...)
-
-Compute the mean vector of the separable model.
-
-For separable models, if all components have zero mean, returns a zero vector.
-Otherwise, returns the Kronecker product of component means.
-"""
 function mean(model::SeparableModel; kwargs...)
     # Extract hyperparameters for each component
     comp_kwargs = _extract_component_kwargs(model, kwargs)
@@ -136,13 +109,6 @@ function mean(model::SeparableModel; kwargs...)
     return foldl(kron, means)
 end
 
-"""
-    precision_matrix(model::SeparableModel; kwargs...)
-
-Construct the precision matrix as a Kronecker product of component precision matrices.
-
-Returns a `LinearMaps.KroneckerMap` for efficient lazy evaluation.
-"""
 function precision_matrix(model::SeparableModel; kwargs...)
     # Extract hyperparameters for each component
     comp_kwargs = _extract_component_kwargs(model, kwargs)
@@ -189,20 +155,6 @@ function _remove_redundant_constraints(A::AbstractMatrix, e::AbstractVector; tol
     return (A_reduced, e_reduced)
 end
 
-"""
-    constraints(model::SeparableModel; kwargs...)
-
-Compute composed constraints for the separable model.
-
-If a component has constraints `A_i * x_i = e_i`, the constraint for the full model is:
-```
-kron(I_{n_after}, A_i, I_{n_before}) * x = kron(ones(n_after), e_i, ones(n_before))
-```
-where `n_before` is the product of sizes of components before i, and `n_after` after i.
-
-All component constraints are stacked vertically to form the full constraint system.
-Redundant constraints are automatically removed to ensure the constraint matrix is full row rank.
-"""
 function constraints(model::SeparableModel; kwargs...)
     # Extract hyperparameters for each component
     comp_kwargs = _extract_component_kwargs(model, kwargs)

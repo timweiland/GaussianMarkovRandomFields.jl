@@ -59,6 +59,7 @@ FixedEffectsModel
 
 ```@docs
 CombinedModel
+SeparableModel
 ```
 
 ## Usage Examples
@@ -127,11 +128,37 @@ CombinedModel(IIDModel(5), IIDModel(10), IIDModel(15))  # τ_iid, τ_iid_2, τ_i
 W = spatial_adjacency(n_regions)
 model = CombinedModel(
     BesagModel(W),           # Spatial structure
-    RW1Model(n_time),        # Temporal trend  
+    RW1Model(n_time),        # Temporal trend
     IIDModel(n_regions * n_time)  # Independent effects
 )
 
 gmrf = model(τ_besag=1.0, τ_rw1=2.0, τ_iid=0.1)
+```
+
+### Separable (Kronecker Product) Models
+
+For multi-dimensional data with separable structure, use `SeparableModel` to compose components via Kronecker products. This is particularly efficient for space-time models:
+
+```julia
+# Space-time separable model: Q = Q_time ⊗ Q_space
+# (space component varies fastest in vectorized form)
+temporal = RW1Model(n_time)
+spatial = BesagModel(W)
+spacetime = SeparableModel(temporal, spatial)
+
+# Hyperparameters use suffix naming
+hyperparameters(spacetime)  # (τ_rw1 = Real, τ_besag = Real)
+
+# Construct GMRF with block-tridiagonal structure
+gmrf = spacetime(τ_rw1=1.0, τ_besag=2.0)
+
+# 3-way separable model: Q = Q_time ⊗ Q_space ⊗ Q_age
+three_way = SeparableModel(
+    RW1Model(n_time),
+    BesagModel(W),
+    IIDModel(n_age)
+)
+gmrf = three_way(τ_rw1=1.0, τ_besag=2.0, τ_iid=0.5)
 ```
 
 ## Key Features
