@@ -216,4 +216,89 @@ end
 
         @test_throws ErrorException build_formula_components(@formula(y ~ 0 + iid_wrong(group)), data; family = Normal)
     end
+
+    @testset "Separable (Kronecker product) models" begin
+        # Create space-time data
+        n_time = 10
+        n_space = 4
+        n_obs = n_time * n_space
+
+        data_st = (
+            y = randn(n_obs),
+            time = repeat(1:n_time, outer = n_space),
+            space = repeat(1:n_space, inner = n_time),
+        )
+
+        # Simple spatial adjacency (chain)
+        W_space = spzeros(n_space, n_space)
+        for i in 1:(n_space - 1)
+            W_space[i, i + 1] = 1
+            W_space[i + 1, i] = 1
+        end
+
+        @testset "Basic Separable (RW1 ⊗ Besag)" begin
+            rw1 = RandomWalk()
+            besag = Besag(W_space)
+            st = Separable(rw1, besag)
+
+            comp = build_formula_components(@formula(y ~ 1 + st(time, space)), data_st; family = Normal)
+
+            @test size(comp.A) == (n_obs, n_time * n_space + 1)  # +1 for intercept
+            @test comp.meta.n_random == 1
+            @test comp.meta.n_fixed == 1
+            @test length(comp.combined_model) == n_time * n_space + 1
+
+            # Check hyperparameters
+            ks = Set(keys(comp.hyperparams))
+            @test :τ_rw1_separable in ks
+            @test :τ_besag_separable in ks
+        end
+
+        @testset "3-way Separable model" begin
+            # Add a third dimension
+            n_group = 2
+            n_obs_3d = n_obs * n_group
+
+            data_3d = (
+                y = randn(n_obs_3d),
+                time = repeat(repeat(1:n_time, outer = n_space), outer = n_group),
+                space = repeat(repeat(1:n_space, inner = n_time), outer = n_group),
+                group = repeat(1:n_group, inner = n_obs),
+            )
+
+            rw1 = RandomWalk()
+            iid_space = IID()
+            iid_group = IID()
+            sep3 = Separable(rw1, iid_space, iid_group)
+
+            comp = build_formula_components(@formula(y ~ 0 + sep3(time, space, group)), data_3d; family = Normal)
+
+            @test size(comp.A, 1) == n_obs_3d
+            @test size(comp.A, 2) == n_time * n_space * n_group
+
+            # Hyperparameters for all three components
+            ks = Set(keys(comp.hyperparams))
+            @test :τ_rw1_separable in ks
+            @test :τ_iid_separable in ks
+            @test :τ_iid_2_separable in ks
+        end
+
+        @testset "Separable GMRF instantiation" begin
+            rw1 = RandomWalk()
+            besag = Besag(W_space)
+            st = Separable(rw1, besag)
+
+            comp = build_formula_components(@formula(y ~ 0 + st(time, space)), data_st; family = Normal)
+
+            # Should create GMRF successfully with constraints
+            gmrf = comp.combined_model(τ_rw1_separable = 1.0, τ_besag_separable = 1.0)
+            @test length(gmrf) == n_time * n_space
+
+            # Different hyperparameter values should give different precision matrices
+            gmrf2 = comp.combined_model(τ_rw1_separable = 2.0, τ_besag_separable = 1.0)
+            Q1 = Matrix(precision_map(gmrf))
+            Q2 = Matrix(precision_map(gmrf2))
+            @test !(Q1 ≈ Q2)
+        end
+    end
 end

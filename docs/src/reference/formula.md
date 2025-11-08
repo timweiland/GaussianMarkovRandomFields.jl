@@ -145,6 +145,145 @@ comp2 = build_formula_components(@formula(y ~ 0 + iid_sz(group)), data; family=N
 gmrf2 = comp2.combined_model(τ_iid=1.0)  # ConstrainedGMRF
 ```
 
+## Separable Models (Kronecker Products)
+
+For multi-dimensional processes with separable structure, use the `Separable` functor to compose
+multiple random effects via Kronecker products. This is particularly useful for space-time models
+where the precision matrix is `Q = Q_time ⊗ Q_space` with space varying fastest.
+
+### Basic Space-Time Example
+
+```julia
+using GaussianMarkovRandomFields, StatsModels, SparseArrays
+
+# Create data with space-time structure
+n_time, n_space = 10, 5
+data = (
+    y = randn(n_time * n_space),
+    time = repeat(1:n_time, outer=n_space),
+    region = repeat(1:n_space, inner=n_time),
+)
+
+# Spatial adjacency (e.g., a chain or grid)
+W = spzeros(n_space, n_space)
+for i in 1:(n_space-1)
+    W[i, i+1] = 1
+    W[i+1, i] = 1
+end
+
+# Create separable model: Q = Q_time ⊗ Q_space
+# RW1 for temporal smoothing, Besag for spatial smoothing
+rw1 = RandomWalk()         # Temporal: RW1 with built-in sum-to-zero
+besag = Besag(W)           # Spatial: Besag (intrinsic CAR)
+st = Separable(rw1, besag) # Separable: Kronecker product
+
+# Build formula
+comp = build_formula_components(
+    @formula(y ~ 1 + st(time, region)),
+    data;
+    family = Normal
+)
+
+# Instantiate GMRF
+gmrf = comp.combined_model(τ_rw1_separable=1.0, τ_besag_separable=2.0)
+```
+
+The resulting precision matrix has a block-tridiagonal structure:
+```
+Q = Q_time ⊗ Q_space = [
+    Q_space  -Q_space     0        0     ...
+    -Q_space  2Q_space  -Q_space    0     ...
+       0     -Q_space  2Q_space  -Q_space ...
+       ...
+]
+```
+
+### Constraint Composition
+
+Constraints from each component are automatically composed and redundant constraints removed:
+
+```julia
+# Both RW1 (sum-to-zero in time) and Besag (sum-to-zero in space)
+# produce constraints that are automatically handled
+rw1 = RandomWalk()
+besag = Besag(W)
+st = Separable(rw1, besag)
+
+comp = build_formula_components(@formula(y ~ 0 + st(time, region)), data; family=Normal)
+
+# The resulting GMRF handles both constraints correctly with redundancy removal
+gmrf = comp.combined_model(τ_rw1_separable=1.0, τ_besag_separable=1.0)
+```
+
+### N-way Separable Models
+
+Extend beyond 2D with three or more components:
+
+```julia
+# 3D space-time-group model: Q = Q_time ⊗ Q_space ⊗ Q_group
+n_group = 3
+data_3d = (
+    y = randn(n_time * n_space * n_group),
+    time = repeat(repeat(1:n_time, outer=n_space), outer=n_group),
+    region = repeat(repeat(1:n_space, inner=n_time), outer=n_group),
+    group = repeat(1:n_group, inner=n_time*n_space),
+)
+
+rw1 = RandomWalk()
+besag = Besag(W)
+iid_group = IID()
+
+# Separable with 3 components
+sep3 = Separable(rw1, besag, iid_group)
+
+comp = build_formula_components(
+    @formula(y ~ 0 + sep3(time, region, group)),
+    data_3d;
+    family = Normal
+)
+
+gmrf = comp.combined_model(
+    τ_rw1_separable = 1.0,
+    τ_besag_separable = 1.0,
+    τ_iid_separable = 0.5
+)
+```
+
+### Component Ordering
+
+The order of components in `Separable` determines the Kronecker order:
+- `Separable(rw1, besag)` → Q = Q_rw1 ⊗ Q_besag (besag varies fastest)
+- `Separable(besag, rw1)` → Q = Q_besag ⊗ Q_rw1 (rw1 varies fastest)
+
+This affects the vectorization pattern but not which observations map to which latent states
+(the indicator matrix handles that mapping appropriately).
+
+### Hyperparameter Naming
+
+Separable models use prefixed hyperparameter names for clarity:
+
+```julia
+# For Separable(rw1, besag):
+# - τ_rw1_separable: precision for temporal component
+# - τ_besag_separable: precision for spatial component
+
+gmrf = comp.combined_model(τ_rw1_separable=1.0, τ_besag_separable=2.0)
+```
+
+When there are multiple components of the same type, indices are added:
+
+```julia
+rw1_a = RandomWalk()
+rw1_b = RandomWalk()
+sep = Separable(rw1_a, rw1_b)
+
+# Hyperparameters are:
+# - τ_rw1_separable: first RW1
+# - τ_rw1_2_separable: second RW1
+
+gmrf = comp.combined_model(τ_rw1_separable=1.0, τ_rw1_2_separable=1.5)
+```
+
 ## Terms and Builders
 
 ```@docs
@@ -153,6 +292,7 @@ GaussianMarkovRandomFields.RandomWalk
 GaussianMarkovRandomFields.AR1
 GaussianMarkovRandomFields.Besag
 GaussianMarkovRandomFields.BYM2
+GaussianMarkovRandomFields.Separable
 GaussianMarkovRandomFields.build_formula_components
 ```
 
