@@ -132,9 +132,9 @@ function _validate_bym2_parameters(; τ::Real, φ::Real)
     0 < φ < 1 || throw(ArgumentError("Mixing parameter φ must be in (0, 1), got φ=$φ"))
 
     # Warn about extreme values that might cause numerical issues
-    if φ < 1e-6
+    if φ < 1.0e-6
         @warn "φ is very close to 0 (φ=$φ), which may cause numerical instability. Consider using a pure Besag model instead."
-    elseif φ > 1 - 1e-6
+    elseif φ > 1 - 1.0e-6
         @warn "φ is very close to 1 (φ=$φ), which may cause numerical instability. Consider using a pure IID model instead."
     end
 

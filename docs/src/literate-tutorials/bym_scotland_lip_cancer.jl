@@ -97,9 +97,11 @@ comp = build_formula_components(f, df; family = Poisson)
 # **Important**: When using BYM2 with an intercept, you should constrain the IID
 # component to avoid identifiability issues:
 
-bym2_constrained = BYM2(W; id_to_node = id_to_node,
-                         singleton_policy = :degenerate,
-                         iid_constraint = :sumtozero)
+bym2_constrained = BYM2(
+    W; id_to_node = id_to_node,
+    singleton_policy = :degenerate,
+    iid_constraint = :sumtozero
+)
 
 f_bym2 = @formula(y ~ 1 + aff + bym2_constrained(code))
 comp_bym2 = build_formula_components(f_bym2, df; family = Poisson)
