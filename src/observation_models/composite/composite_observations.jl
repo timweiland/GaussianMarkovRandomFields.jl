@@ -31,9 +31,8 @@ struct CompositeObservations{T <: Tuple} <: AbstractVector{Float64}
             throw(ArgumentError("CompositeObservations cannot be empty"))
         end
 
-        # Convert all components to Vector{Float64} for type stability
-        converted_components = map(c -> Vector{Float64}(c), components)
-        return new{typeof(converted_components)}(converted_components)
+        # Keep components as-is (support for different observation types like PoissonObservations, BinomialObservations, etc)
+        return new{T}(components)
     end
 end
 

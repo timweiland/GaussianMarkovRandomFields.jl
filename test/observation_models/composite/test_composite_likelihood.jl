@@ -7,7 +7,7 @@ using Distributions: Normal, Poisson
         composite_model = CompositeObservationModel((gaussian_model, poisson_model))
 
         y1 = [1.0, 2.0]  # 2 Gaussian observations
-        y2 = [3, 4]      # 2 Poisson observations
+        y2 = PoissonObservations([3, 4])      # 2 Poisson observations
         y_composite = CompositeObservations((y1, y2))
 
         composite_lik = composite_model(y_composite; σ = 1.0)
@@ -76,7 +76,7 @@ using Distributions: Normal, Poisson
         poisson_model = ExponentialFamily(Poisson)
         composite_model = CompositeObservationModel((gaussian_model, poisson_model))
 
-        y_composite = CompositeObservations(([1.0, 2.0], [3, 4]))  # Both 2D
+        y_composite = CompositeObservations(([1.0, 2.0], PoissonObservations([3, 4])))  # Both 2D
         composite_lik = composite_model(y_composite; σ = 1.5)
 
         x = randn(2)  # 2D latent field to match observations
@@ -97,7 +97,7 @@ using Distributions: Normal, Poisson
         poisson_model = ExponentialFamily(Poisson)
         composite_model = CompositeObservationModel((gaussian_model, poisson_model))
 
-        y_composite = CompositeObservations(([1.0], [2]))  # Both 1D -> 1D latent field
+        y_composite = CompositeObservations(([1.0], PoissonObservations([2])))  # Both 1D -> 1D latent field
         composite_lik = composite_model(y_composite; σ = 1.0)
 
         x = randn(1)  # 1D latent field

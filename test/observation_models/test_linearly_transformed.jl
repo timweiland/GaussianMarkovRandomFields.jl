@@ -53,7 +53,7 @@ using Distributions
         A = sparse(1.0 * I, 2, 2)
         ltom = LinearlyTransformedObservationModel(base_model, A)
 
-        y = [1, 3]
+        y = PoissonObservations([1, 3])
         ltlik = ltom(y)
         base_lik = base_model(y)
 
