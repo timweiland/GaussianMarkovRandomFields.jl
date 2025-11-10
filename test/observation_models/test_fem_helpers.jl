@@ -20,7 +20,7 @@ using GaussianMarkovRandomFields, Ferrite, Tensors, Distributions, SparseArrays
             @test hyperparameters(obs_model) == ()
 
             # Test materialization and conditional distribution
-            y = [2, 5, 1]
+            y = PoissonObservations([2, 5, 1])
             obs_lik = obs_model(y)
             @test obs_lik isa LinearlyTransformedLikelihood
 

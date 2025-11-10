@@ -75,7 +75,7 @@ using Distributions
 
         obs_model = ExponentialFamily(Poisson)
         θ_named = NamedTuple()  # No hyperparameters
-        y = [1, 3, 0, 2, 4, 1]  # Count data
+        y = PoissonObservations([1, 3, 0, 2, 4, 1])  # Count data
 
         obs_lik = obs_model(y; θ_named...)
         result = gaussian_approximation(prior_gmrf, obs_lik)

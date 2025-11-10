@@ -44,13 +44,15 @@ struct NormalLikelihood{L <: LinkFunction, I} <: ExponentialFamilyLikelihood{L, 
 end
 
 """
-    PoissonLikelihood{L<:LinkFunction} <: ObservationLikelihood
+    PoissonLikelihood{L<:LinkFunction, I, O} <: ObservationLikelihood
 
 Materialized Poisson observation likelihood.
 
 # Fields  
 - `link::L`: Link function connecting latent field to rate parameter
 - `y::Vector{Int}`: Count observations
+- `indices::I`: Indices of the latent field corresponding to the observations
+- `logexposure::O`: Log exposure / offset
 
 # Example
 ```julia
@@ -63,7 +65,7 @@ struct PoissonLikelihood{L <: LinkFunction, I, O} <: ExponentialFamilyLikelihood
     link::L
     y::Vector{Int}
     indices::I  # Can be Nothing, UnitRange, or Vector{Int}
-    offset::O   # Nothing or Vector{Float64}
+    logexposure::O   # Real vector
 end
 
 """

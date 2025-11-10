@@ -35,7 +35,8 @@ using Enzyme, FiniteDiff, Zygote
 
         # Create Poisson observation likelihood
         obs_model = ExponentialFamily(Poisson)
-        obs_lik = obs_model(y)
+        poisson_obs = PoissonObservations(y)
+        obs_lik = obs_model(poisson_obs)
 
         # Find Gaussian approximation
         posterior_gmrf = gaussian_approximation(prior_gmrf, obs_lik)
@@ -63,7 +64,8 @@ using Enzyme, FiniteDiff, Zygote
 
         # Create Poisson observation likelihood
         obs_model = ExponentialFamily(Poisson)
-        obs_lik = obs_model(y)
+        poisson_obs = PoissonObservations(y)
+        obs_lik = obs_model(poisson_obs)
 
         # Find Gaussian approximation
         posterior_gmrf = gaussian_approximation(prior_gmrf, obs_lik)

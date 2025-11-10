@@ -11,8 +11,7 @@ using LinearAlgebra
 end
 
 # Specializations: Poisson with LogLink supports additive offsets on η
-@inline _mu(lik::PoissonLikelihood{LogLink, I, Nothing}, η) where {I} = exp.(η)
-@inline _mu(lik::PoissonLikelihood{LogLink, I, Vector{Float64}}, η) where {I} = exp.(η .+ lik.offset)
+@inline _mu(lik::PoissonLikelihood{LogLink}, η) = exp.(η .+ lik.logexposure)
 
 # Embed observation-space gradient back into full latent space when indexed
 @inline _embed_grad(::ExponentialFamilyLikelihood{L, Nothing}, g_obs, n_full::Integer) where {L} = g_obs
