@@ -106,6 +106,7 @@ function GaussianMarkovRandomFields.build_formula_components(
         data;
         family = Distributions.Normal,
         trials = nothing,
+        exposure = nothing,
         fixed_prior::Real = 1.0e-6,
     )
     # Transform formula
@@ -119,6 +120,14 @@ function GaussianMarkovRandomFields.build_formula_components(
         tcol = _getcolumn(data, trials)
         length(tcol) == length(y) || error("trials length $(length(tcol)) must match response length $(length(y))")
         y = BinomialObservations(y, tcol)
+    elseif family == Distributions.Poisson
+        if exposure !== nothing
+            exp_col = _getcolumn(data, exposure)
+            length(exp_col) == length(y) || error("exposure length $(length(exp_col)) must match response length $(length(y))")
+            y = PoissonObservations(y, exp_col)
+        else
+            y = PoissonObservations(y)
+        end
     end
 
     # Partition terms

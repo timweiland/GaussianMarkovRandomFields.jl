@@ -81,7 +81,7 @@ besag = Besag(W; id_to_node = id_to_node, singleton_policy = :degenerate)
 iid = IID()
 
 f = @formula(y ~ 1 + aff + iid(code) + besag(code))
-comp = build_formula_components(f, df; family = Poisson)
+comp = build_formula_components(f, df; family = Poisson, exposure = :E)
 
 # ### Alternative: BYM2 model with improved parameterization
 # The BYM2 model (Riebler et al. 2016) offers an improved reparameterization of BYM
@@ -104,10 +104,10 @@ bym2_constrained = BYM2(
 )
 
 f_bym2 = @formula(y ~ 1 + aff + bym2_constrained(code))
-comp_bym2 = build_formula_components(f_bym2, df; family = Poisson)
+comp_bym2 = build_formula_components(f_bym2, df; family = Poisson, exposure = :E)
 
 # With BYM2, you specify τ (overall precision) and φ (mixing: 0=pure spatial, 1=pure IID):
-lik_bym2 = comp_bym2.obs_model(df.y; offset = df.offset)
+lik_bym2 = comp_bym2.obs_model(comp_bym2.y)
 prior_bym2 = comp_bym2.combined_model(; τ_bym2 = 2.0, φ_bym2 = 0.4)
 post_bym2 = gaussian_approximation(prior_bym2, lik_bym2)
 
@@ -121,9 +121,9 @@ RR_bym2 = exp.(η_bym2)
 # to demonstrate component decomposition, but BYM2 is recommended for new analyses.
 
 # ## Likelihood with offset and Gaussian approximation
-# The Poisson observation model uses the log‑link by default. Passing
-# `offset = log(E)` encodes exposure and turns the linear predictor into log RR.
-lik = comp.obs_model(df.y; offset = df.offset)
+# The Poisson observation model uses the log‑link by default. The exposure (E)
+# encodes expected counts and turns the linear predictor into log RR.
+lik = comp.obs_model(comp.y)
 
 # Pick prior precision scales for the BYM parts (you can tune these later) and
 # form a Gaussian approximation of the posterior.
@@ -245,7 +245,7 @@ plt_ex
 # ## Notes
 # - The `id_to_node` mapping allows using string IDs in the formula; we avoid
 #   forcing integer region indices on users.
-# - Offsets are supported for Poisson with LogLink; here `offset = log(E)` encodes exposure.
+# - Exposure (E) is supported for Poisson via the `exposure = :E` keyword in `build_formula_components`.
 # - Intrinsic Besag imposes sum-to-zero constraints per connected component.
 # - Isolated islands (with no edges) receive a degenerate prior, such that only the IID
 #   part has an effect there.

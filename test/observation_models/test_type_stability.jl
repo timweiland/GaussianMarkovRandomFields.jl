@@ -10,7 +10,7 @@ using DifferentiationInterface
         # Poisson model
         poisson_model = ExponentialFamily(Poisson)
         x = [1.0, 2.0]
-        y = [1, 3]
+        y = PoissonObservations([1, 3])
         poisson_lik = poisson_model(y)
 
         @inferred loglik(x, poisson_lik)
@@ -97,7 +97,7 @@ using DifferentiationInterface
 
         # Both should be type stable with new API
         x = [1.0, 2.0]
-        y = [1, 2]
+        y = PoissonObservations([1, 2])
 
         poisson_log_lik = poisson_log(y)
         poisson_identity_lik = poisson_identity(y)

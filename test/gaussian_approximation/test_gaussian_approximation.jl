@@ -75,7 +75,7 @@ using Distributions
 
         obs_model = ExponentialFamily(Poisson)
         θ_named = NamedTuple()  # No hyperparameters
-        y = [1, 3, 0, 2, 4, 1]  # Count data
+        y = PoissonObservations([1, 3, 0, 2, 4, 1])  # Count data
 
         obs_lik = obs_model(y; θ_named...)
         result = gaussian_approximation(prior_gmrf, obs_lik)
@@ -242,7 +242,7 @@ using Distributions
 
         # Poisson likelihood with data far from prior
         obs_model = ExponentialFamily(Poisson)
-        y = [10, 15, 8, 12, 20]  # High counts, far from prior mean of 0
+        y = PoissonObservations([10, 15, 8, 12, 20])  # High counts, far from prior mean of 0
         obs_lik = obs_model(y)
 
         # Force non-convergence by using max_iter = 1
@@ -285,7 +285,7 @@ using Distributions
 
         # Poisson likelihood
         obs_model = ExponentialFamily(Poisson)
-        y = [2, 1, 3, 2, 1]
+        y = PoissonObservations([2, 1, 3, 2, 1])
         obs_lik = obs_model(y)
 
         result = gaussian_approximation(prior_gmrf, obs_lik)

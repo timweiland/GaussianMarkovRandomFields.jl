@@ -295,6 +295,39 @@ obs_lik = obs_model(y)
 ll = loglik(x_full, obs_lik)  # Chain rule applied automatically
 ```
 
+### Poisson Observations with Exposure
+
+For Poisson count data with different exposure times or populations, use the `PoissonObservations` utility:
+
+```julia
+# Create Poisson observations with counts and exposure
+# This models relative risk (rate per unit exposure)
+counts = [5, 12, 8, 3]
+exposure = [100.0, 150.0, 120.0, 80.0]  # population or observation time
+y = PoissonObservations(counts, exposure)
+
+# Or with unit exposure (standard Poisson intensity)
+y = PoissonObservations(counts)
+
+# Use with Poisson model
+poisson_model = ExponentialFamily(Poisson)  # LogLink by default
+obs_lik = poisson_model(y)
+
+# Access components
+counts(y)     # [5, 12, 8, 3]
+exposure(y)   # [100.0, 150.0, 120.0, 80.0]
+y[1]          # (5, 100.0) - tuple access
+```
+
+When using the formula interface, specify exposure via the `exposure` keyword:
+
+```julia
+using StatsModels
+df = (y = [5, 12, 8], pop = [100.0, 150.0, 120.0], x = [0.1, 0.2, 0.15])
+f = @formula(y ~ 1 + x)
+comp = build_formula_components(f, df; family=Poisson, exposure=:pop)
+```
+
 ### Binomial Observations
 
 For binomial data, use the `BinomialObservations` utility:
@@ -304,7 +337,7 @@ For binomial data, use the `BinomialObservations` utility:
 y = BinomialObservations([3, 1, 4], [5, 8, 6])  # (successes, trials) pairs
 
 # Use with Binomial model
-binomial_model = ExponentialFamily(Binomial) 
+binomial_model = ExponentialFamily(Binomial)
 obs_lik = binomial_model(y)
 
 # Access components
@@ -401,6 +434,9 @@ PointSecondDerivativeObsModel
 ```@docs
 LinearlyTransformedObservationModel
 LinearlyTransformedLikelihood
+PoissonObservations
+counts
+exposure
 BinomialObservations
 successes
 trials

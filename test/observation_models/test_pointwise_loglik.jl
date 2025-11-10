@@ -61,7 +61,7 @@ using SparseArrays
     end
 
     @testset "ExponentialFamily: Poisson" begin
-        y = [1, 3, 0, 2, 5]
+        y = PoissonObservations([1, 3, 0, 2, 5])
         obs_model = ExponentialFamily(Poisson)
         obs_lik = obs_model(y)
         x = randn(length(y))
@@ -72,7 +72,7 @@ using SparseArrays
 
         # Test correctness: Poisson with LogLink (default)
         λ = exp.(x)
-        expected = logpdf.(Poisson.(λ), y)
+        expected = logpdf.(Poisson.(λ), counts(y))
         @test per_obs ≈ expected
 
         # Test in-place version
@@ -82,10 +82,11 @@ using SparseArrays
     end
 
     @testset "ExponentialFamily: Poisson with offset" begin
-        y = [1, 3, 0, 2]
+        count_data = [1, 3, 0, 2]
         offset = log.([0.5, 1.0, 0.1, 2.0])  # Offset is additive on η (log scale)
+        y = PoissonObservations(count_data, exp.(offset))  # Convert offset to exposure
         obs_model = ExponentialFamily(Poisson)
-        obs_lik = obs_model(y; offset = offset)
+        obs_lik = obs_model(y)
         x = randn(length(y))
 
         per_obs = pointwise_loglik(x, obs_lik)
@@ -94,7 +95,7 @@ using SparseArrays
 
         # Test correctness: offset is additive on log scale
         λ = exp.(x .+ offset)
-        expected = logpdf.(Poisson.(λ), y)
+        expected = logpdf.(Poisson.(λ), counts(y))
         @test per_obs ≈ expected
     end
 
@@ -314,7 +315,7 @@ using SparseArrays
 
     @testset "Non-canonical links" begin
         # Test with non-canonical link functions
-        y = [1, 3, 0, 2]
+        y = PoissonObservations([1, 3, 0, 2])
 
         # Poisson with IdentityLink (non-canonical)
         obs_model = ExponentialFamily(Poisson, IdentityLink())
@@ -326,7 +327,7 @@ using SparseArrays
 
         # Verify correctness
         λ = x  # IdentityLink: inverse is identity
-        expected = logpdf.(Poisson.(λ), y)
+        expected = logpdf.(Poisson.(λ), counts(y))
         @test per_obs ≈ expected
     end
 
@@ -356,7 +357,7 @@ using SparseArrays
 
         # Basic usage example
         obs_model = ExponentialFamily(Poisson)
-        y = [1, 3, 0, 2]
+        y = PoissonObservations([1, 3, 0, 2])
         obs_lik = obs_model(y)
         x = randn(length(y))
 

@@ -21,7 +21,7 @@ using Distributions: Normal, Poisson
 
         # Test materialization
         y1 = randn(3)
-        y2 = rand(1:10, 2)
+        y2 = PoissonObservations(rand(1:10, 2))
         y_composite = CompositeObservations((y1, y2))
 
         # Should create CompositeLikelihood when called
@@ -55,7 +55,7 @@ using Distributions: Normal, Poisson
         # Test with mixed hyperparameters (some components won't use all)
         poisson_model = ExponentialFamily(Poisson)
         mixed_model = CompositeObservationModel((gaussian_model, poisson_model))
-        mixed_composite = CompositeObservations(([1.0], [2]))
+        mixed_composite = CompositeObservations(([1.0], PoissonObservations([2])))
 
         # Poisson should ignore σ, Gaussian should use it
         mixed_lik = mixed_model(mixed_composite; σ = 1.0, unused_param = 999)

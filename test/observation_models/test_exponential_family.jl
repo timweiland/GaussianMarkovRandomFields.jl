@@ -36,7 +36,8 @@ end
                 η = abs.(randn(5)) .+ 0.1  # Must be positive for Poisson rates
             end
 
-            y = rand(0:10, 5)  # Random count data
+            # Create Poisson observations with count data and unit exposure
+            y = PoissonObservations(rand(0:10, 5))
 
             # Create materialized likelihood using new API
             obs_lik = model(y)
@@ -49,15 +50,17 @@ end
         @testset "Non-indexed, LogLink" begin
             model = ExponentialFamily(Poisson, LogLink())
             η = randn(6)
-            y = rand(0:10, 6)
-            offset = randn(6) .* 0.3  # arbitrary log-exposure
+            count_data = rand(0:10, 6)
+            log_exposure = randn(6) .* 0.3
+            exposure = exp.(log_exposure)
+            y = PoissonObservations(count_data, exposure)
 
-            lik = model(y; offset = offset)
+            lik = model(y)
 
-            # Log-likelihood matches reference with μ = exp(η + offset)
+            # Log-likelihood matches reference with μ = exp(η + log_exposure)
             ll = loglik(η, lik)
-            μ = exp.(η .+ offset)
-            ref = logpdf(product_distribution(Poisson.(μ)), y)
+            μ = exp.(η .+ log_exposure)
+            ref = logpdf(product_distribution(Poisson.(μ)), counts(y))
             @test ll ≈ ref atol = 1.0e-10
 
             # Gradient/Hessian match ForwardDiff
@@ -73,14 +76,16 @@ end
         @testset "Indexed, LogLink" begin
             model = ExponentialFamily(Poisson, LogLink(); indices = 2:4)
             η_full = randn(6)
-            y = rand(0:10, 3)
+            count_data = rand(0:10, 3)
             offset = randn(3) .* 0.2
+            exposure = exp.(offset)
+            y = PoissonObservations(count_data, exposure)
 
-            lik = model(y; offset = offset)
+            lik = model(y)
 
             ll = loglik(η_full, lik)
             μ = exp.(η_full[2:4] .+ offset)
-            ref = logpdf(product_distribution(Poisson.(μ)), y)
+            ref = logpdf(product_distribution(Poisson.(μ)), counts(y))
             @test ll ≈ ref atol = 1.0e-10
 
             grad = loggrad(η_full, lik)
@@ -282,7 +287,7 @@ end
                         σ = 0.5 + rand()
                         indexed_lik = indexed_model(y; σ = σ)
                     elseif family == Poisson
-                        y = rand(0:10, 3)
+                        y = PoissonObservations(rand(0:10, 3))
                         indexed_lik = indexed_model(y)
                     elseif family == Bernoulli
                         y = rand(0:1, 3)

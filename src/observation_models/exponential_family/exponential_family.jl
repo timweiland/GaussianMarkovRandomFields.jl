@@ -204,16 +204,8 @@ function (obs_model::ExponentialFamily{Normal, L, I})(y; σ, kwargs...) where {L
     return NormalLikelihood(obs_model.link, Float64.(y), Float64(σ), 1.0 / (σ^2), log(σ), obs_model.indices)
 end
 
-function (obs_model::ExponentialFamily{Poisson, L, I})(y; offset = nothing, kwargs...) where {L, I}
-    # Offsets are only supported for Poisson with LogLink (log-exposure)
-    if (offset !== nothing) && !(obs_model.link isa LogLink)
-        throw(ArgumentError("offset is only supported for Poisson with LogLink"))
-    end
-    offset_vec = offset === nothing ? nothing : Float64.(offset)
-    if offset_vec !== nothing
-        length(offset_vec) == length(y) || throw(ArgumentError("offset length $(length(offset_vec)) must match y length $(length(y))"))
-    end
-    return PoissonLikelihood(obs_model.link, Int.(y), obs_model.indices, offset_vec)
+function (obs_model::ExponentialFamily{Poisson, L, I})(y::PoissonObservations; kwargs...) where {L, I}
+    return PoissonLikelihood(obs_model.link, y.counts, obs_model.indices, y.logexposure)
 end
 
 function (obs_model::ExponentialFamily{Bernoulli, L, I})(y; kwargs...) where {L, I}

@@ -11,7 +11,7 @@ using Distributions: Normal, Poisson
 
         # Prepare observation data
         y_gaussian = [1.0, 2.0, 1.5]  # 3 Gaussian observations
-        y_poisson = [2, 3, 1]         # 3 Poisson observations
+        y_poisson = PoissonObservations([2, 3, 1])         # 3 Poisson observations
         y_composite = CompositeObservations((y_gaussian, y_poisson))
 
         # Materialize composite likelihood
@@ -84,12 +84,12 @@ using Distributions: Normal, Poisson
         poisson_model = ExponentialFamily(Poisson, indices = 3:4)
 
         composite_model = CompositeObservationModel((gaussian_model, poisson_model))
-        y_composite = CompositeObservations(([1.0, 2.0], [3, 4]))
+        y_composite = CompositeObservations(([1.0, 2.0], PoissonObservations([3, 4])))
         composite_lik = composite_model(y_composite; σ = 1.0)
 
         # Individual likelihoods for comparison
         gaussian_lik = gaussian_model([1.0, 2.0]; σ = 1.0)
-        poisson_lik = poisson_model([3, 4])
+        poisson_lik = poisson_model(PoissonObservations([3, 4]))
 
         x = randn(4)
 
@@ -109,7 +109,7 @@ using Distributions: Normal, Poisson
         poisson_model = ExponentialFamily(Poisson, indices = 3:4)
 
         composite_model = CompositeObservationModel((gaussian_model, poisson_model))
-        y_composite = CompositeObservations(([1.0, 2.0], [3, 4]))
+        y_composite = CompositeObservations(([1.0, 2.0], PoissonObservations([3, 4])))
         composite_lik = composite_model(y_composite; σ = 1.0)
 
         x = randn(4)

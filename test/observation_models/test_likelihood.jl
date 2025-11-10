@@ -7,10 +7,10 @@ using Distributions
 
         # Test Poisson
         poisson_model = ExponentialFamily(Poisson)
-        y_poisson = [1, 3]
+        y_poisson = PoissonObservations([1, 3])
         poisson_lik = poisson_model(y_poisson)
         @test poisson_lik isa PoissonLikelihood{LogLink}
-        @test poisson_lik.y == y_poisson
+        @test poisson_lik.y == counts(y_poisson)
 
         # Test Normal
         normal_model = ExponentialFamily(Normal)
@@ -40,7 +40,7 @@ using Distributions
         # Test that materialized likelihoods work correctly
 
         test_cases = [
-            (ExponentialFamily(Poisson), [1, 3], NamedTuple(), [1.0, 2.0]),
+            (ExponentialFamily(Poisson), PoissonObservations([1, 3]), NamedTuple(), [1.0, 2.0]),
             (ExponentialFamily(Normal), [0.1, 1.2], (σ = 0.5,), [0.0, 1.0]),
             (ExponentialFamily(Bernoulli), [0, 1], NamedTuple(), [0.0, 1.0]),
             (ExponentialFamily(Binomial), BinomialObservations([3, 8], [10, 10]), NamedTuple(), [0.0, 0.5]),
