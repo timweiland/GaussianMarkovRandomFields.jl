@@ -55,7 +55,7 @@ end
 true_gmrf = build_prior(log(τ_true), log(μ_true), n)
 x_latent = rand(true_gmrf)
 obs_model = ExponentialFamily(Poisson)
-y_obs = rand(conditional_distribution(obs_model, x_latent))
+y_obs = PoissonObservations(rand(conditional_distribution(obs_model, x_latent)))
 
 println("Generated $n observations with τ = $τ_true, μ = $μ_true")
 
@@ -67,7 +67,7 @@ println("Generated $n observations with τ = $τ_true, μ = $μ_true")
 # The objective function takes hyperparameters [log_τ, log_μ], builds a GMRF prior,
 # computes a Gaussian approximation to the posterior, and returns the negative log
 # marginal likelihood.
-function objective(θ::Vector{Float64}, y::Vector{Int}, n::Int)
+function objective(θ::Vector{Float64}, y::PoissonObservations, n::Int)
     log_τ, log_μ = θ
     prior = build_prior(log_τ, log_μ, n)
     obs_model = ExponentialFamily(Poisson)
