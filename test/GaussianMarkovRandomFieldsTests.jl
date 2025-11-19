@@ -37,6 +37,7 @@ include("latent_models/test_latent_models.jl")
 include("autodiff/runtests.jl")
 include("formula/test_formula_interface.jl")
 include("utils/test_adjacency.jl")
+include("kl_cholesky/runtests.jl")
 
 @testset "Code quality (Aqua.jl)" begin
     # TODO: Re-enable piracy check once SymTridiagonal AD piracy is fixed

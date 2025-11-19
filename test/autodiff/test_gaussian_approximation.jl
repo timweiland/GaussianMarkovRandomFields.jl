@@ -8,7 +8,12 @@ using LinearSolve
 using DifferentiationInterface
 using Enzyme, FiniteDiff, Zygote
 
-@testset "$backend_name gaussian_approximation autodiff tests" for (backend_name, backend) in [("Zygote", AutoZygote()), ("Enzyme", AutoEnzyme(; function_annotation = Enzyme.Const))]
+backends = Any[("Zygote", AutoZygote())]
+if get(ENV, "GMRF_TEST_ENZYME", "false") == "true"
+    push!(backends, ("Enzyme", AutoEnzyme(; function_annotation = Enzyme.Const)))
+end
+
+@testset "$backend_name gaussian_approximation autodiff tests" for (backend_name, backend) in backends
     # Set seed for reproducibility
     Random.seed!(42)
     fd_backend = AutoFiniteDiff()

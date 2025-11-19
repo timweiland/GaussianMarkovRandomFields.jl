@@ -17,6 +17,7 @@ makedocs(
             "tutorials/boundary_conditions.md",
             "tutorials/bernoulli_spatial_classification.md",
             "tutorials/bym_scotland_lip_cancer.md",
+            "tutorials/kl_approximation.md",
             "tutorials/automatic_differentiation.md",
         ],
         "API Reference" => [
@@ -27,6 +28,7 @@ makedocs(
             "Gaussian Approximation" => "reference/gaussian_approximation.md",
             "Hard Constraints" => "reference/hard_constraints.md",
             "Automatic Differentiation" => "reference/autodiff.md",
+            "KL Approximations" => "reference/kl_approximation.md",
             "SPDEs" => "reference/spdes.md",
             "Discretizations" => "reference/discretizations.md",
             "Meshes" => "reference/meshes.md",
