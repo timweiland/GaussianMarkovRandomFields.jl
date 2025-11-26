@@ -1,7 +1,7 @@
 using NearestNeighbors, DataStructures
 using SparseArrays
 
-export reverse_maximin_ordering, reverse_maximin_ordering_and_sparsity_pattern, form_supernodes
+export reverse_maximin_ordering, reverse_maximin_ordering_and_sparsity_pattern, sparsity_pattern_from_ordering, form_supernodes
 
 """
     reverse_maximin_ordering(X::AbstractMatrix; point_tree = KDTree(X))
@@ -97,6 +97,49 @@ values create denser (and more accurate) approximations.
 function reverse_maximin_ordering_and_sparsity_pattern(X::AbstractMatrix, ρ::Real; lower = true)
     point_tree = KDTree(X)
     P, ℓ = reverse_maximin_ordering(X; point_tree)
+    S = sparsity_pattern_from_ordering(X, P, ℓ, ρ; lower, point_tree)
+    return S, P, ℓ
+end
+
+"""
+    sparsity_pattern_from_ordering(X::AbstractMatrix, P::Vector{Int}, ℓ::Vector{Float64}, ρ::Real; lower = true, point_tree = KDTree(X))
+
+Construct sparsity pattern for sparse Cholesky factorization from a pre-computed ordering.
+
+This function allows users who already have a permutation `P` and maximin distances `ℓ`
+(from `reverse_maximin_ordering` or other sources) to construct the sparsity pattern
+independently. This is useful when the ordering has been computed separately or when
+experimenting with different sparsity parameters `ρ` on the same ordering.
+
+# Arguments
+- `X::AbstractMatrix`: Input point locations (d × n matrix where d is spatial dimension)
+- `P::Vector{Int}`: Permutation vector (ordering of points)
+- `ℓ::Vector{Float64}`: Maximin distances for each point
+- `ρ::Real`: Neighborhood radius multiplier for sparsity pattern construction
+
+# Keyword Arguments
+- `lower::Bool = true`: If true, return lower triangular pattern; otherwise upper triangular
+- `point_tree = KDTree(X)`: Pre-computed KDTree for efficient nearest neighbor queries
+
+# Returns
+- `S::SparseMatrixCSC`: Sparsity pattern matrix (all nonzeros are 0.0, structure only)
+
+# Details
+For each point i, the algorithm includes entries in the sparsity pattern for all neighbors
+within distance `ρ × ℓᵢ`, where `ℓᵢ` is the maximin distance for point i. Larger `ρ`
+values create denser (and more accurate) approximations.
+
+# See also
+[`reverse_maximin_ordering`](@ref), [`reverse_maximin_ordering_and_sparsity_pattern`](@ref), [`sparse_approximate_cholesky`](@ref)
+"""
+function sparsity_pattern_from_ordering(
+        X::AbstractMatrix,
+        P::Vector{Int},
+        ℓ::Vector{Float64},
+        ρ::Real;
+        lower::Bool = true,
+        point_tree = KDTree(X)
+    )
     P_inv = invperm(P)
     Is = Int[]
     Js = Int[]
@@ -116,8 +159,8 @@ function reverse_maximin_ordering_and_sparsity_pattern(X::AbstractMatrix, ρ::Re
     end
     N = length(P)
     if lower
-        return spzeros(Is, Js, N, N), P, ℓ
+        return spzeros(Is, Js, N, N)
     else
-        return spzeros(Js, Is, N, N), P, ℓ
+        return spzeros(Js, Is, N, N)
     end
 end

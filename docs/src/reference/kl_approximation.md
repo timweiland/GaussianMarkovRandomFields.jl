@@ -49,6 +49,7 @@ sparse_approximate_cholesky!
 ```@docs
 reverse_maximin_ordering
 reverse_maximin_ordering_and_sparsity_pattern
+sparsity_pattern_from_ordering
 ```
 
 ### Supernodal Clustering
