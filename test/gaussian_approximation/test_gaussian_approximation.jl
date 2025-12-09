@@ -319,4 +319,53 @@ using Distributions
         # Results should be very similar
         @test norm(mean(result1) - mean(result2)) < 1.0e-6
     end
+
+    @testset "Adaptive stepsize - Poisson with extreme counts" begin
+        # Test case where undamped Newton fails due to large initial residual
+        # Poisson with y=100 at prior η=0 and weak prior causes massive overshoot:
+        # - Newton step ≈ (y - exp(η)) / (Q_prior + exp(η)) ≈ 99 / 1.01 ≈ 98
+        # - New η ≈ 98 → exp(98) ≈ 10^42 → numerical overflow
+        n = 1
+        Q_prior = Diagonal([0.01])  # Weak prior so data dominates
+        μ_prior = zeros(n)
+        prior_gmrf = GMRF(μ_prior, Q_prior)
+
+        obs_model = ExponentialFamily(Poisson)
+        y = PoissonObservations([100])
+        obs_lik = obs_model(y)
+
+        result = gaussian_approximation(prior_gmrf, obs_lik)
+
+        @test result isa GMRF
+        μ_result = mean(result)
+
+        # Mode should be close to log(100) ≈ 4.6 (with small prior pull toward 0)
+        @test isfinite(μ_result[1])
+        @test abs(μ_result[1] - log(100)) < 1.0
+
+        # Precision should be positive
+        @test precision_matrix(result)[1, 1] > 0
+    end
+
+    @testset "Adaptive stepsize - multiple extreme Poisson" begin
+        # Multi-dimensional case with varying extreme counts
+        n = 5
+        Q_prior = 0.01 * sparse(I, n, n)  # Weak prior
+        prior_gmrf = GMRF(zeros(n), Q_prior)
+
+        obs_model = ExponentialFamily(Poisson)
+        y = PoissonObservations([200, 50, 500, 10, 1000])
+        obs_lik = obs_model(y)
+
+        result = gaussian_approximation(prior_gmrf, obs_lik)
+
+        @test result isa GMRF
+        μ_result = mean(result)
+        @test all(isfinite.(μ_result))
+
+        # Each component should be close to log of its count
+        for i in 1:n
+            @test abs(μ_result[i] - log(y.counts[i])) < 1.5
+        end
+    end
 end

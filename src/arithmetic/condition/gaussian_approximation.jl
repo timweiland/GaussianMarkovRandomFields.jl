@@ -65,6 +65,8 @@ constraint projection when needed.
 - `max_iter::Int=50`: Maximum number of Fisher scoring iterations
 - `mean_change_tol::Real=1e-4`: Convergence tolerance for mean change
 - `newton_dec_tol::Real=1e-5`: Newton decrement convergence tolerance
+- `adaptive_stepsize::Bool=true`: Enable adaptive stepsize with backtracking line search
+- `max_linesearch_iter::Int=10`: Maximum line search iterations per Newton step
 - `verbose::Bool=false`: Print iteration information
 
 # Returns
@@ -77,8 +79,11 @@ prior_gmrf = GMRF(μ_prior, Q_prior)
 obs_model = ExponentialFamily(Poisson)
 obs_lik = obs_model(y)
 
-# Find Gaussian approximation - returns a GMRF
+# Find Gaussian approximation - uses adaptive stepsize by default
 posterior_gmrf = gaussian_approximation(prior_gmrf, obs_lik)
+
+# For well-conditioned problems, disable adaptive stepsize for speed
+posterior_gmrf = gaussian_approximation(prior_gmrf, obs_lik; adaptive_stepsize=false)
 ```
 """
 function gaussian_approximation(
@@ -87,6 +92,8 @@ function gaussian_approximation(
         max_iter::Int = 50,
         mean_change_tol::Real = 1.0e-4,
         newton_dec_tol::Real = 1.0e-5,
+        adaptive_stepsize::Bool = true,
+        max_linesearch_iter::Int = 10,
         verbose::Bool = false
     )
     # Extract base GMRF and constraints (nothing for regular GMRF)
@@ -98,6 +105,9 @@ function gaussian_approximation(
 
     cache = deepcopy(linsolve_cache(base_gmrf))
     Q_base = cache.A
+
+    # Adaptive stepsize state (persists across outer iterations)
+    α = 1.0
 
     verbose && println("Starting Fisher scoring...")
 
@@ -112,7 +122,43 @@ function gaussian_approximation(
         neg_score_k = ∇ₓ_neg_log_posterior(base_gmrf, obs_lik, x_k)
         cache.b = neg_score_k
         step = solve!(cache).u
-        μ_new = x_k - step
+
+        # Apply step with adaptive line search or full step
+        if adaptive_stepsize
+            obj_current = neg_log_posterior(base_gmrf, obs_lik, x_k)
+            step_accepted = false
+
+            for ls_iter in 1:max_linesearch_iter
+                candidate = x_k - α * step
+                obj_candidate = neg_log_posterior(base_gmrf, obs_lik, candidate)
+
+                if obj_candidate <= obj_current
+                    # Accept step, increase α toward 1
+                    μ_new = candidate
+                    α = sqrt(α)
+                    step_accepted = true
+                    verbose && ls_iter > 1 && println("    Accepted at α=$(round(α^2, digits = 3)) after $ls_iter backtracks")
+                    break
+                else
+                    # Reject, reduce stepsize
+                    α *= 0.1
+                    verbose && println("    Backtrack: α=$(round(α, digits = 4))")
+
+                    if α * norm(step, Inf) < newton_dec_tol / 1000
+                        μ_new = candidate
+                        step_accepted = true
+                        break
+                    end
+                end
+            end
+
+            if !step_accepted
+                μ_new = x_k - α * step
+            end
+        else
+            μ_new = x_k - step
+        end
+
         newton_decrement = dot(neg_score_k, step)
 
         # Update cache matrix and create new GMRF with updated precision
@@ -127,7 +173,7 @@ function gaussian_approximation(
         mean_change = norm(x_new - x_k)
         mean_change_rel = mean_change / norm(x_k)
 
-        verbose && println("  Iter $iter: Newton decrement = $(newton_decrement)")
+        verbose && println("  Iter $iter: Newton dec = $(round(newton_decrement, sigdigits = 3)), α = $(round(α, digits = 3))")
         if (newton_decrement < newton_dec_tol) || (mean_change < mean_change_tol) || (mean_change_rel < mean_change_tol)
             verbose && println("  Converged after $iter iterations")
             return result
