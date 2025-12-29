@@ -19,6 +19,7 @@
 [![Coverage](https://codecov.io/gh/timweiland/GaussianMarkovRandomFields.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/timweiland/GaussianMarkovRandomFields.jl)
 [![Aqua](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 [![code style: runic](https://img.shields.io/badge/code_style-%E1%9A%B1%E1%9A%A2%E1%9A%BE%E1%9B%81%E1%9A%B2-black)](https://github.com/fredrikekre/Runic.jl)
+[![DOI](https://zenodo.org/badge/827801443.svg)](https://doi.org/10.5281/zenodo.18088215)
 
 </div>
 
