@@ -53,41 +53,36 @@ end
 """
     RandomWalk(order=1; additional_constraints = nothing)
 
-Formula functor for RandomWalk random effects.
+Formula functor for RandomWalk random effects of any order.
 
 # Arguments
-- `order`: Order of the random walk (default: 1). Currently only order=1 is supported.
-- `additional_constraints`: Optional additional constraints beyond the built-in sum-to-zero constraint.
+- `order`: Order of the random walk (default: 1). Order 1 gives RW1 (tridiagonal precision),
+  order 2 gives RW2 (pentadiagonal precision), and higher orders are supported.
+- `additional_constraints`: Optional additional constraints beyond the built-in null space constraints.
   Can be:
-  - `nothing` (default): Only the built-in sum-to-zero constraint
+  - `nothing` (default): Only the built-in null space constraints
   - `(A, e)`: Custom additional linear constraint matrix and vector where `Ax = e`
 
 # Usage
 ```julia
-# RW1 with built-in sum-to-zero constraint (order can be omitted, defaults to 1)
+# RW1 (order can be omitted, defaults to 1)
 rw1 = RandomWalk()
 @formula(y ~ 0 + rw1(time))
 
-# Explicitly specifying order=1
-rw1 = RandomWalk(1)
-@formula(y ~ 0 + rw1(time))
+# RW2 for smoother trends
+rw2 = RandomWalk(2)
+@formula(y ~ 0 + rw2(time))
 
 # Used in separable models
 rw1 = RandomWalk()
 besag = Besag(W)
 st = Separable(rw1, besag)
 @formula(y ~ 1 + st(time, region))
-
-# RW1 with additional constraints
-A = [1.0 0.0 1.0 zeros(7)...]  # x1 + x3 = 0 (in addition to sum-to-zero)
-e = [0.0]
-rw1_extra = RandomWalk(1, additional_constraints=(A, e))
-@formula(y ~ 0 + rw1_extra(time))
 ```
 
 # Notes
-- RW1 always has a built-in sum-to-zero constraint for identifiability
-- Use `additional_constraints` to specify constraints beyond sum-to-zero
+- Random walk models are intrinsic GMRFs with k null space constraints (k = order)
+- Use `additional_constraints` to specify constraints beyond the built-in ones
 - When used in Separable models, order is specified in constructor, not in formula
 - You must create a RandomWalk instance before using it in a formula
 - Calling the functor directly is unsupported outside formula parsing

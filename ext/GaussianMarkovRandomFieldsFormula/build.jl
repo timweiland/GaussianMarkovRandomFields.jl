@@ -18,7 +18,7 @@ function _latent_model(term::IIDTerm, data)
     return IIDModel(n; constraint = term.constraint)
 end
 
-function _latent_model(term::RandomWalkTerm{1}, data)
+function _latent_model(term::RandomWalkTerm{Order}, data) where {Order}
     v = _getcolumn(data, term.variable)
     lvls, _ = _levels_and_index(v)
     n = length(lvls)
@@ -31,7 +31,7 @@ function _latent_model(term::RandomWalkTerm{1}, data)
         end
     end
 
-    return RW1Model(n; additional_constraints = term.additional_constraints)
+    return RWModel{Order}(n; additional_constraints = term.additional_constraints)
 end
 
 function _latent_model(term::AR1Term, data)
