@@ -60,6 +60,10 @@ function _construct_distribution(lik::BinomialLikelihood, μ)
     return product_distribution(Binomial.(lik.n, μ))
 end
 
+function _construct_distribution(lik::GammaLikelihood, μ)
+    return product_distribution(Gamma.(lik.phi, μ ./ lik.phi))
+end
+
 # ----------------------------- Specialized loglik for NegBin --------------------------
 
 """
@@ -81,6 +85,30 @@ function loglik(x, lik::NegBinLikelihood)
     @inbounds for i in eachindex(y)
         ll += lgamma(y[i] + r) - lgamma_r - lgamma(y[i] + 1) +
             r_log_r + y[i] * log(μ[i]) - (r + y[i]) * log(r + μ[i])
+    end
+    return ll
+end
+
+# ----------------------------- Specialized loglik for Gamma --------------------------
+
+"""
+    loglik(x, lik::GammaLikelihood) -> Float64
+
+Fast implementation for Gamma likelihood that avoids product_distribution overhead.
+
+Computes: ∑ᵢ [φ log φ − φ log μᵢ − log Γ(φ) + (φ−1) log yᵢ − φyᵢ/μᵢ]
+"""
+function loglik(x, lik::GammaLikelihood)
+    y = lik.y
+    phi = lik.phi
+    η = _eta(lik, x)
+    μ = _mu(lik, η)
+
+    n = length(y)
+    phi_m1 = phi - 1
+    ll = n * (phi * log(phi) - lgamma(phi))
+    @inbounds for i in eachindex(y)
+        ll += phi_m1 * log(y[i]) - phi * log(μ[i]) - phi * y[i] / μ[i]
     end
     return ll
 end
@@ -155,6 +183,22 @@ function loggrad(x, lik::NegBinLikelihood{LogLink})
     return _embed_grad(lik, g_obs, length(x))
 end
 
+"""
+    loggrad(x, lik::GammaLikelihood{LogLink}) -> Vector{Float64}
+
+Compute gradient of Gamma likelihood with log link w.r.t. latent field x.
+
+∂ℓ/∂ηᵢ = φ(yᵢ/μᵢ − 1)
+"""
+function loggrad(x, lik::GammaLikelihood{LogLink})
+    y = lik.y
+    phi = lik.phi
+    η = _eta(lik, x)
+    μ = _mu(lik, η)
+    g_obs = @. phi * (y / μ - 1)
+    return _embed_grad(lik, g_obs, length(x))
+end
+
 # ----------------------------- loghessian methods for canonical links --------------------------
 
 """
@@ -217,5 +261,21 @@ function loghessian(x, lik::NegBinLikelihood{LogLink})
     η = _eta(lik, x)
     μ = _mu(lik, η)
     d_obs = @. -r * μ * (r + y) / (r + μ)^2
+    return _embed_diag(lik, d_obs, length(x))
+end
+
+"""
+    loghessian(x, lik::GammaLikelihood{LogLink}) -> Diagonal{Float64}
+
+Compute Hessian of Gamma likelihood with log link w.r.t. latent field x.
+
+∂²ℓ/∂ηᵢ² = −φyᵢ/μᵢ
+"""
+function loghessian(x, lik::GammaLikelihood{LogLink})
+    y = lik.y
+    phi = lik.phi
+    η = _eta(lik, x)
+    μ = _mu(lik, η)
+    d_obs = @. -phi * y / μ
     return _embed_diag(lik, d_obs, length(x))
 end

@@ -117,6 +117,7 @@ ll = loglik(x, obs_lik)
 | Bernoulli         | LogitLink      | LogLink          | none             |
 | Binomial          | LogitLink      | IdentityLink     | none*            |
 | NegativeBinomial  | LogLink        | IdentityLink     | r (shape/size)   |
+| Gamma             | LogLink        | IdentityLink     | phi (shape)      |
 
 *For Binomial, the number of trials is provided through the data structure `BinomialObservations`, not as a hyperparameter.
 
@@ -358,6 +359,32 @@ f = @formula(y ~ 1 + x)
 comp = build_formula_components(f, df; family=NegativeBinomial, exposure=:pop)
 ```
 
+### Gamma Observations
+
+For continuous positive-valued data with variance that scales with the mean (e.g., precipitation, income, disease rates), use the Gamma observation model. This uses the mean-shape parameterization where Var(y) = μ²/φ:
+
+```julia
+# Continuous positive observations — no wrapper type needed (like Normal)
+y = [1.5, 0.3, 4.2, 0.8, 2.1]
+
+# Use with Gamma model — phi is the shape parameter (higher = less dispersion)
+gamma_model = ExponentialFamily(Gamma)  # LogLink by default
+obs_lik = gamma_model(y; phi=3.0)
+
+# Evaluate
+x = randn(5)  # Latent field (log-mean due to LogLink)
+ll = loglik(x, obs_lik)
+```
+
+When using the formula interface:
+
+```julia
+using StatsModels
+df = (y = [1.5, 0.3, 4.2], x = [0.1, 0.2, 0.15])
+f = @formula(y ~ 1 + x)
+comp = build_formula_components(f, df; family=Gamma)
+```
+
 ### Binomial Observations
 
 For binomial data, use the `BinomialObservations` utility:
@@ -432,6 +459,7 @@ PoissonLikelihood
 BernoulliLikelihood
 BinomialLikelihood
 NegBinLikelihood
+GammaLikelihood
 ```
 
 ### Link Functions
