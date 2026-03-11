@@ -60,6 +60,37 @@ function _construct_distribution(lik::BinomialLikelihood, μ)
     return product_distribution(Binomial.(lik.n, μ))
 end
 
+function _construct_distribution(lik::NegBinLikelihood, μ)
+    r = lik.r
+    p = r ./ (r .+ μ)
+    return product_distribution(NegativeBinomial.(r, p))
+end
+
+# ----------------------------- Specialized loglik for NegBin --------------------------
+
+"""
+    loglik(x, lik::NegBinLikelihood) -> Float64
+
+Fast implementation for Negative Binomial likelihood that avoids product_distribution overhead.
+
+Computes: ∑ᵢ [lgamma(yᵢ+r) - lgamma(r) - lgamma(yᵢ+1) + r·log(r) + yᵢ·log(μᵢ) - (r+yᵢ)·log(r+μᵢ)]
+"""
+function loglik(x, lik::NegBinLikelihood)
+    y = lik.y
+    r = lik.r
+    η = _eta(lik, x)
+    μ = _mu(lik, η)
+
+    ll = zero(eltype(μ))
+    lgamma_r = lgamma(r)
+    r_log_r = r * log(r)
+    @inbounds for i in eachindex(y)
+        ll += lgamma(y[i] + r) - lgamma_r - lgamma(y[i] + 1) +
+            r_log_r + y[i] * log(μ[i]) - (r + y[i]) * log(r + μ[i])
+    end
+    return ll
+end
+
 # ----------------------------- loggrad methods for canonical links --------------------------
 
 """
@@ -114,6 +145,22 @@ function loggrad(x, lik::BinomialLikelihood{LogitLink})
     return _embed_grad(lik, g_obs, length(x))
 end
 
+"""
+    loggrad(x, lik::NegBinLikelihood{LogLink}) -> Vector{Float64}
+
+Compute gradient of Negative Binomial likelihood with log link w.r.t. latent field x.
+
+∂ℓ/∂ηᵢ = r(yᵢ - μᵢ) / (r + μᵢ)
+"""
+function loggrad(x, lik::NegBinLikelihood{LogLink})
+    y = lik.y
+    r = lik.r
+    η = _eta(lik, x)
+    μ = _mu(lik, η)
+    g_obs = @. r * (y - μ) / (r + μ)
+    return _embed_grad(lik, g_obs, length(x))
+end
+
 # ----------------------------- loghessian methods for canonical links --------------------------
 
 """
@@ -160,5 +207,21 @@ function loghessian(x, lik::BinomialLikelihood{LogitLink})
     η = _eta(lik, x)
     μ = logistic.(η)
     d_obs = -n .* μ .* (1 .- μ)
+    return _embed_diag(lik, d_obs, length(x))
+end
+
+"""
+    loghessian(x, lik::NegBinLikelihood{LogLink}) -> Diagonal{Float64}
+
+Compute Hessian of Negative Binomial likelihood with log link w.r.t. latent field x.
+
+∂²ℓ/∂ηᵢ² = -rμᵢ(r + yᵢ) / (r + μᵢ)²
+"""
+function loghessian(x, lik::NegBinLikelihood{LogLink})
+    y = lik.y
+    r = lik.r
+    η = _eta(lik, x)
+    μ = _mu(lik, η)
+    d_obs = @. -r * μ * (r + y) / (r + μ)^2
     return _embed_diag(lik, d_obs, length(x))
 end

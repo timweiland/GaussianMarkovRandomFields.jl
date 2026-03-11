@@ -143,6 +143,14 @@ function GaussianMarkovRandomFields.build_formula_components(
         else
             y = PoissonObservations(y)
         end
+    elseif family == Distributions.NegativeBinomial
+        if exposure !== nothing
+            exp_col = _getcolumn(data, exposure)
+            length(exp_col) == length(y) || error("exposure length $(length(exp_col)) must match response length $(length(y))")
+            y = NegativeBinomialObservations(y, exp_col)
+        else
+            y = NegativeBinomialObservations(y)
+        end
     end
 
     # Partition terms

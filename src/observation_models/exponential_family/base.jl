@@ -3,6 +3,7 @@
 # Include all components in dependency order
 include("binomial_observations.jl")
 include("poisson_observations.jl")
+include("negative_binomial_observations.jl")
 include("link_functions.jl")
 include("observation_likelihoods.jl")
 # Helper utilities shared by canonical and fallback implementations

@@ -119,6 +119,7 @@ _default_link(::Type{<:Normal}) = IdentityLink()
 _default_link(::Type{<:Poisson}) = LogLink()
 _default_link(::Type{<:Bernoulli}) = LogitLink()
 _default_link(::Type{<:Binomial}) = LogitLink()
+_default_link(::Type{<:NegativeBinomial}) = LogLink()
 
 """
     conditional_distribution(obs_model::ExponentialFamily, x; θ_named...) -> Distribution
@@ -181,6 +182,20 @@ function _conditional_distribution_family(::Type{<:Binomial}, μ; n, kwargs...)
     return product_distribution(Binomial.(n, μ))
 end
 
+function conditional_distribution(obs_model::ExponentialFamily{NegativeBinomial}, x; r, offset = nothing, kwargs...)
+    if (offset !== nothing) && !(obs_model.link isa LogLink)
+        throw(ArgumentError("offset is only supported for NegativeBinomial with LogLink"))
+    end
+    η = x
+    if offset !== nothing
+        length(offset) == length(x) || throw(ArgumentError("offset length $(length(offset)) must match x length $(length(x))"))
+        η = η .+ offset
+    end
+    μ = apply_invlink.(Ref(obs_model.link), η)
+    p = r ./ (r .+ μ)
+    return product_distribution(NegativeBinomial.(r, p))
+end
+
 function conditional_distribution(obs_model::ExponentialFamily{Poisson}, x; offset = nothing, kwargs...)
     # Offsets are only supported for Poisson with LogLink (log-exposure)
     if (offset !== nothing) && !(obs_model.link isa LogLink)
@@ -216,11 +231,16 @@ function (obs_model::ExponentialFamily{Binomial, L, I})(y::BinomialObservations;
     return BinomialLikelihood(obs_model.link, successes(y), trials(y), obs_model.indices)
 end
 
+function (obs_model::ExponentialFamily{NegativeBinomial, L, I})(y::NegativeBinomialObservations; r, kwargs...) where {L, I}
+    return NegBinLikelihood(obs_model.link, y.counts, Float64(r), obs_model.indices, y.logexposure)
+end
+
 # Hyperparameter interface implementations
 hyperparameters(::ExponentialFamily{<:Normal}) = (:σ,)
 hyperparameters(::ExponentialFamily{<:Bernoulli}) = ()
 hyperparameters(::ExponentialFamily{<:Binomial}) = ()  # No hyperparameters - trials are data
 hyperparameters(::ExponentialFamily{<:Poisson}) = ()
+hyperparameters(::ExponentialFamily{<:NegativeBinomial}) = (:r,)
 
 """
     latent_dimension(ef::ExponentialFamily, y::AbstractVector) -> Int

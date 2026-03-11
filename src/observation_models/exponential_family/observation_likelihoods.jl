@@ -1,4 +1,4 @@
-export ExponentialFamilyLikelihood, NormalLikelihood, PoissonLikelihood, BernoulliLikelihood, BinomialLikelihood
+export ExponentialFamilyLikelihood, NormalLikelihood, PoissonLikelihood, BernoulliLikelihood, BinomialLikelihood, NegBinLikelihood
 
 """
     ExponentialFamilyLikelihood{L, I} <: ObservationLikelihood
@@ -112,4 +112,35 @@ struct BinomialLikelihood{L <: LinkFunction, I} <: ExponentialFamilyLikelihood{L
     y::Vector{Int}
     n::Vector{Int}  # Changed from Int to Vector{Int}
     indices::I  # Can be Nothing, UnitRange, or Vector{Int}
+end
+
+"""
+    NegBinLikelihood{L<:LinkFunction, I, O} <: ExponentialFamilyLikelihood{L, I}
+
+Materialized Negative Binomial (NB2) observation likelihood.
+
+Uses the NB2 parameterization where Var(y) = μ + μ²/r. As r → ∞, this
+converges to the Poisson distribution.
+
+# Fields
+- `link::L`: Link function connecting latent field to mean parameter
+- `y::Vector{Int}`: Count observations
+- `r::Float64`: Shape/size parameter (overdispersion; r > 0)
+- `indices::I`: Indices of the latent field corresponding to the observations
+- `logexposure::O`: Log exposure / offset
+
+# Example
+```julia
+obs_model = ExponentialFamily(NegativeBinomial)
+y = NegativeBinomialObservations([3, 1, 8])
+obs_lik = obs_model(y; r=5.0)
+ll = loglik([1.0, 0.5, 2.0], obs_lik)
+```
+"""
+struct NegBinLikelihood{L <: LinkFunction, I, O} <: ExponentialFamilyLikelihood{L, I}
+    link::L
+    y::Vector{Int}
+    r::Float64
+    indices::I
+    logexposure::O
 end
