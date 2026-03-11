@@ -153,6 +153,8 @@ function GaussianMarkovRandomFields.build_formula_components(
         end
     elseif family == Distributions.Gamma
         y = Float64.(y)
+    elseif family == Distributions.TDist
+        y = Float64.(y)
     end
 
     # Partition terms

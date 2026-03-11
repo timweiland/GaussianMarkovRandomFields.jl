@@ -121,6 +121,7 @@ _default_link(::Type{<:Bernoulli}) = LogitLink()
 _default_link(::Type{<:Binomial}) = LogitLink()
 _default_link(::Type{<:NegativeBinomial}) = LogLink()
 _default_link(::Type{<:Gamma}) = LogLink()
+_default_link(::Type{<:TDist}) = IdentityLink()
 
 """
     conditional_distribution(obs_model::ExponentialFamily, x; θ_named...) -> Distribution
@@ -201,6 +202,11 @@ function _conditional_distribution_family(::Type{<:Gamma}, μ; phi, kwargs...)
     return product_distribution(Gamma.(phi, μ ./ phi))
 end
 
+function _conditional_distribution_family(::Type{<:TDist}, μ; σ, ν, kwargs...)
+    σ_eff = σ * sqrt((ν - 2) / ν)
+    return product_distribution(μ .+ σ_eff .* TDist(ν))
+end
+
 function conditional_distribution(obs_model::ExponentialFamily{Poisson}, x; offset = nothing, kwargs...)
     # Offsets are only supported for Poisson with LogLink (log-exposure)
     if (offset !== nothing) && !(obs_model.link isa LogLink)
@@ -251,6 +257,17 @@ function (obs_model::ExponentialFamily{Gamma, L, I})(y; phi, kwargs...) where {L
     return GammaLikelihood(obs_model.link, y_f64, Float64(phi), obs_model.indices)
 end
 
+function (obs_model::ExponentialFamily{TDist, L, I})(y; σ, ν, kwargs...) where {L, I}
+    σ > 0 || error("Student-t scale parameter σ must be positive (got $σ)")
+    ν > 2 || error("Student-t degrees of freedom ν must be > 2 for finite variance (got $ν)")
+    σ_f = Float64(σ)
+    ν_f = Float64(ν)
+    w = σ_f^2 * (ν_f - 2)
+    νp1 = ν_f + 1
+    σ_eff = σ_f * sqrt((ν_f - 2) / ν_f)
+    return StudentTLikelihood(obs_model.link, Float64.(y), σ_f, ν_f, w, νp1, σ_eff, obs_model.indices)
+end
+
 # Hyperparameter interface implementations
 hyperparameters(::ExponentialFamily{<:Normal}) = (:σ,)
 hyperparameters(::ExponentialFamily{<:Bernoulli}) = ()
@@ -258,6 +275,7 @@ hyperparameters(::ExponentialFamily{<:Binomial}) = ()  # No hyperparameters - tr
 hyperparameters(::ExponentialFamily{<:Poisson}) = ()
 hyperparameters(::ExponentialFamily{<:NegativeBinomial}) = (:r,)
 hyperparameters(::ExponentialFamily{<:Gamma}) = (:phi,)
+hyperparameters(::ExponentialFamily{<:TDist}) = (:σ, :ν)
 
 """
     latent_dimension(ef::ExponentialFamily, y::AbstractVector) -> Int

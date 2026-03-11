@@ -124,3 +124,20 @@ function _loghessian_diagonal_family(lik::GammaLikelihood, μ, dμ_dη, d2μ_dη
     # ∂ℓ/∂μ = φ(y − μ)/μ²
     return @. (phi / μ^2 - 2 * phi * y / μ^3) * dμ_dη^2 + phi * (y - μ) / μ^2 * d2μ_dη²
 end
+
+function _loggrad_family(lik::StudentTLikelihood, μ, dμ_dη)
+    y = lik.y
+    w = lik.w
+    νp1 = lik.νp1
+    # ∂ℓ/∂μ = (ν+1)(y − μ) / (w + (y − μ)²)
+    return @. νp1 * (y - μ) / (w + (y - μ)^2) * dμ_dη
+end
+
+function _loghessian_diagonal_family(lik::StudentTLikelihood, μ, dμ_dη, d2μ_dη²)
+    y = lik.y
+    w = lik.w
+    νp1 = lik.νp1
+    # ∂²ℓ/∂μ² = (ν+1)((y − μ)² − w) / (w + (y − μ)²)²
+    # ∂ℓ/∂μ = (ν+1)(y − μ) / (w + (y − μ)²)
+    return @. νp1 * ((y - μ)^2 - w) / (w + (y - μ)^2)^2 * dμ_dη^2 + νp1 * (y - μ) / (w + (y - μ)^2) * d2μ_dη²
+end

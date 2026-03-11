@@ -114,3 +114,17 @@ function _pointwise_logpdf!(result, lik::GammaLikelihood, μ)
     end
     return result
 end
+
+# StudentTLikelihood
+function _pointwise_logpdf(lik::StudentTLikelihood, μ)
+    return logpdf.(μ .+ lik.σ_eff .* TDist(lik.ν), lik.y)
+end
+
+function _pointwise_logpdf!(result, lik::StudentTLikelihood, μ)
+    tdist = TDist(lik.ν)
+    σ_eff = lik.σ_eff
+    @inbounds for i in eachindex(result, μ, lik.y)
+        result[i] = logpdf(μ[i] + σ_eff * tdist, lik.y[i])
+    end
+    return result
+end
