@@ -140,7 +140,7 @@ function StatsModels.modelcols(term::IIDTerm, data)
     return _indicator_mapping(v)
 end
 
-function StatsModels.modelcols(term::RandomWalkTerm{1}, data)
+function StatsModels.modelcols(term::RandomWalkTerm, data)
     v = _getcolumn(data, term.variable)
     return _indicator_mapping(v)
 end

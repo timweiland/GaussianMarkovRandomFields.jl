@@ -217,6 +217,28 @@ end
         @test_throws ErrorException build_formula_components(@formula(y ~ 0 + iid_wrong(group)), data; family = Normal)
     end
 
+    @testset "RW2 via formula interface" begin
+        rw2 = RandomWalk(2)
+        comp = build_formula_components(@formula(y ~ 0 + rw2(time)), data; family = Normal)
+
+        # Design matrix: n observations mapping to n time points
+        @test size(comp.A) == (n, n)
+        @test nnz(comp.A) == n
+
+        # Hyperparameters should use rw2 suffix
+        ks = Set(keys(comp.hyperparams))
+        @test :τ_rw2 in ks
+
+        # Should produce ConstrainedGMRF (intrinsic with 2 constraints)
+        gmrf = comp.combined_model(τ_rw2 = 1.0)
+        @test gmrf isa ConstrainedGMRF
+        @test length(gmrf) == n
+
+        # Sampling should work
+        s = rand(gmrf)
+        @test length(s) == n
+    end
+
     @testset "Separable (Kronecker product) models" begin
         # Create space-time data
         n_time = 10
