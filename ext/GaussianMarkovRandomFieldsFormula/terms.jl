@@ -59,6 +59,29 @@ end
 
 StatsModels.termvars(term::AR1Term) = [term.variable]
 
+# Generalized AR(p) term
+struct ARTerm{P} <: FormulaRandomEffectTerm
+    variable::Symbol
+    constraint::Union{Nothing, Symbol, Tuple{AbstractMatrix, AbstractVector}}
+end
+
+function StatsModels.apply_schema(
+        t::StatsModels.FunctionTerm{<:GaussianMarkovRandomFields.AR},
+        ::StatsModels.Schema,
+        ::Type
+    )
+    var_term = only(t.args)
+    order = t.f.order
+    return ARTerm{Int(order)}(var_term.sym, t.f.constraint)
+end
+
+StatsModels.termvars(term::ARTerm) = [term.variable]
+
+function StatsModels.modelcols(term::ARTerm, data)
+    v = _getcolumn(data, term.variable)
+    return _indicator_mapping(v)
+end
+
 # Besag(region; W = adjacency)
 struct BesagTerm{M <: AbstractMatrix, MT} <: FormulaRandomEffectTerm
     variable::Symbol

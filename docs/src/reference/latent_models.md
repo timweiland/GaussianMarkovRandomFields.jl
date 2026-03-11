@@ -36,6 +36,7 @@ model_name
 ### Temporal Models
 
 ```@docs
+ARModel
 AR1Model
 RWModel
 RW1Model

@@ -290,6 +290,7 @@ gmrf = comp.combined_model(τ_rw1_separable=1.0, τ_rw1_2_separable=1.5)
 GaussianMarkovRandomFields.IID
 GaussianMarkovRandomFields.RandomWalk
 GaussianMarkovRandomFields.AR1
+GaussianMarkovRandomFields.AR
 GaussianMarkovRandomFields.Besag
 GaussianMarkovRandomFields.BYM2
 GaussianMarkovRandomFields.Separable

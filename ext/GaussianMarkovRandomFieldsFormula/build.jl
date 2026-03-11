@@ -34,6 +34,21 @@ function _latent_model(term::RandomWalkTerm{Order}, data) where {Order}
     return RWModel{Order}(n; additional_constraints = term.additional_constraints)
 end
 
+function _latent_model(term::ARTerm{P}, data) where {P}
+    v = _getcolumn(data, term.variable)
+    lvls, _ = _levels_and_index(v)
+    n = length(lvls)
+
+    if term.constraint isa Tuple
+        A, e = term.constraint
+        if size(A, 2) != n
+            error("Constraint matrix for $(term.variable) has $(size(A, 2)) columns but variable has $(n) levels")
+        end
+    end
+
+    return ARModel{P}(n; constraint = term.constraint)
+end
+
 function _latent_model(term::AR1Term, data)
     v = _getcolumn(data, term.variable)
     lvls, _ = _levels_and_index(v)

@@ -239,6 +239,29 @@ end
         @test length(s) == n
     end
 
+    @testset "AR(2) via formula interface" begin
+        ar2 = AR(2)
+        comp = build_formula_components(@formula(y ~ 0 + ar2(time)), data; family = Normal)
+
+        @test size(comp.A) == (n, n)
+        @test nnz(comp.A) == n
+
+        # Hyperparameters should use ar2 suffix
+        ks = Set(keys(comp.hyperparams))
+        @test :τ_ar2 in ks
+        @test :pacf1_ar2 in ks
+        @test :pacf2_ar2 in ks
+
+        # Should produce unconstrained GMRF
+        gmrf = comp.combined_model(τ_ar2 = 1.0, pacf1_ar2 = 0.5, pacf2_ar2 = -0.3)
+        @test gmrf isa GMRF
+        @test length(gmrf) == n
+
+        # Sampling should work
+        s = rand(gmrf)
+        @test length(s) == n
+    end
+
     @testset "Separable (Kronecker product) models" begin
         # Create space-time data
         n_time = 10
