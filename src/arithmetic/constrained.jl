@@ -50,6 +50,7 @@ For efficiency, the constructor precomputes:
 - `A_tilde_T::Matrix{T}`: Precomputed Q⁻¹A^T
 - `L_c::Cholesky{T, Matrix{T}}`: Cholesky factorization of AÃ^T
 - `constrained_mean::Vector{T}`: Precomputed constrained mean
+- `log_constraint_correction::T`: Precomputed log-density correction for constraints
 
 # Constructor
     ConstrainedGMRF(base_gmrf::AbstractGMRF, A, e)
@@ -64,6 +65,7 @@ struct ConstrainedGMRF{T <: Real, L <: Union{LinearMaps.LinearMap{T}, AbstractMa
     A_tilde_T::Matrix{T}
     L_c::Cholesky{T, Matrix{T}}
     constrained_mean::Vector{T}
+    log_constraint_correction::T
 
     function ConstrainedGMRF(
             base_gmrf::G,
@@ -86,26 +88,16 @@ struct ConstrainedGMRF{T <: Real, L <: Union{LinearMaps.LinearMap{T}, AbstractMa
         μ_base = mean(base_gmrf)
         Q = precision_map(base_gmrf)
 
-        # Step 1: Compute Ã^T := Q⁻¹A^T
-        # We solve Q * A_tilde_T = A^T for A_tilde_T
-        A_T = Matrix{T_result}(A_dense')
-
-        # For efficiency, we'll solve this using the existing LinearSolve infrastructure
-        # Since we need to solve Q * X = A^T for multiple RHS columns
+        # Step 1: Compute Ã^T := Q⁻¹A^T by solving Q * Ã^T = A^T column-by-column.
+        # Save and restore cache.b to avoid mutating the base GMRF's state.
         A_tilde_T = Matrix{T_result}(undef, n, m)
-
-        # Get a copy of the linsolve cache and modify it for our solve
         cache = linsolve_cache(base_gmrf)
-
-        # Solve for each column of A^T
+        b_saved = copy(cache.b)
         for i in 1:m
-            # Update the RHS in the cache
-            cache.b .= A_T[:, i]
-            # Solve the system
-            sol = solve!(cache)
-            # Store the solution
-            A_tilde_T[:, i] .= sol.u
+            cache.b .= @view(A_dense[i, :])
+            A_tilde_T[:, i] .= solve!(cache).u
         end
+        cache.b .= b_saved
 
         # Step 2: Compute AÃ^T and its Cholesky factorization
         AA_tilde = A_dense * A_tilde_T  # This should be m×m
@@ -120,8 +112,17 @@ struct ConstrainedGMRF{T <: Real, L <: Union{LinearMaps.LinearMap{T}, AbstractMa
         correction = A_tilde_T * (L_c \ residual)
         constrained_mean = μ_base - correction
 
+        # Precompute the log-density correction for logpdf (Rue & Held 2005, §2.3.3).
+        # This is constant w.r.t. z: -log p_A(e) - ½ log|AA'|
+        resid_e = e_vec - A_dense * μ_base
+        r = length(resid_e)
+        log_constraint_correction =
+            T_result(0.5) * (r * log(T_result(2π)) + logdet(L_c) + dot(resid_e, L_c \ resid_e)) -
+            T_result(0.5) * logdet(cholesky(Symmetric(A_dense * A_dense')))
+
         return new{T_result, L, G}(
-            base_gmrf, A_dense, e_vec, A_tilde_T, L_c, constrained_mean
+            base_gmrf, A_dense, e_vec, A_tilde_T, L_c, constrained_mean,
+            log_constraint_correction
         )
     end
 end
@@ -144,20 +145,13 @@ precision_map(d::ConstrainedGMRF) = precision_map(d.base_gmrf)  # TODO: Return c
 
 Sample from the constrained GMRF using conditioning by Kriging.
 
-The algorithm:
-1. Sample x from the unconstrained base GMRF
-2. Apply Kriging correction: x_c = x - Ã^T * L_c^(-1) * (A*x - e)
+Given an unconstrained sample x, the constrained sample is:
+    x_c = x - Ã^T (AÃ^T)⁻¹ (Ax - e)
 """
 function _rand!(rng::AbstractRNG, d::ConstrainedGMRF{T}, x::AbstractVector{T}) where {T}
-    # Step 1: Sample from unconstrained GMRF
     _rand!(rng, d.base_gmrf, x)
-
-    # Step 2: Apply constraint correction using Kriging formula
-    # x_c = x - Ã^T * L_c^(-1) * (A*x - e)
     residual = d.constraint_matrix * x - d.constraint_vector
-    correction = d.A_tilde_T * (d.L_c \ residual)
-    x .-= correction
-
+    x .-= d.A_tilde_T * (d.L_c \ residual)
     return x
 end
 
@@ -189,26 +183,15 @@ function var(d::ConstrainedGMRF{T}) where {T}
 end
 
 function Distributions.logpdf(d::ConstrainedGMRF, z::AbstractVector)
-    # Check if constraint is satisfied: A*z ≈ e
-    # Points that violate the constraint have zero probability
+    # Scale-aware constraint check: warn (don't return -Inf) for numerical residuals.
     constraint_residual = d.constraint_matrix * z - d.constraint_vector
-    if !isapprox(constraint_residual, zero(constraint_residual), atol = 1.0e-10)
-        return -Inf
+    rel_error = norm(constraint_residual) /
+        (norm(d.constraint_matrix, Inf) * norm(z, Inf) + 1)
+    if rel_error > sqrt(eps())
+        @warn "Point does not satisfy constraints (relative residual: $(rel_error))" maxlog = 1
     end
 
-    # Prior logpdf
-    res = Distributions.logpdf(d.base_gmrf, z)
-
-    # Constraint logpdf
-    resid = d.constraint_vector - d.constraint_matrix * mean(d.base_gmrf)
-    r = length(resid)
-    neg_logpdf_e = 0.5 * (r * log(2π) + logdet(d.L_c) + dot(resid, d.L_c \ resid))
-    res += neg_logpdf_e
-
-    # Degenerate constraint likelihood
-    # Rue and Held (2005), Section 2.3.3
-    res -= 0.5 * logdet(cholesky(Symmetric(d.constraint_matrix * d.constraint_matrix')))
-    return res
+    return Distributions.logpdf(d.base_gmrf, z) + d.log_constraint_correction
 end
 
 # Display methods

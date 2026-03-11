@@ -120,6 +120,24 @@ using Random
         end
     end
 
+    @testset "Constructor does not mutate base GMRF" begin
+        μ_fresh = [1.0, 2.0, 3.0, 4.0]
+        Q_fresh = spdiagm(0 => [1.0, 2.0, 3.0, 4.0])
+        base_fresh = GMRF(μ_fresh, Q_fresh)
+
+        # Sample before construction to seed the cache
+        rng1 = Random.MersenneTwister(999)
+        sample_before = rand(rng1, base_fresh)
+
+        # Construct a ConstrainedGMRF (constructor restores cache.b after solving)
+        ConstrainedGMRF(base_fresh, ones(1, 4), [0.0])
+
+        # Sampling from the base should still give identical results
+        rng2 = Random.MersenneTwister(999)
+        sample_after = rand(rng2, base_fresh)
+        @test sample_before == sample_after
+    end
+
     @testset "Edge cases" begin
         @testset "Zero constraint vector" begin
             A = [1.0 1.0 0.0 0.0]
@@ -169,14 +187,46 @@ using Random
             @test isfinite(lpdf_mean)
         end
 
-        @testset "Invalid points (violate constraint)" begin
-            # Create a point that doesn't satisfy the constraint
+        @testset "Off-manifold points (violate constraint)" begin
+            # Points that violate the constraint return a finite value
+            # (with a warning)
             invalid_point = [1.0, 2.0, 3.0, 4.0]  # sum = 10, not 0
             @test !(A * invalid_point ≈ e)
 
-            # logpdf should be -Inf for points that violate constraints
-            lpdf_invalid = logpdf(constrained, invalid_point)
-            @test lpdf_invalid == -Inf
+            lpdf_invalid = @test_warn "Point does not satisfy constraints" logpdf(constrained, invalid_point)
+            @test isfinite(lpdf_invalid)
+        end
+
+        @testset "Precomputed correction matches per-call computation" begin
+            # Verify the precomputed log_constraint_correction matches what
+            # the old per-call code would have computed
+            A_mat = constrained.constraint_matrix
+            L_c = constrained.L_c
+            resid = constrained.constraint_vector - A_mat * mean(base_gmrf)
+            r = length(resid)
+            expected = 0.5 * (r * log(2π) + logdet(L_c) + dot(resid, L_c \ resid)) -
+                0.5 * logdet(cholesky(Symmetric(A_mat * A_mat')))
+            @test constrained.log_constraint_correction ≈ expected
+        end
+
+        @testset "Ill-conditioned system returns finite logpdf" begin
+            n = 20
+            # RW2-like tridiagonal + small diagonal => high condition number
+            diag_vals = fill(4.0, n)
+            diag_vals[1] = diag_vals[end] = 1.0
+            off_diag = fill(-1.0, n - 1)
+            Q_illcond = spdiagm(0 => diag_vals .+ 1.0e-6, 1 => off_diag, -1 => off_diag)
+            μ_illcond = zeros(n)
+            base_illcond = GMRF(μ_illcond, Q_illcond)
+
+            A_illcond = ones(1, n)
+            e_illcond = [0.0]
+            constrained_illcond = ConstrainedGMRF(base_illcond, A_illcond, e_illcond)
+
+            # The constrained mean should return a finite logpdf, not -Inf,
+            # and should not warn (it's on the manifold, any residual is numerical noise)
+            lpdf = @test_nowarn logpdf(constrained_illcond, mean(constrained_illcond))
+            @test isfinite(lpdf)
         end
 
         @testset "Relative probabilities" begin
