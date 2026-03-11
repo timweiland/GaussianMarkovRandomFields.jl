@@ -1,4 +1,4 @@
-export ExponentialFamilyLikelihood, NormalLikelihood, PoissonLikelihood, BernoulliLikelihood, BinomialLikelihood, NegBinLikelihood
+export ExponentialFamilyLikelihood, NormalLikelihood, PoissonLikelihood, BernoulliLikelihood, BinomialLikelihood, NegBinLikelihood, GammaLikelihood
 
 """
     ExponentialFamilyLikelihood{L, I} <: ObservationLikelihood
@@ -143,4 +143,31 @@ struct NegBinLikelihood{L <: LinkFunction, I, O} <: ExponentialFamilyLikelihood{
     r::Float64
     indices::I
     logexposure::O
+end
+
+"""
+    GammaLikelihood{L<:LinkFunction, I} <: ExponentialFamilyLikelihood{L, I}
+
+Materialized Gamma observation likelihood using the mean-shape parameterization.
+
+Uses Var(y) = μ²/φ, where φ is the shape parameter. Larger φ means less dispersion.
+
+# Fields
+- `link::L`: Link function connecting latent field to mean parameter
+- `y::Vector{Float64}`: Continuous positive observations
+- `phi::Float64`: Shape parameter (φ > 0; controls precision)
+- `indices::I`: Indices of the latent field corresponding to the observations
+
+# Example
+```julia
+obs_model = ExponentialFamily(Gamma)
+obs_lik = obs_model([1.5, 0.3, 4.2]; phi=3.0)
+ll = loglik([0.4, -1.2, 1.4], obs_lik)
+```
+"""
+struct GammaLikelihood{L <: LinkFunction, I} <: ExponentialFamilyLikelihood{L, I}
+    link::L
+    y::Vector{Float64}
+    phi::Float64
+    indices::I
 end

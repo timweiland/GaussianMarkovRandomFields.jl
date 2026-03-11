@@ -120,6 +120,7 @@ _default_link(::Type{<:Poisson}) = LogLink()
 _default_link(::Type{<:Bernoulli}) = LogitLink()
 _default_link(::Type{<:Binomial}) = LogitLink()
 _default_link(::Type{<:NegativeBinomial}) = LogLink()
+_default_link(::Type{<:Gamma}) = LogLink()
 
 """
     conditional_distribution(obs_model::ExponentialFamily, x; θ_named...) -> Distribution
@@ -196,6 +197,10 @@ function conditional_distribution(obs_model::ExponentialFamily{NegativeBinomial}
     return product_distribution(NegativeBinomial.(r, p))
 end
 
+function _conditional_distribution_family(::Type{<:Gamma}, μ; phi, kwargs...)
+    return product_distribution(Gamma.(phi, μ ./ phi))
+end
+
 function conditional_distribution(obs_model::ExponentialFamily{Poisson}, x; offset = nothing, kwargs...)
     # Offsets are only supported for Poisson with LogLink (log-exposure)
     if (offset !== nothing) && !(obs_model.link isa LogLink)
@@ -235,12 +240,24 @@ function (obs_model::ExponentialFamily{NegativeBinomial, L, I})(y::NegativeBinom
     return NegBinLikelihood(obs_model.link, y.counts, Float64(r), obs_model.indices, y.logexposure)
 end
 
+function (obs_model::ExponentialFamily{Gamma, L, I})(y; phi, kwargs...) where {L, I}
+    phi > 0 || error("Gamma shape parameter phi must be positive (got $phi)")
+    y_f64 = Float64.(y)
+    for i in eachindex(y_f64)
+        if y_f64[i] <= 0
+            error("Gamma observations must be positive at index $i (got $(y_f64[i]))")
+        end
+    end
+    return GammaLikelihood(obs_model.link, y_f64, Float64(phi), obs_model.indices)
+end
+
 # Hyperparameter interface implementations
 hyperparameters(::ExponentialFamily{<:Normal}) = (:σ,)
 hyperparameters(::ExponentialFamily{<:Bernoulli}) = ()
 hyperparameters(::ExponentialFamily{<:Binomial}) = ()  # No hyperparameters - trials are data
 hyperparameters(::ExponentialFamily{<:Poisson}) = ()
 hyperparameters(::ExponentialFamily{<:NegativeBinomial}) = (:r,)
+hyperparameters(::ExponentialFamily{<:Gamma}) = (:phi,)
 
 """
     latent_dimension(ef::ExponentialFamily, y::AbstractVector) -> Int

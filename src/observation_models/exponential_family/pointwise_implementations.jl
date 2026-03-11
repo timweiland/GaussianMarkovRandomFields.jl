@@ -100,3 +100,17 @@ function _pointwise_logpdf!(result, lik::NegBinLikelihood, μ)
     end
     return result
 end
+
+# GammaLikelihood
+function _pointwise_logpdf(lik::GammaLikelihood, μ)
+    phi = lik.phi
+    return logpdf.(Gamma.(phi, μ ./ phi), lik.y)
+end
+
+function _pointwise_logpdf!(result, lik::GammaLikelihood, μ)
+    phi = lik.phi
+    @inbounds for i in eachindex(result, μ, lik.y)
+        result[i] = logpdf(Gamma(phi, μ[i] / phi), lik.y[i])
+    end
+    return result
+end

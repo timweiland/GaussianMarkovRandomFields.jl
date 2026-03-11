@@ -151,6 +151,8 @@ function GaussianMarkovRandomFields.build_formula_components(
         else
             y = NegativeBinomialObservations(y)
         end
+    elseif family == Distributions.Gamma
+        y = Float64.(y)
     end
 
     # Partition terms
