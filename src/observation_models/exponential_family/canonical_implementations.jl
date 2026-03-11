@@ -60,12 +60,6 @@ function _construct_distribution(lik::BinomialLikelihood, μ)
     return product_distribution(Binomial.(lik.n, μ))
 end
 
-function _construct_distribution(lik::NegBinLikelihood, μ)
-    r = lik.r
-    p = r ./ (r .+ μ)
-    return product_distribution(NegativeBinomial.(r, p))
-end
-
 # ----------------------------- Specialized loglik for NegBin --------------------------
 
 """

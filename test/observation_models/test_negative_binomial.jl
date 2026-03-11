@@ -33,6 +33,19 @@ using SparseArrays
             @test y[2] == (1, 0.5)
         end
 
+        @testset "Range indexing and iteration" begin
+            y = NegativeBinomialObservations([3, 1, 8], [2.0, 0.5, 1.0])
+            @test y[1:2] == [(3, 2.0), (1, 0.5)]
+            collected = collect(y)
+            @test collected == [(3, 2.0), (1, 0.5), (8, 1.0)]
+        end
+
+        @testset "Property access" begin
+            y = NegativeBinomialObservations([3, 1], [2.0, 0.5])
+            @test y.exposure ≈ [2.0, 0.5]
+            @test y.counts == [3, 1]
+        end
+
         @testset "Validation" begin
             @test_throws ErrorException NegativeBinomialObservations([-1, 2])
             @test_throws ErrorException NegativeBinomialObservations([1, 2], [0.0, 1.0])
@@ -188,6 +201,11 @@ using SparseArrays
 
         # Sum matches total loglik
         @test sum(pw) ≈ loglik(η, lik) atol = 1.0e-10
+
+        # In-place version
+        result = zeros(5)
+        pointwise_loglik!(result, η, lik)
+        @test result ≈ pw atol = 1.0e-10
     end
 
     # ============================================================
@@ -236,6 +254,10 @@ using SparseArrays
         samples_off = rand(dist_off)
         @test length(samples_off) == 3
         @test all(s -> s >= 0, samples_off)
+
+        # Offset with non-LogLink should error
+        ef_id = ExponentialFamily(NegativeBinomial, IdentityLink())
+        @test_throws ArgumentError conditional_distribution(ef_id, abs.(η) .+ 1.0; r = 5.0, offset = [0.1, 0.2, 0.3])
     end
 
     # ============================================================
