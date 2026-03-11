@@ -37,7 +37,9 @@ model_name
 
 ```@docs
 AR1Model
+RWModel
 RW1Model
+RW2Model
 ```
 
 ### Spatial Models
