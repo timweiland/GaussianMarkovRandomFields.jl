@@ -118,6 +118,7 @@ ll = loglik(x, obs_lik)
 | Binomial          | LogitLink      | IdentityLink     | none*            |
 | NegativeBinomial  | LogLink        | IdentityLink     | r (shape/size)   |
 | Gamma             | LogLink        | IdentityLink     | phi (shape)      |
+| TDist             | IdentityLink   | LogLink          | σ (scale), ν (d.f.) |
 
 *For Binomial, the number of trials is provided through the data structure `BinomialObservations`, not as a hyperparameter.
 
@@ -385,6 +386,34 @@ f = @formula(y ~ 1 + x)
 comp = build_formula_components(f, df; family=Gamma)
 ```
 
+### Student-t Observations
+
+For continuous data with potential outliers, the Student-t observation model provides a robust alternative to Normal. It uses the unit-variance parameterization where Var(y) = σ² for all ν > 2, so σ has the same interpretation as Normal's standard deviation:
+
+```julia
+# Continuous observations (can be negative, unlike Gamma)
+y = [1.5, -0.3, 4.2, 0.8, -2.1]
+
+# Use with Student-t model — σ is the scale, ν is degrees of freedom (ν > 2)
+t_model = ExponentialFamily(TDist)  # IdentityLink by default
+obs_lik = t_model(y; σ=2.0, ν=4.0)
+
+# Evaluate
+x = randn(5)  # Latent field (direct mean due to IdentityLink)
+ll = loglik(x, obs_lik)
+```
+
+As ν → ∞, the Student-t converges to Normal, so you can swap `Normal` for `TDist` and keep σ.
+
+When using the formula interface:
+
+```julia
+using StatsModels
+df = (y = [1.5, -0.3, 4.2], x = [0.1, 0.2, 0.15])
+f = @formula(y ~ 1 + x)
+comp = build_formula_components(f, df; family=TDist)
+```
+
 ### Binomial Observations
 
 For binomial data, use the `BinomialObservations` utility:
@@ -460,6 +489,7 @@ BernoulliLikelihood
 BinomialLikelihood
 NegBinLikelihood
 GammaLikelihood
+StudentTLikelihood
 ```
 
 ### Link Functions

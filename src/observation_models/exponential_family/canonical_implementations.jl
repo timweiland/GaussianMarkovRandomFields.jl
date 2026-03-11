@@ -2,6 +2,7 @@ using LinearAlgebra
 using StatsFuns
 using Distributions
 using Distributions: product_distribution
+using SpecialFunctions: loggamma
 
 # =======================================================================================
 # EXPONENTIAL FAMILY IMPLEMENTATIONS: Generic loglik + specialized gradients/hessians
@@ -64,6 +65,10 @@ function _construct_distribution(lik::GammaLikelihood, μ)
     return product_distribution(Gamma.(lik.phi, μ ./ lik.phi))
 end
 
+function _construct_distribution(lik::StudentTLikelihood, μ)
+    return product_distribution(μ .+ lik.σ_eff .* TDist(lik.ν))
+end
+
 # ----------------------------- Specialized loglik for NegBin --------------------------
 
 """
@@ -71,7 +76,7 @@ end
 
 Fast implementation for Negative Binomial likelihood that avoids product_distribution overhead.
 
-Computes: ∑ᵢ [lgamma(yᵢ+r) - lgamma(r) - lgamma(yᵢ+1) + r·log(r) + yᵢ·log(μᵢ) - (r+yᵢ)·log(r+μᵢ)]
+Computes: ∑ᵢ [loggamma(yᵢ+r) - loggamma(r) - loggamma(yᵢ+1) + r·log(r) + yᵢ·log(μᵢ) - (r+yᵢ)·log(r+μᵢ)]
 """
 function loglik(x, lik::NegBinLikelihood)
     y = lik.y
@@ -80,10 +85,10 @@ function loglik(x, lik::NegBinLikelihood)
     μ = _mu(lik, η)
 
     ll = zero(eltype(μ))
-    lgamma_r = lgamma(r)
+    loggamma_r = loggamma(r)
     r_log_r = r * log(r)
     @inbounds for i in eachindex(y)
-        ll += lgamma(y[i] + r) - lgamma_r - lgamma(y[i] + 1) +
+        ll += loggamma(y[i] + r) - loggamma_r - loggamma(y[i] + 1) +
             r_log_r + y[i] * log(μ[i]) - (r + y[i]) * log(r + μ[i])
     end
     return ll
@@ -106,9 +111,34 @@ function loglik(x, lik::GammaLikelihood)
 
     n = length(y)
     phi_m1 = phi - 1
-    ll = n * (phi * log(phi) - lgamma(phi))
+    ll = n * (phi * log(phi) - loggamma(phi))
     @inbounds for i in eachindex(y)
         ll += phi_m1 * log(y[i]) - phi * log(μ[i]) - phi * y[i] / μ[i]
+    end
+    return ll
+end
+
+# ----------------------------- Specialized loglik for Student-t --------------------------
+
+"""
+    loglik(x, lik::StudentTLikelihood) -> Float64
+
+Fast implementation for Student-t likelihood using the unit-variance parameterization.
+
+Computes: ∑ᵢ [loggamma((ν+1)/2) − loggamma(ν/2) − 0.5log(π(ν−2)) − log(σ)
+               − (ν+1)/2 · log(1 + (yᵢ − μᵢ)² / (σ²(ν−2)))]
+"""
+function loglik(x, lik::StudentTLikelihood)
+    y = lik.y
+    w = lik.w
+    η = _eta(lik, x)
+    μ = _mu(lik, η)
+
+    n = length(y)
+    half_νp1 = lik.νp1 / 2
+    ll = n * (loggamma(half_νp1) - loggamma(lik.ν / 2) - 0.5 * log(π * (lik.ν - 2)) - log(lik.σ))
+    @inbounds for i in eachindex(y)
+        ll -= half_νp1 * log(1 + (y[i] - μ[i])^2 / w)
     end
     return ll
 end
@@ -199,6 +229,22 @@ function loggrad(x, lik::GammaLikelihood{LogLink})
     return _embed_grad(lik, g_obs, length(x))
 end
 
+"""
+    loggrad(x, lik::StudentTLikelihood{IdentityLink}) -> Vector{Float64}
+
+Compute gradient of Student-t likelihood with canonical identity link w.r.t. latent field x.
+
+∂ℓ/∂ηᵢ = (ν+1)(yᵢ − ηᵢ) / (w + (yᵢ − ηᵢ)²)  where w = σ²(ν−2)
+"""
+function loggrad(x, lik::StudentTLikelihood{IdentityLink})
+    y = lik.y
+    w = lik.w
+    νp1 = lik.νp1
+    η = _eta(lik, x)
+    g_obs = @. νp1 * (y - η) / (w + (y - η)^2)
+    return _embed_grad(lik, g_obs, length(x))
+end
+
 # ----------------------------- loghessian methods for canonical links --------------------------
 
 """
@@ -277,5 +323,23 @@ function loghessian(x, lik::GammaLikelihood{LogLink})
     η = _eta(lik, x)
     μ = _mu(lik, η)
     d_obs = @. -phi * y / μ
+    return _embed_diag(lik, d_obs, length(x))
+end
+
+"""
+    loghessian(x, lik::StudentTLikelihood{IdentityLink}) -> Diagonal{Float64}
+
+Compute Hessian of Student-t likelihood with canonical identity link w.r.t. latent field x.
+
+∂²ℓ/∂ηᵢ² = (ν+1)((yᵢ − ηᵢ)² − w) / (w + (yᵢ − ηᵢ)²)²  where w = σ²(ν−2)
+
+Note: Can be positive when |y−η| > σ√(ν−2) — the Student-t log-likelihood is NOT globally concave.
+"""
+function loghessian(x, lik::StudentTLikelihood{IdentityLink})
+    y = lik.y
+    w = lik.w
+    νp1 = lik.νp1
+    η = _eta(lik, x)
+    d_obs = @. νp1 * ((y - η)^2 - w) / (w + (y - η)^2)^2
     return _embed_diag(lik, d_obs, length(x))
 end

@@ -1,4 +1,4 @@
-export ExponentialFamilyLikelihood, NormalLikelihood, PoissonLikelihood, BernoulliLikelihood, BinomialLikelihood, NegBinLikelihood, GammaLikelihood
+export ExponentialFamilyLikelihood, NormalLikelihood, PoissonLikelihood, BernoulliLikelihood, BinomialLikelihood, NegBinLikelihood, GammaLikelihood, StudentTLikelihood
 
 """
     ExponentialFamilyLikelihood{L, I} <: ObservationLikelihood
@@ -169,5 +169,39 @@ struct GammaLikelihood{L <: LinkFunction, I} <: ExponentialFamilyLikelihood{L, I
     link::L
     y::Vector{Float64}
     phi::Float64
+    indices::I
+end
+
+"""
+    StudentTLikelihood{L<:LinkFunction, I} <: ExponentialFamilyLikelihood{L, I}
+
+Materialized Student-t observation likelihood using the unit-variance parameterization.
+
+Uses the unit-variance parameterization where Var(y) = σ² for all ν > 2, achieved by
+rescaling the standard t-distribution by √((ν−2)/ν). This makes σ directly comparable
+to the Normal standard deviation — users can swap `Normal` for `TDist` and keep σ.
+
+# Fields
+- `link::L`: Link function connecting latent field to location parameter
+- `y::Vector{Float64}`: Continuous observations
+- `σ::Float64`: Scale parameter (σ > 0; same interpretation as Normal's σ)
+- `ν::Float64`: Degrees of freedom (ν > 2; required for finite variance)
+- `indices::I`: Indices of the latent field corresponding to the observations
+
+# Example
+```julia
+obs_model = ExponentialFamily(TDist)
+obs_lik = obs_model([1.5, -0.3, 4.2]; σ=2.0, ν=4.0)
+ll = loglik([0.4, -1.2, 1.4], obs_lik)
+```
+"""
+struct StudentTLikelihood{L <: LinkFunction, I} <: ExponentialFamilyLikelihood{L, I}
+    link::L
+    y::Vector{Float64}
+    σ::Float64
+    ν::Float64
+    w::Float64       # Precomputed: σ²(ν−2)
+    νp1::Float64     # Precomputed: ν+1
+    σ_eff::Float64   # Precomputed: σ√((ν−2)/ν)
     indices::I
 end
