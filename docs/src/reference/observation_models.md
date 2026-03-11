@@ -110,12 +110,13 @@ ll = loglik(x, obs_lik)
 
 ### Supported Distributions and Links
 
-| Distribution | Canonical Link | Alternative Links | Hyperparameters |
-|-------------|----------------|-------------------|------------------|
-| Normal      | IdentityLink   | LogLink          | σ (std. dev.)    |
-| Poisson     | LogLink        | IdentityLink     | none             |
-| Bernoulli   | LogitLink      | LogLink          | none             |
-| Binomial    | LogitLink      | IdentityLink     | none*            |
+| Distribution      | Canonical Link | Alternative Links | Hyperparameters |
+|-------------------|----------------|-------------------|------------------|
+| Normal            | IdentityLink   | LogLink          | σ (std. dev.)    |
+| Poisson           | LogLink        | IdentityLink     | none             |
+| Bernoulli         | LogitLink      | LogLink          | none             |
+| Binomial          | LogitLink      | IdentityLink     | none*            |
+| NegativeBinomial  | LogLink        | IdentityLink     | r (shape/size)   |
 
 *For Binomial, the number of trials is provided through the data structure `BinomialObservations`, not as a hyperparameter.
 
@@ -328,6 +329,35 @@ f = @formula(y ~ 1 + x)
 comp = build_formula_components(f, df; family=Poisson, exposure=:pop)
 ```
 
+### Negative Binomial Observations
+
+For overdispersed count data, use the `NegativeBinomialObservations` utility with the NB2 parameterization (Var(y) = μ + μ²/r):
+
+```julia
+# Create NB observations with counts and exposure
+counts = [5, 12, 8, 3]
+exposure = [100.0, 150.0, 120.0, 80.0]
+y = NegativeBinomialObservations(counts, exposure)
+
+# Or with unit exposure
+y = NegativeBinomialObservations(counts)
+
+# Use with NegativeBinomial model — r is the shape/overdispersion parameter
+nb_model = ExponentialFamily(NegativeBinomial)  # LogLink by default
+obs_lik = nb_model(y; r=5.0)
+
+# As r → ∞, NB2 converges to Poisson
+```
+
+When using the formula interface:
+
+```julia
+using StatsModels
+df = (y = [5, 12, 8], pop = [100.0, 150.0, 120.0], x = [0.1, 0.2, 0.15])
+f = @formula(y ~ 1 + x)
+comp = build_formula_components(f, df; family=NegativeBinomial, exposure=:pop)
+```
+
 ### Binomial Observations
 
 For binomial data, use the `BinomialObservations` utility:
@@ -401,6 +431,7 @@ NormalLikelihood
 PoissonLikelihood
 BernoulliLikelihood
 BinomialLikelihood
+NegBinLikelihood
 ```
 
 ### Link Functions
@@ -435,6 +466,7 @@ PointSecondDerivativeObsModel
 LinearlyTransformedObservationModel
 LinearlyTransformedLikelihood
 PoissonObservations
+NegativeBinomialObservations
 counts
 exposure
 BinomialObservations

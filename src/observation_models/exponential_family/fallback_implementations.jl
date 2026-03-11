@@ -94,3 +94,18 @@ function _loghessian_diagonal_family(lik::BinomialLikelihood, μ, dμ_dη, d2μ_
     dl_dmu = (y ./ μ) .- ((n .- y) ./ (1 .- μ))
     return d2l_dmu2 .* (dμ_dη .^ 2) .+ dl_dmu .* d2μ_dη²
 end
+
+function _loggrad_family(lik::NegBinLikelihood, μ, dμ_dη)
+    y = lik.y
+    r = lik.r
+    # ∂ℓ/∂μ = y/μ - (r+y)/(r+μ)
+    return @. (y / μ - (r + y) / (r + μ)) * dμ_dη
+end
+
+function _loghessian_diagonal_family(lik::NegBinLikelihood, μ, dμ_dη, d2μ_dη²)
+    y = lik.y
+    r = lik.r
+    # ∂²ℓ/∂μ² = -y/μ² + (r+y)/(r+μ)²
+    # ∂ℓ/∂μ = y/μ - (r+y)/(r+μ)
+    return @. (-y / μ^2 + (r + y) / (r + μ)^2) * dμ_dη^2 + (y / μ - (r + y) / (r + μ)) * d2μ_dη²
+end

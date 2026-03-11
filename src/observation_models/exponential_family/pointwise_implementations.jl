@@ -84,3 +84,19 @@ function _pointwise_logpdf!(result, lik::BinomialLikelihood, μ)
     end
     return result
 end
+
+# NegBinLikelihood
+function _pointwise_logpdf(lik::NegBinLikelihood, μ)
+    r = lik.r
+    p = r ./ (r .+ μ)
+    return logpdf.(NegativeBinomial.(r, p), lik.y)
+end
+
+function _pointwise_logpdf!(result, lik::NegBinLikelihood, μ)
+    r = lik.r
+    @inbounds for i in eachindex(result, μ, lik.y)
+        p = r / (r + μ[i])
+        result[i] = logpdf(NegativeBinomial(r, p), lik.y[i])
+    end
+    return result
+end
