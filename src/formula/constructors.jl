@@ -1,4 +1,4 @@
-export IID, RandomWalk, AR1, Besag, BYM2, Separable, build_formula_components
+export IID, RandomWalk, AR1, AR, Besag, BYM2, Separable, build_formula_components
 
 """
     build_formula_components(formula, data; kwargs...)
@@ -139,6 +139,47 @@ struct AR1
 end
 
 (::AR1)(args...) = error("AR1(...) functor is only intended for use inside @formula; not callable directly.")
+
+"""
+    AR(order=1; constraint = nothing)
+
+Formula functor for autoregressive random effects of any order, using the PACF parameterization.
+
+# Arguments
+- `order`: Order of the AR process (default: 1). Order 1 uses `ρ` as the correlation parameter;
+  order 2+ uses `pacf1, pacf2, ...` (partial autocorrelations, each in (-1, 1)).
+- `constraint`: Optional constraint specification (`:sumtozero`, `(A, e)`, or `nothing`).
+
+# Usage
+```julia
+# AR(1) — equivalent to AR1()
+ar1 = AR(1)
+@formula(y ~ 0 + ar1(time))
+
+# AR(2) for cyclical patterns
+ar2 = AR(2)
+@formula(y ~ 0 + ar2(time))
+```
+
+# Notes
+- The k-th PACF value is the correlation between x[t] and x[t-k] after removing the
+  linear effect of the intervening lags. They are converted to AR coefficients internally
+  via the Durbin-Levinson recursion.
+- Stationarity is guaranteed when all PACF values are in (-1, 1)
+- You must create an AR instance before using it in a formula
+- Calling the functor directly is unsupported outside formula parsing
+"""
+struct AR
+    order::Int
+    constraint::Union{Nothing, Symbol, Tuple{AbstractMatrix, AbstractVector}}
+
+    function AR(order::Integer = 1; constraint = nothing)
+        order > 0 || throw(ArgumentError("AR order must be positive"))
+        return new(Int(order), constraint)
+    end
+end
+
+(::AR)(args...) = error("AR(...) functor is only intended for use inside @formula; not callable directly.")
 
 """
     Besag(W; id_to_node = nothing, normalize_var = true, singleton_policy = :gaussian)

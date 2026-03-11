@@ -1,6 +1,6 @@
 include("test_latent_model.jl")
 include("test_utils.jl")
-include("test_ar1.jl")
+include("test_ar.jl")
 include("test_rw.jl")
 include("test_iid.jl")
 include("test_besag.jl")
