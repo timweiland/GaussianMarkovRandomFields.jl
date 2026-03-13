@@ -28,6 +28,29 @@ _apply_constraints(gmrf::GMRF, constraints::NamedTuple) = ConstrainedGMRF(gmrf, 
 _base_gmrf(gmrf::GMRF) = gmrf
 _base_gmrf(constrained::ConstrainedGMRF) = constrained.base_gmrf
 
+# Compute the constrained Newton step via the KKT Schur complement.
+# Solves H⁻¹Aᵀ using the existing linsolve cache (m sparse solves, m = #constraints),
+# then removes the constraint-normal component so AΔx = 0.
+_constrain_step(step, cache, ::Nothing) = step
+function _constrain_step(step, cache, constraints::NamedTuple)
+    A = constraints.A
+    m = size(A, 1)
+    n = length(step)
+
+    # Solve H · X = Aᵀ column-by-column (reuses current cache factorization)
+    A_tilde_T = Matrix{eltype(step)}(undef, n, m)
+    saved_b = copy(cache.b)
+    for i in 1:m
+        cache.b .= @view(A[i, :])
+        A_tilde_T[:, i] .= solve!(cache).u
+    end
+    cache.b .= saved_b
+
+    # Schur complement: remove constraint-normal component
+    L_c = cholesky(Symmetric(A * A_tilde_T))
+    return step - A_tilde_T * (L_c \ (A * step))
+end
+
 # Set the matrix in the linsolve cache to Q
 _update_linsolve_cache!(cache, Q) = _update_linsolve_cache_inner!(cache, Q, cache.alg)
 
@@ -124,6 +147,11 @@ function gaussian_approximation(
         cache.b = neg_score_k
         step = solve!(cache).u
 
+        # For constrained problems, project step onto constraint tangent space
+        # via the KKT Schur complement (m sparse solves, m = #constraints).
+        # This ensures A*step = 0, so x_k - α*step stays on the manifold.
+        step = _constrain_step(step, cache, constraints)
+
         # Apply step with adaptive line search or full step
         if adaptive_stepsize
             obj_current = neg_log_posterior(base_gmrf, obs_lik, x_k)
@@ -160,24 +188,18 @@ function gaussian_approximation(
             μ_new = x_k - step
         end
 
+        # Newton decrement: dot(g, constrained_step) = -g'Δx_nt = Δx_nt'HΔx_nt ≥ 0
         newton_decrement = dot(neg_score_k, step)
 
-        # Update cache matrix and create new GMRF with updated precision
-        new_gmrf = GMRF(μ_new, Q_new; linsolve_cache = cache)
-
-        # Apply constraints if present (no-op for regular GMRF)
-        result = _apply_constraints(new_gmrf, constraints)
-
-        # Get mean for convergence check (projects if constrained)
-        x_new = mean(result)
-
+        x_new = μ_new
         mean_change = norm(x_new - x_k)
         mean_change_rel = mean_change / norm(x_k)
 
         verbose && println("  Iter $iter: Newton dec = $(round(newton_decrement, sigdigits = 3)), α = $(round(α, digits = 3))")
         if (newton_decrement < newton_dec_tol) || (mean_change < mean_change_tol) || (mean_change_rel < mean_change_tol)
             verbose && println("  Converged after $iter iterations")
-            return result
+            new_gmrf = GMRF(x_new, Q_new; linsolve_cache = cache)
+            return _apply_constraints(new_gmrf, constraints)
         end
 
         # Update for next iteration
