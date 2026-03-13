@@ -89,6 +89,7 @@ posterior_gmrf = gaussian_approximation(prior_gmrf, obs_lik; adaptive_stepsize=f
 function gaussian_approximation(
         prior_gmrf::Union{GMRF, ConstrainedGMRF},
         obs_lik::ObservationLikelihood;
+        x0::Union{Nothing, AbstractVector} = nothing,
         max_iter::Int = 50,
         mean_change_tol::Real = 1.0e-4,
         newton_dec_tol::Real = 1.0e-5,
@@ -100,8 +101,8 @@ function gaussian_approximation(
     base_gmrf = _base_gmrf(prior_gmrf)
     constraints = _extract_constraints(prior_gmrf)
 
-    # Initialize with prior mean
-    x_k = mean(prior_gmrf)
+    # Initialize with provided starting point or prior mean
+    x_k = x0 === nothing ? mean(prior_gmrf) : copy(x0)
 
     cache = deepcopy(linsolve_cache(base_gmrf))
     Q_base = cache.A
