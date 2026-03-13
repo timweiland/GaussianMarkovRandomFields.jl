@@ -84,6 +84,67 @@ using Distributions
         @test A_multi * mean(result) ≈ e_multi atol = 1.0e-10
     end
 
+    @testset "Constrained Newton convergence - Poisson" begin
+        # Bug 1: Newton decrement uses unprojected gradient, so it never
+        # triggers for constrained models. Isolate by setting mean_change_tol = 0
+        # and mean_change_rel implicitly disabled (mean_change_tol = 0 handles both).
+        # Use a larger problem where the backup criterion isn't enough.
+        n_p = 25
+        W_p = spzeros(n_p, n_p)
+        for i in 1:(n_p - 1)
+            W_p[i, i + 1] = W_p[i + 1, i] = 1.0
+        end
+        besag_p = BesagModel(W_p)
+        prior_p = besag_p(τ = 2.0)
+
+        obs_model_p = ExponentialFamily(Poisson)
+        y_p = PoissonObservations(
+            [8, 3, 12, 1, 6, 15, 2, 9, 4, 11, 7, 3, 14, 5, 8, 2, 10, 6, 13, 1, 7, 4, 9, 11, 5]
+        )
+        obs_lik_p = obs_model_p(y_p)
+
+        # With mean_change_tol = 0, convergence MUST come from newton_dec_tol.
+        # Before the fix, this hits max_iter every time.
+        # After the fix, it should converge well before max_iter = 50.
+        result_50 = gaussian_approximation(
+            prior_p, obs_lik_p;
+            newton_dec_tol = 1.0e-6, mean_change_tol = 0.0, max_iter = 50
+        )
+        result_15 = gaussian_approximation(
+            prior_p, obs_lik_p;
+            newton_dec_tol = 1.0e-6, mean_change_tol = 0.0, max_iter = 15
+        )
+
+        @test result_50 isa ConstrainedGMRF
+        @test sum(mean(result_50)) ≈ 0.0 atol = 1.0e-10
+        # If newton_dec_tol actually triggers, both should give the same answer
+        @test mean(result_15) ≈ mean(result_50) atol = 1.0e-6
+    end
+
+    @testset "Constrained solution independent of max_iter" begin
+        # Bugs 1+2 combined: for a Besag + Poisson problem, the solver should
+        # converge well before 20 iters when both bugs are fixed.
+        n_m = 16
+        W_m = spzeros(n_m, n_m)
+        nr_m, nc_m = 4, 4
+        for i in 1:nr_m, j in 1:nc_m
+            node = (i - 1) * nc_m + j
+            j < nc_m && (W_m[node, node + 1] = W_m[node + 1, node] = 1.0)
+            i < nr_m && (W_m[node, node + nc_m] = W_m[node + nc_m, node] = 1.0)
+        end
+        besag_m = BesagModel(W_m)
+        prior_m = besag_m(τ = 3.0)
+
+        obs_model_m = ExponentialFamily(Poisson)
+        y_m = PoissonObservations([5, 2, 8, 1, 4, 10, 3, 6, 7, 12, 2, 9, 4, 11, 3, 8])
+        obs_lik_m = obs_model_m(y_m)
+
+        ga_20 = gaussian_approximation(prior_m, obs_lik_m; max_iter = 20)
+        ga_50 = gaussian_approximation(prior_m, obs_lik_m; max_iter = 50)
+
+        @test mean(ga_20) ≈ mean(ga_50) atol = 1.0e-8
+    end
+
     @testset "Conjugate cases" begin
         # Test linear_condition dispatch (use sparse matrices to avoid type issues)
         A_obs = sparse([1.0 0.0 1.0 0.0; 0.0 1.0 0.0 1.0])  # Observe pairs (sparse)
