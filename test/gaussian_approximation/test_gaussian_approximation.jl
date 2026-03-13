@@ -347,6 +347,43 @@ using Distributions
         @test precision_matrix(result)[1, 1] > 0
     end
 
+    @testset "Warm-start with x0 keyword" begin
+        # Setup: Poisson with moderate counts so Newton needs a few iterations
+        n = 6
+        Q_prior = Diagonal(1.0 * ones(n))
+        prior_gmrf = GMRF(zeros(n), Q_prior)
+
+        obs_model = ExponentialFamily(Poisson)
+        y = PoissonObservations([5, 12, 2, 8, 15, 3])
+        obs_lik = obs_model(y)
+
+        # Cold-start result (baseline)
+        result_cold = gaussian_approximation(prior_gmrf, obs_lik)
+        x_star = mean(result_cold)
+
+        @testset "x0 produces equivalent result when starting from converged mode" begin
+            result_warm = gaussian_approximation(prior_gmrf, obs_lik; x0 = x_star)
+            @test mean(result_warm) ≈ x_star atol = 1.0e-3
+            @test precision_matrix(result_warm) ≈ precision_matrix(result_cold) atol = 1.0e-2
+        end
+
+        @testset "x0 = nothing gives same result as default" begin
+            result_default = gaussian_approximation(prior_gmrf, obs_lik; x0 = nothing)
+            @test mean(result_default) ≈ x_star atol = 1.0e-10
+        end
+
+        @testset "warm-start converges faster" begin
+            # Warm start from the converged mode should be faster than cold start
+            t_cold = @elapsed for _ in 1:20
+                gaussian_approximation(prior_gmrf, obs_lik)
+            end
+            t_warm = @elapsed for _ in 1:20
+                gaussian_approximation(prior_gmrf, obs_lik; x0 = x_star)
+            end
+            @test t_warm < t_cold
+        end
+    end
+
     @testset "Adaptive stepsize - multiple extreme Poisson" begin
         # Multi-dimensional case with varying extreme counts
         n = 5
