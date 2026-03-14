@@ -145,7 +145,7 @@ function gaussian_approximation(
         _update_linsolve_cache!(cache, Q_new)
         neg_score_k = ∇ₓ_neg_log_posterior(base_gmrf, obs_lik, x_k)
         cache.b = neg_score_k
-        step = solve!(cache).u
+        step = copy(solve!(cache).u)
 
         # For constrained problems, project step onto constraint tangent space
         # via the KKT Schur complement (m sparse solves, m = #constraints).
