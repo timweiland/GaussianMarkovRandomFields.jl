@@ -116,10 +116,25 @@ function precision_matrix(model::SeparableModel; kwargs...)
     # Compute precision matrices for each component
     Qs = [precision_matrix(comp; comp_kwargs[i]...) for (i, comp) in enumerate(model.components)]
 
-    # Return Kronecker product using LinearMaps
-    # For SeparableModel([comp1, comp2]), we compute: Q1 ⊗ Q2
+    # Kronecker product: Q1 ⊗ Q2
     # This matches the mean vectorization (comp2 varying fastest)
-    return foldl(kron, Qs)
+    Q = foldl(kron, Qs)
+
+    # When multiple components are rank-deficient (have constraints), the individual
+    # component regularizations (ε*I added by RW/Besag) get diluted through the
+    # Kronecker product: (Q1 + εI) ⊗ (Q2 + εI) only provides ε²*I⊗I regularization
+    # to the joint null space. Re-apply regularization so the constrained GMRF solver
+    # remains well-conditioned.
+    n_constrained = count(((i, comp),) -> constraints(comp; comp_kwargs[i]...) !== nothing, enumerate(model.components))
+    if n_constrained >= 2
+        regs = [comp.regularization for comp in model.components if hasfield(typeof(comp), :regularization)]
+        if !isempty(regs)
+            n = size(Q, 1)
+            Q = Q + maximum(regs) * sparse(I, n, n)
+        end
+    end
+
+    return Q
 end
 
 """
