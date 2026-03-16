@@ -1,6 +1,7 @@
 using LinearSolve
 using LinearAlgebra
 using SelectedInversion
+using SparseArrays: sparse, spdiagm
 
 export selinv
 

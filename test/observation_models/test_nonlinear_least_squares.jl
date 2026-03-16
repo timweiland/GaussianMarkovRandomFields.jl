@@ -1,4 +1,5 @@
-using Test
+using Test: @test, @test_throws
+using ReTest: @testset
 using GaussianMarkovRandomFields
 using Distributions
 
