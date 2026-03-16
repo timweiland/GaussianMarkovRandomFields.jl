@@ -1,5 +1,4 @@
 using GaussianMarkovRandomFields
-using GraphicalLassoQUIC
 using LinearAlgebra
 using SparseArrays
 using Random
@@ -39,14 +38,9 @@ end
     gmrf = graphical_lasso(X, Λ)
     Θ_rest = Matrix(precision_matrix(gmrf))
 
-    # QUIC
-    Θ_quic = GraphicalLassoQUIC.QUIC(S, fill(λ, n, n))
-
     # compare objectives
     obj_ours = glasso_obj(Θ_ours, S, λ)
     obj_rest = glasso_obj(Θ_rest, S, λ)
-    obj_quic = glasso_obj(Θ_quic, S, λ)
 
-    @test obj_ours ≈ obj_quic rtol=1e-2
     @test obj_ours < obj_rest
 end

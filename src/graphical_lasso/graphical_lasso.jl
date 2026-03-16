@@ -7,7 +7,7 @@ using SparseArrays: SparseMatrixCSC, sparse, nzrange, rowvals, nonzeros
 export graphical_lasso
 
 """
-    graphical_lasso(X::AbstractMatrix, threshold; blocksize::Int=256, alg=nothing)
+    graphical_lasso(X::AbstractMatrix, threshold; blocksize::Int=256, shift=zero(T), alg=nothing)
 
 Learn a GMRF from data by solving the graphical lasso problem:
 
@@ -15,14 +15,17 @@ Learn a GMRF from data by solving the graphical lasso problem:
     such that  Ω is positive definite
 
 where Σ is the sample covariance and Ω is the GMRF's precision matrix.
+
+`threshold` can be a scalar `λ` for uniform penalization, or a `SparseMatrixCSC`
+for per-entry penalties within a given sparsity pattern (restricted graphical lasso).
 """
 function graphical_lasso(X::AbstractMatrix{T}, threshold; blocksize::Int = 256, shift::T = zero(T), alg = nothing) where {T}
     # We will solve the graphical lasso problem using the approach in
     # Zhang, Fattahi, and Sojoudi: "Large-Scale Sparse Inverse Covariance
     # Estimation via Thresholding and Max-Det Matrix Completion".
     #
-    # First, we construct a truncated covariance matrix samle covariance matrix C.
-    # This is derived from the sample covariance matrix Σ via the followig formula:
+    # First, we construct a truncated covariance matrix from the sample covariance matrix C.
+    # This is derived from the sample covariance matrix Σ via the following formula:
     #
     #   Cij = { Σij - λ if Σij > λ
     #         { Σij + λ if Σij < -λ
@@ -48,11 +51,11 @@ end
 function soft_threshold_cov(X::AbstractMatrix{T}, threshold::T; blocksize::Int = 256, shift::T = zero(T)) where {T}
     m, n = size(X)
 
-    μ = vec(mean(X, dims=1))
+    μ = vec(mean(X, dims = 1))
 
     colptr = Vector{Int}(undef, n + 1)
     rowval = Int[]
-    nzval  = T[]
+    nzval = T[]
 
     block = Matrix{T}(undef, n, blocksize)
 
@@ -60,7 +63,7 @@ function soft_threshold_cov(X::AbstractMatrix{T}, threshold::T; blocksize::Int =
         jstop = min(jstart + blocksize - 1, n)
         jsize = jstop - jstart + 1
         jblock = view(block, :, 1:jsize)
-        mul!(jblock, X', view(X, :, jstart:jstop), 1/m, false)
+        mul!(jblock, X', view(X, :, jstart:jstop), 1 / m, false)
 
         for (k, j) in enumerate(jstart:jstop)
             colptr[j] = length(rowval) + 1
@@ -70,7 +73,7 @@ function soft_threshold_cov(X::AbstractMatrix{T}, threshold::T; blocksize::Int =
             push!(rowval, j)
             push!(nzval, Cjj)
 
-            for i in j + 1:n
+            for i in (j + 1):n
                 Cij = jblock[i, k] - μ[i] * μj
 
                 if Cij > threshold
@@ -92,11 +95,11 @@ end
 function soft_threshold_cov(X::AbstractMatrix{T}, threshold::SparseMatrixCSC{T}; blocksize::Int = 256, shift::T = zero(T)) where {T}
     m, n = size(X)
 
-    μ = vec(mean(X, dims=1))
+    μ = vec(mean(X, dims = 1))
 
     colptr = Vector{Int}(undef, n + 1)
     rowval = Int[]
-    nzval  = T[]
+    nzval = T[]
 
     block = Matrix{T}(undef, n, blocksize)
 
@@ -104,7 +107,7 @@ function soft_threshold_cov(X::AbstractMatrix{T}, threshold::SparseMatrixCSC{T};
         jstop = min(jstart + blocksize - 1, n)
         jsize = jstop - jstart + 1
         jblock = view(block, :, 1:jsize)
-        mul!(jblock, X', view(X, :, jstart:jstop), 1/m, false)
+        mul!(jblock, X', view(X, :, jstart:jstop), 1 / m, false)
 
         for (k, j) in enumerate(jstart:jstop)
             colptr[j] = length(rowval) + 1
