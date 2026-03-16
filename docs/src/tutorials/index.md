@@ -7,6 +7,7 @@ Pages = [
     "spatiotemporal_modelling.md",
     "boundary_conditions.md",
     "bernoulli_spatial_classification.md",
-    "bym_scotland_lip_cancer.md"
+    "bym_scotland_lip_cancer.md",
+    "graphical_lasso.md"
 ]
 ```

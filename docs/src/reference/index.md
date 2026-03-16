@@ -18,5 +18,6 @@ Pages = [
     "linear_maps.md",
     "preconditioners.md",
     "autodiff.md",
+    "graphical_lasso.md",
 ]
 ```
