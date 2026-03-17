@@ -19,6 +19,7 @@ makedocs(
             "tutorials/bym_scotland_lip_cancer.md",
             "tutorials/kl_approximation.md",
             "tutorials/automatic_differentiation.md",
+            "tutorials/graphical_lasso.md",
         ],
         "API Reference" => [
             "Overview" => "reference/index.md",
@@ -37,6 +38,7 @@ makedocs(
             "Autoregressive Models" => "reference/autoregressive.md",
             "Linear maps" => "reference/linear_maps.md",
             "Preconditioners" => "reference/preconditioners.md",
+            "Graphical Lasso" => "reference/graphical_lasso.md",
         ],
         "Bibliography" => "bibliography.md",
         "Developer Documentation" => [

@@ -1,11 +1,12 @@
 name = "GaussianMarkovRandomFields"
 uuid = "d5f06795-35bb-4323-9f0b-405ef76cfc5b"
-authors = ["Tim Weiland <hello@timwei.land> and contributors"]
 version = "0.10.0"
+authors = ["Tim Weiland <hello@timwei.land> and contributors"]
 
 [deps]
 AMD = "14f7f29c-3bd6-536c-9a0b-7339e30b5a3e"
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
+CliqueTrees = "60701a23-6482-424a-84db-faee86b9b1f8"
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
 DifferentiationInterface = "a0c0ee7d-e4b9-4e03-894e-1c5f64a51d63"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
@@ -24,6 +25,7 @@ Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SelectedInversion = "043bf095-3f01-458a-9f1c-8cf4448fe908"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsFuns = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
 Tensors = "48a634ad-e948-5137-8d70-aa71f2a747f4"
 
@@ -55,6 +57,7 @@ GaussianMarkovRandomFieldsSparseJacobian = ["Symbolics", "SparseDiffTools"]
 AMD = "0.5"
 Aqua = "0.8"
 ChainRulesCore = "1"
+CliqueTrees = "1.18.0"
 DataStructures = "0.14 - 0.19"
 DifferentiationInterface = "0.6, 0.7"
 Distributions = "0.25"
@@ -83,6 +86,7 @@ SparseConnectivityTracer = "1"
 SparseDiffTools = "2"
 SparseMatrixColorings = "0.4"
 SpecialFunctions = "2"
+Statistics = "1"
 StatsFuns = "1"
 StatsModels = "0.7"
 Symbolics = "5"
@@ -107,4 +111,4 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [targets]
-test = ["Aqua", "Enzyme", "FiniteDiff", "ForwardDiff", "LinearAlgebra", "ReTest", "SparseArrays", "SparseConnectivityTracer", "SparseMatrixColorings", "Test", "Zygote", "StatsModels", "Distributions"]
+test = ["Aqua", "Distributions", "Enzyme", "FiniteDiff", "ForwardDiff", "LinearAlgebra", "ReTest", "SparseArrays", "SparseConnectivityTracer", "SparseMatrixColorings", "StatsModels", "Test", "Zygote"]

@@ -16,6 +16,7 @@ include("latent_models/latent_models.jl")
 include("formula/constructors.jl")
 include("plots/makie.jl")
 include("kl_cholesky/base.jl")
+include("graphical_lasso/graphical_lasso.jl")
 include("autodiff/autodiff.jl")
 
 end
