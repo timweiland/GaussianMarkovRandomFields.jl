@@ -18,6 +18,9 @@ where Σ is the sample covariance and Ω is the GMRF's precision matrix.
 
 `threshold` can be a scalar `λ` for uniform penalization, or a `SparseMatrixCSC`
 for per-entry penalties within a given sparsity pattern (restricted graphical lasso).
+
+`shift` adds a constant to the diagonal of the sample covariance as regularization
+to improve convergence.
 """
 function graphical_lasso(X::AbstractMatrix{T}, threshold; blocksize::Int = 256, shift::T = zero(T), alg = nothing) where {T}
     # We will solve the graphical lasso problem using the approach in
