@@ -347,6 +347,62 @@ using Test
         @test maximum(rel_error) < 5.0e-2
     end
 
+    @testset "gaussian_approximation - Normal with differentiable σ" begin
+        Random.seed!(42)
+        k = 6
+        y = randn(k) .* 0.3 .+ 0.2
+        x = randn(k)
+
+        function normal_sigma_pipeline(θ, y, x, k)
+            ρ, μ_const, log_σ = θ
+            Q = ar_precision(ρ, k)
+            μ = μ_const * ones(k)
+            prior = GMRF(μ, Q, LinearSolve.CHOLMODFactorization())
+            obs_lik = ExponentialFamily(Normal)(y; σ = exp(log_σ))
+            posterior = gaussian_approximation(prior, obs_lik)
+            return logpdf(posterior, x)
+        end
+
+        θ = [0.3, 0.1, log(0.5)]  # [ρ, μ_const, log_σ]
+        grad_fwd = ForwardDiff.gradient(θ -> normal_sigma_pipeline(θ, y, x, k), θ)
+        grad_fin = FiniteDiff.finite_difference_gradient(θ -> normal_sigma_pipeline(θ, y, x, k), θ)
+
+        abs_error = abs.(grad_fwd - grad_fin)
+        rel_error = abs_error ./ (abs.(grad_fin) .+ 1.0e-10)
+
+        @test maximum(abs_error) < 1.0e-3
+        @test maximum(rel_error) < 5.0e-2
+    end
+
+    @testset "Laplace marginal likelihood - Normal with differentiable σ" begin
+        Random.seed!(42)
+        k = 6
+        y = randn(k) .* 0.3 .+ 0.2
+
+        function normal_laplace(θ, y, k)
+            ρ, μ_const, log_σ = θ
+            Q = ar_precision(ρ, k)
+            μ = μ_const * ones(k)
+            prior = GMRF(μ, Q, LinearSolve.CHOLMODFactorization())
+            obs_lik = ExponentialFamily(Normal)(y; σ = exp(log_σ))
+            posterior = gaussian_approximation(prior, obs_lik)
+            x_star = mean(posterior)
+            return -logpdf(prior, x_star) - loglik(x_star, obs_lik) + logpdf(posterior, x_star)
+        end
+
+        θ = [0.3, 0.1, log(0.5)]
+        grad_fwd = ForwardDiff.gradient(θ -> normal_laplace(θ, y, k), θ)
+        grad_fin = FiniteDiff.finite_difference_gradient(θ -> normal_laplace(θ, y, k), θ)
+
+        @test all(isfinite.(grad_fwd))
+
+        abs_error = abs.(grad_fwd - grad_fin)
+        rel_error = abs_error ./ (abs.(grad_fin) .+ 1.0e-10)
+
+        @test maximum(abs_error) < 1.0e-3
+        @test maximum(rel_error) < 5.0e-2
+    end
+
     @testset "Integration with higher-level operations (logpdf)" begin
         # Test that ForwardDiff works through full pipeline
         using Distributions: logpdf

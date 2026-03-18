@@ -165,6 +165,35 @@ function _primal_gmrf(prior::GMRF{<:ForwardDiff.Dual})
     return GMRF(mu_primal, Q_primal, alg)
 end
 
+# Extract primal values from observation likelihoods that may contain Dual hyperparameters.
+# Default: identity (Poisson, Bernoulli, Binomial have no Real-typed hyperparameters)
+_primal_obs_lik(obs_lik) = obs_lik
+
+function _primal_obs_lik(lik::GMRFs.NormalLikelihood)
+    return GMRFs.NormalLikelihood(
+        lik.link, lik.y, ForwardDiff.value(lik.σ),
+        ForwardDiff.value(lik.inv_σ²), ForwardDiff.value(lik.log_σ), lik.indices
+    )
+end
+
+function _primal_obs_lik(lik::GMRFs.NegBinLikelihood)
+    return GMRFs.NegBinLikelihood(
+        lik.link, lik.y, ForwardDiff.value(lik.r), lik.indices, lik.logexposure
+    )
+end
+
+function _primal_obs_lik(lik::GMRFs.GammaLikelihood)
+    return GMRFs.GammaLikelihood(lik.link, lik.y, ForwardDiff.value(lik.phi), lik.indices)
+end
+
+function _primal_obs_lik(lik::GMRFs.StudentTLikelihood)
+    return GMRFs.StudentTLikelihood(
+        lik.link, lik.y, ForwardDiff.value(lik.σ), ForwardDiff.value(lik.ν),
+        ForwardDiff.value(lik.w), ForwardDiff.value(lik.νp1),
+        ForwardDiff.value(lik.σ_eff), lik.indices
+    )
+end
+
 """
     gaussian_approximation(prior_gmrf::GMRF{<:ForwardDiff.Dual}, obs_lik; kwargs...)
 
@@ -183,7 +212,8 @@ function _forwarddiff_gaussian_approximation(
     ) where {D <: ForwardDiff.Dual}
     # --- Step 1: Primal forward pass ---
     primal_prior = _primal_gmrf(prior_gmrf)
-    posterior_primal = GMRFs.gaussian_approximation(primal_prior, obs_lik; kwargs...)
+    primal_obs_lik = _primal_obs_lik(obs_lik)
+    posterior_primal = GMRFs.gaussian_approximation(primal_prior, primal_obs_lik; kwargs...)
     x_star = GMRFs.mean(posterior_primal)
 
     # --- Step 2: Compute ∂g/∂θ · θ̇ ---

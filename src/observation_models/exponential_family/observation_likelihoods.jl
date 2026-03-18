@@ -34,12 +34,12 @@ obs_lik = obs_model([1.0, 2.0, 1.5]; σ=0.5)  # NormalLikelihood{IdentityLink}
 ll = loglik([0.9, 2.1, 1.4], obs_lik)
 ```
 """
-struct NormalLikelihood{L <: LinkFunction, I} <: ExponentialFamilyLikelihood{L, I}
+struct NormalLikelihood{L <: LinkFunction, I, T <: Real} <: ExponentialFamilyLikelihood{L, I}
     link::L
     y::Vector{Float64}
-    σ::Float64
-    inv_σ²::Float64
-    log_σ::Float64
+    σ::T
+    inv_σ²::T
+    log_σ::T
     indices::I  # Can be Nothing, UnitRange, or Vector{Int}
 end
 
@@ -137,10 +137,10 @@ obs_lik = obs_model(y; r=5.0)
 ll = loglik([1.0, 0.5, 2.0], obs_lik)
 ```
 """
-struct NegBinLikelihood{L <: LinkFunction, I, O} <: ExponentialFamilyLikelihood{L, I}
+struct NegBinLikelihood{L <: LinkFunction, I, O, T <: Real} <: ExponentialFamilyLikelihood{L, I}
     link::L
     y::Vector{Int}
-    r::Float64
+    r::T
     indices::I
     logexposure::O
 end
@@ -165,10 +165,10 @@ obs_lik = obs_model([1.5, 0.3, 4.2]; phi=3.0)
 ll = loglik([0.4, -1.2, 1.4], obs_lik)
 ```
 """
-struct GammaLikelihood{L <: LinkFunction, I} <: ExponentialFamilyLikelihood{L, I}
+struct GammaLikelihood{L <: LinkFunction, I, T <: Real} <: ExponentialFamilyLikelihood{L, I}
     link::L
     y::Vector{Float64}
-    phi::Float64
+    phi::T
     indices::I
 end
 
@@ -195,13 +195,13 @@ obs_lik = obs_model([1.5, -0.3, 4.2]; σ=2.0, ν=4.0)
 ll = loglik([0.4, -1.2, 1.4], obs_lik)
 ```
 """
-struct StudentTLikelihood{L <: LinkFunction, I} <: ExponentialFamilyLikelihood{L, I}
+struct StudentTLikelihood{L <: LinkFunction, I, T <: Real} <: ExponentialFamilyLikelihood{L, I}
     link::L
     y::Vector{Float64}
-    σ::Float64
-    ν::Float64
-    w::Float64       # Precomputed: σ²(ν−2)
-    νp1::Float64     # Precomputed: ν+1
-    σ_eff::Float64   # Precomputed: σ√((ν−2)/ν)
+    σ::T
+    ν::T
+    w::T       # Precomputed: σ²(ν−2)
+    νp1::T     # Precomputed: ν+1
+    σ_eff::T   # Precomputed: σ√((ν−2)/ν)
     indices::I
 end
