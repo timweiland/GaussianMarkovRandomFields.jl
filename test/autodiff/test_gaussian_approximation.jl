@@ -6,9 +6,9 @@ using Random
 using LinearSolve
 
 using DifferentiationInterface
-using Enzyme, FiniteDiff, Zygote
+using Enzyme, FiniteDiff, ForwardDiff, Zygote
 
-backends = Any[("Zygote", AutoZygote())]
+backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
 if get(ENV, "GMRF_TEST_ENZYME", "false") == "true"
     push!(backends, ("Enzyme", AutoEnzyme(; function_annotation = Enzyme.Const)))
 end

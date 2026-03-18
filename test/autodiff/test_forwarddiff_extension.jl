@@ -1,11 +1,13 @@
 using GaussianMarkovRandomFields
 using ForwardDiff
+using FiniteDiff
 using Distributions
 using Distributions: logdetcov, logpdf
 using SparseArrays
 using LinearAlgebra
 using LinearMaps
 using LinearSolve
+using Random
 using Test
 
 @testset "ForwardDiff Extension" begin
@@ -162,7 +164,246 @@ using Test
         @test grad ≈ expected rtol = 1.0e-6
     end
 
-    @testset "Integration with higher-level operations" begin
+    # Helper functions for gaussian_approximation tests
+    function ar_precision(ρ, k)
+        return spdiagm(-1 => -ρ * ones(k - 1), 0 => ones(k) .+ ρ^2, 1 => -ρ * ones(k - 1))
+    end
+
+    function poisson_pipeline(θ, y, x, k)
+        ρ, μ_const = θ
+        Q = ar_precision(ρ, k)
+        μ = μ_const * ones(k)
+        prior = GMRF(μ, Q, LinearSolve.CHOLMODFactorization())
+        obs_lik = ExponentialFamily(Poisson)(PoissonObservations(y))
+        posterior = gaussian_approximation(prior, obs_lik)
+        return logpdf(posterior, x)
+    end
+
+    @testset "gaussian_approximation - Poisson AR(1)" begin
+        Random.seed!(42)
+        k = 8
+        θ = [0.4, 0.5]
+        y = [2, 1, 3, 2, 1, 4, 2, 1]
+        x = randn(k) .+ 0.5
+
+        grad_fwd = ForwardDiff.gradient(θ -> poisson_pipeline(θ, y, x, k), θ)
+        grad_fin = FiniteDiff.finite_difference_gradient(θ -> poisson_pipeline(θ, y, x, k), θ)
+
+        abs_error = abs.(grad_fwd - grad_fin)
+        rel_error = abs_error ./ (abs.(grad_fin) .+ 1.0e-10)
+
+        @test maximum(abs_error) < 1.0e-3
+        @test maximum(rel_error) < 5.0e-2
+    end
+
+    @testset "gaussian_approximation - SymTridiagonal + LDLt" begin
+        Random.seed!(42)
+        k = 8
+        θ = [1.5, 0.6, 0.5]  # [τ, ρ, μ_const]
+        y = [2, 1, 3, 2, 1, 4, 2, 1]
+        x = randn(k) .+ 0.5
+
+        function symtri_pipeline(θ, y, x, k)
+            τ, ρ, μ_const = θ
+            model = AR1Model(k)
+            Q = precision_matrix(model; τ = τ, ρ = ρ)
+            μ = μ_const * ones(k)
+            prior = GMRF(μ, Q, LinearSolve.LDLtFactorization())
+            obs_lik = ExponentialFamily(Poisson)(PoissonObservations(y))
+            posterior = gaussian_approximation(prior, obs_lik)
+            return logpdf(posterior, x)
+        end
+
+        grad_fwd = ForwardDiff.gradient(θ -> symtri_pipeline(θ, y, x, k), θ)
+        grad_fin = FiniteDiff.finite_difference_gradient(θ -> symtri_pipeline(θ, y, x, k), θ)
+
+        abs_error = abs.(grad_fwd - grad_fin)
+        rel_error = abs_error ./ (abs.(grad_fin) .+ 1.0e-10)
+
+        @test maximum(abs_error) < 1.0e-3
+        @test maximum(rel_error) < 5.0e-2
+    end
+
+    @testset "gaussian_approximation - Normal (conjugate)" begin
+        Random.seed!(42)
+        k = 6
+        θ = [0.3, 0.1]
+        y = randn(k) .* 0.3 .+ 0.2
+        x = randn(k)
+
+        function normal_pipeline(θ, y, x, k)
+            ρ, μ_const = θ
+            Q = ar_precision(ρ, k)
+            μ = μ_const * ones(k)
+            prior = GMRF(μ, Q, LinearSolve.CHOLMODFactorization())
+            obs_lik = ExponentialFamily(Normal)(y; σ = 0.5)
+            posterior = gaussian_approximation(prior, obs_lik)
+            return logpdf(posterior, x)
+        end
+
+        grad_fwd = ForwardDiff.gradient(θ -> normal_pipeline(θ, y, x, k), θ)
+        grad_fin = FiniteDiff.finite_difference_gradient(θ -> normal_pipeline(θ, y, x, k), θ)
+
+        abs_error = abs.(grad_fwd - grad_fin)
+        rel_error = abs_error ./ (abs.(grad_fin) .+ 1.0e-10)
+
+        @test maximum(abs_error) < 1.0e-3
+        @test maximum(rel_error) < 5.0e-2
+    end
+
+    @testset "gaussian_approximation - different hyperparameters" begin
+        k = 6
+        y = [1, 2, 1, 3, 1, 2]
+        Random.seed!(42)
+        x = randn(k) .+ 0.3
+
+        for ρ in [0.2, 0.5]
+            for μ_const in [0.3, 0.8]
+                θ = [ρ, μ_const]
+
+                f = θ -> poisson_pipeline(θ, y, x, k)
+                grad_fwd = ForwardDiff.gradient(f, θ)
+                grad_fin = FiniteDiff.finite_difference_gradient(f, θ)
+
+                abs_error = abs.(grad_fwd - grad_fin)
+                rel_error = abs_error ./ (abs.(grad_fin) .+ 1.0e-10)
+
+                @test maximum(abs_error) < 2.0e-2
+                @test maximum(rel_error) < 5.0e-2
+            end
+        end
+    end
+
+    @testset "gaussian_approximation - small system" begin
+        Random.seed!(42)
+        k = 4
+        θ = [0.6, 0.4]
+        y = [1, 2, 1, 1]
+        x = randn(k) .+ 0.4
+
+        grad_fwd = ForwardDiff.gradient(θ -> poisson_pipeline(θ, y, x, k), θ)
+        grad_fin = FiniteDiff.finite_difference_gradient(θ -> poisson_pipeline(θ, y, x, k), θ)
+
+        abs_error = abs.(grad_fwd - grad_fin)
+        rel_error = abs_error ./ (abs.(grad_fin) .+ 1.0e-10)
+
+        @test maximum(abs_error) < 1.0e-3
+        @test maximum(rel_error) < 5.0e-2
+    end
+
+    @testset "gaussian_approximation - Bernoulli" begin
+        Random.seed!(42)
+        k = 6
+        θ = [0.3, 0.0]
+        y = [1, 0, 1, 1, 0, 1]
+        x = randn(k)
+
+        function bernoulli_pipeline(θ, y, x, k)
+            ρ, μ_const = θ
+            Q = ar_precision(ρ, k)
+            μ = μ_const * ones(k)
+            prior = GMRF(μ, Q, LinearSolve.CHOLMODFactorization())
+            obs_lik = ExponentialFamily(Bernoulli)(y)
+            posterior = gaussian_approximation(prior, obs_lik)
+            return logpdf(posterior, x)
+        end
+
+        grad_fwd = ForwardDiff.gradient(θ -> bernoulli_pipeline(θ, y, x, k), θ)
+        grad_fin = FiniteDiff.finite_difference_gradient(θ -> bernoulli_pipeline(θ, y, x, k), θ)
+
+        abs_error = abs.(grad_fwd - grad_fin)
+        rel_error = abs_error ./ (abs.(grad_fin) .+ 1.0e-10)
+
+        @test maximum(abs_error) < 1.0e-3
+        @test maximum(rel_error) < 5.0e-2
+    end
+
+    @testset "ForwardDiff Laplace marginal likelihood" begin
+        Random.seed!(42)
+        k = 8
+        θ = [0.4, 0.5]
+        y = [2, 1, 3, 2, 1, 4, 2, 1]
+
+        function neg_log_marginal_lik(θ, y, k)
+            ρ, μ_const = θ
+            Q = ar_precision(ρ, k)
+            μ = μ_const * ones(k)
+            prior = GMRF(μ, Q, LinearSolve.CHOLMODFactorization())
+            obs_lik = ExponentialFamily(Poisson)(PoissonObservations(y))
+            posterior = gaussian_approximation(prior, obs_lik)
+            x_star = mean(posterior)
+            return -logpdf(prior, x_star) - loglik(x_star, obs_lik) + logpdf(posterior, x_star)
+        end
+
+        grad_fwd = ForwardDiff.gradient(θ -> neg_log_marginal_lik(θ, y, k), θ)
+        grad_fin = FiniteDiff.finite_difference_gradient(θ -> neg_log_marginal_lik(θ, y, k), θ)
+
+        @test all(isfinite.(grad_fwd))
+
+        abs_error = abs.(grad_fwd - grad_fin)
+        rel_error = abs_error ./ (abs.(grad_fin) .+ 1.0e-10)
+
+        @test maximum(abs_error) < 1.0e-3
+        @test maximum(rel_error) < 5.0e-2
+    end
+
+    @testset "gaussian_approximation - Normal with differentiable σ" begin
+        Random.seed!(42)
+        k = 6
+        y = randn(k) .* 0.3 .+ 0.2
+        x = randn(k)
+
+        function normal_sigma_pipeline(θ, y, x, k)
+            ρ, μ_const, log_σ = θ
+            Q = ar_precision(ρ, k)
+            μ = μ_const * ones(k)
+            prior = GMRF(μ, Q, LinearSolve.CHOLMODFactorization())
+            obs_lik = ExponentialFamily(Normal)(y; σ = exp(log_σ))
+            posterior = gaussian_approximation(prior, obs_lik)
+            return logpdf(posterior, x)
+        end
+
+        θ = [0.3, 0.1, log(0.5)]  # [ρ, μ_const, log_σ]
+        grad_fwd = ForwardDiff.gradient(θ -> normal_sigma_pipeline(θ, y, x, k), θ)
+        grad_fin = FiniteDiff.finite_difference_gradient(θ -> normal_sigma_pipeline(θ, y, x, k), θ)
+
+        abs_error = abs.(grad_fwd - grad_fin)
+        rel_error = abs_error ./ (abs.(grad_fin) .+ 1.0e-10)
+
+        @test maximum(abs_error) < 1.0e-3
+        @test maximum(rel_error) < 5.0e-2
+    end
+
+    @testset "Laplace marginal likelihood - Normal with differentiable σ" begin
+        Random.seed!(42)
+        k = 6
+        y = randn(k) .* 0.3 .+ 0.2
+
+        function normal_laplace(θ, y, k)
+            ρ, μ_const, log_σ = θ
+            Q = ar_precision(ρ, k)
+            μ = μ_const * ones(k)
+            prior = GMRF(μ, Q, LinearSolve.CHOLMODFactorization())
+            obs_lik = ExponentialFamily(Normal)(y; σ = exp(log_σ))
+            posterior = gaussian_approximation(prior, obs_lik)
+            x_star = mean(posterior)
+            return -logpdf(prior, x_star) - loglik(x_star, obs_lik) + logpdf(posterior, x_star)
+        end
+
+        θ = [0.3, 0.1, log(0.5)]
+        grad_fwd = ForwardDiff.gradient(θ -> normal_laplace(θ, y, k), θ)
+        grad_fin = FiniteDiff.finite_difference_gradient(θ -> normal_laplace(θ, y, k), θ)
+
+        @test all(isfinite.(grad_fwd))
+
+        abs_error = abs.(grad_fwd - grad_fin)
+        rel_error = abs_error ./ (abs.(grad_fin) .+ 1.0e-10)
+
+        @test maximum(abs_error) < 1.0e-3
+        @test maximum(rel_error) < 5.0e-2
+    end
+
+    @testset "Integration with higher-level operations (logpdf)" begin
         # Test that ForwardDiff works through full pipeline
         using Distributions: logpdf
 

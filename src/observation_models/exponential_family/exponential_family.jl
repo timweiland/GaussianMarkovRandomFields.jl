@@ -227,7 +227,7 @@ end
 # =======================================================================================
 
 function (obs_model::ExponentialFamily{Normal, L, I})(y; σ, kwargs...) where {L, I}
-    return NormalLikelihood(obs_model.link, Float64.(y), Float64(σ), 1.0 / (σ^2), log(σ), obs_model.indices)
+    return NormalLikelihood(obs_model.link, Float64.(y), σ, one(σ) / (σ^2), log(σ), obs_model.indices)
 end
 
 function (obs_model::ExponentialFamily{Poisson, L, I})(y::PoissonObservations; kwargs...) where {L, I}
@@ -243,7 +243,7 @@ function (obs_model::ExponentialFamily{Binomial, L, I})(y::BinomialObservations;
 end
 
 function (obs_model::ExponentialFamily{NegativeBinomial, L, I})(y::NegativeBinomialObservations; r, kwargs...) where {L, I}
-    return NegBinLikelihood(obs_model.link, y.counts, Float64(r), obs_model.indices, y.logexposure)
+    return NegBinLikelihood(obs_model.link, y.counts, r, obs_model.indices, y.logexposure)
 end
 
 function (obs_model::ExponentialFamily{Gamma, L, I})(y; phi, kwargs...) where {L, I}
@@ -254,18 +254,19 @@ function (obs_model::ExponentialFamily{Gamma, L, I})(y; phi, kwargs...) where {L
             error("Gamma observations must be positive at index $i (got $(y_f64[i]))")
         end
     end
-    return GammaLikelihood(obs_model.link, y_f64, Float64(phi), obs_model.indices)
+    return GammaLikelihood(obs_model.link, y_f64, phi, obs_model.indices)
 end
 
 function (obs_model::ExponentialFamily{TDist, L, I})(y; σ, ν, kwargs...) where {L, I}
     σ > 0 || error("Student-t scale parameter σ must be positive (got $σ)")
     ν > 2 || error("Student-t degrees of freedom ν must be > 2 for finite variance (got $ν)")
-    σ_f = Float64(σ)
-    ν_f = Float64(ν)
-    w = σ_f^2 * (ν_f - 2)
-    νp1 = ν_f + 1
-    σ_eff = σ_f * sqrt((ν_f - 2) / ν_f)
-    return StudentTLikelihood(obs_model.link, Float64.(y), σ_f, ν_f, w, νp1, σ_eff, obs_model.indices)
+    T = promote_type(typeof(σ), typeof(ν))
+    σ_T = convert(T, σ)
+    ν_T = convert(T, ν)
+    w = σ_T^2 * (ν_T - 2)
+    νp1 = ν_T + 1
+    σ_eff = σ_T * sqrt((ν_T - 2) / ν_T)
+    return StudentTLikelihood(obs_model.link, Float64.(y), σ_T, ν_T, w, νp1, σ_eff, obs_model.indices)
 end
 
 # Hyperparameter interface implementations
