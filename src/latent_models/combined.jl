@@ -228,9 +228,10 @@ function _blockdiag(matrices...)
     col_offsets = cumsum([0; [size(M, 2) for M in sparse_matrices[1:(end - 1)]]])
 
     # Collect all entries
+    T = promote_type(map(eltype, sparse_matrices)...)
     I_vals = Int[]
     J_vals = Int[]
-    V_vals = Float64[]
+    V_vals = T[]
 
     for (i, M) in enumerate(sparse_matrices)
         rows_M, cols_M, vals_M = findnz(M)

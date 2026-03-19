@@ -32,6 +32,10 @@ function _primal_precision(precision::Diagonal)
     return Diagonal(ForwardDiff.value.(precision.diag))
 end
 
+function _primal_precision(precision::Symmetric{<:ForwardDiff.Dual, <:SparseMatrixCSC})
+    return Symmetric(ForwardDiff.value.(precision.data))
+end
+
 function _primal_precision(precision::LinearMaps.LinearMap)
     return ForwardDiff.value.(to_matrix(precision))
 end
