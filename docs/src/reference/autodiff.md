@@ -8,7 +8,7 @@ We support the following AD backends:
 
 - **Zygote.jl**: General-purpose, good first choice, works in most cases
 - **Enzyme.jl**: Often 2-5× faster than Zygote, but requires attention to type stability
-- **ForwardDiff.jl**: Fast in the right situations (i.e. for functions with few inputs), but support is limited. See below.
+- **ForwardDiff.jl**: Fast in the right situations (i.e. for functions with few inputs)
 
 All backends produce mathematically identical gradients.
 
@@ -18,9 +18,9 @@ The package provides custom AD rules for the following operations:
 
 1. **GMRF construction**: `GMRF(μ, Q, algorithm)` - gradients flow through mean μ and precision matrix Q
 2. **Log-probability density**: `logpdf(gmrf, z)` - uses selected inversion for efficient gradient computation
-3. **Gaussian approximation**: `gaussian_approximation(prior_gmrf, obs_lik)` - uses Implicit Function Theorem to avoid differentiating through the optimization loop. **NOTE: We do not have a custom rule for ForwardDiff for this yet. Help is appreciated!**
+3. **Gaussian approximation**: `gaussian_approximation(prior_gmrf, obs_lik)` - uses Implicit Function Theorem to avoid differentiating through the optimization loop
 
-These three operations cover most common GMRF workflows. If you need AD support for other operations, please open an issue on GitHub.
+All three operations work with both regular `GMRF` and `ConstrainedGMRF` priors (e.g. from `RW1Model`, `BesagModel`). Constrained GMRF support is available for Zygote and ForwardDiff.
 
 ## Linear Solver Type Stability
 
@@ -43,7 +43,8 @@ See the [Automatic Differentiation Tutorial](../tutorials/automatic_differentiat
 
 ## Current Limitations
 
-- **ForwardDiff**: Currently only has custom rules for the constructor and `logpdf`. AD through a Gaussian approximation is going to fail.
+- **Enzyme + ConstrainedGMRF**: The Enzyme extension does not yet have custom rules for `ConstrainedGMRF`. Use Zygote or ForwardDiff for constrained models.
+- **ForwardDiff Hessians**: Second-order derivatives (Hessians) via nested ForwardDiff Duals are not supported. For Hessians, consider using finite-difference-over-ForwardDiff-gradient (`FiniteDiff.finite_difference_jacobian` of `ForwardDiff.gradient`), which is numerically more stable than pure finite-difference Hessians.
 
 If you encounter AD issues or need support for additional operations, please open an issue on GitHub.
 
