@@ -92,6 +92,131 @@ _add_namedtuples(t::ChainRulesCore.Tangent, ::ChainRulesCore.NoTangent) = t
 _add_namedtuples(::ChainRulesCore.NoTangent, t::ChainRulesCore.Tangent) = t
 _add_namedtuples(t1::ChainRulesCore.Tangent, t2::ChainRulesCore.Tangent) = t1 + t2
 
+# Extract μ̄ and Q̄ from the posterior tangent, handling both GMRF and ConstrainedGMRF.
+# These are the tangents for the BASE GMRF's mean (= x*, the mode) and precision.
+_extract_posterior_tangents(ȳ, ::GMRF) = (ȳ.mean, ȳ.precision)
+function _extract_posterior_tangents(ȳ, posterior::ConstrainedGMRF)
+    μ̄ = NoTangent()
+    Q̄ = NoTangent()
+
+    # The constrained_mean tangent must be projected back via P^T (not P).
+    # P = I - Ã'S⁻¹A, so P^T = I - A^TS⁻¹Ã (these differ when Q ≠ I).
+    if !_is_zero_tangent(ȳ.constrained_mean)
+        μ̄_c = collect(ȳ.constrained_mean)
+        v = posterior.L_c \ (posterior.A_tilde_T' * μ̄_c)  # S⁻¹ * Ã * μ̄_c
+        μ̄ = μ̄_c - posterior.constraint_matrix' * v  # P^T * μ̄_c
+    end
+
+    # Direct base_gmrf tangent (from logpdf rrule)
+    base_ȳ = ȳ.base_gmrf
+    if !_is_zero_tangent(base_ȳ) && base_ȳ isa Tangent
+        if !_is_zero_tangent(base_ȳ.mean)
+            μ̄ = _is_zero_tangent(μ̄) ? base_ȳ.mean : μ̄ + collect(base_ȳ.mean)
+        end
+        if !_is_zero_tangent(base_ȳ.precision)
+            Q̄ = base_ȳ.precision
+        end
+    end
+
+    # log_constraint_correction tangent → flows back through correction's μ and Q dependence
+    if !_is_zero_tangent(ȳ.log_constraint_correction)
+        c̄ = ȳ.log_constraint_correction
+        resid = posterior.constraint_vector - posterior.constraint_matrix * mean(posterior.base_gmrf)
+
+        # ∂c/∂μ contribution
+        μ̄_corr = c̄ * (posterior.constraint_matrix' * (posterior.L_c \ (-resid)))
+        μ̄ = _is_zero_tangent(μ̄) ? μ̄_corr : μ̄ + μ̄_corr
+
+        # ∂c/∂Q contribution
+        S_inv = inv(posterior.L_c)
+        w = S_inv * resid
+        Q̄_corr = c̄ * (-0.5) * posterior.A_tilde_T * (S_inv - w * w') * posterior.A_tilde_T'
+        Q̄ = _is_zero_tangent(Q̄) ? Q̄_corr : Q̄ + Q̄_corr
+    end
+
+    return (μ̄, Q̄)
+end
+
+# Combine the Q̄ contribution with the existing prior tangent from the VJP.
+function _add_precision_tangent(prior_tangent, prior::GMRF, Q̄)
+    prior_μ̄ = prior_tangent isa Tangent ? prior_tangent.mean : NoTangent()
+    prior_Q̄_existing = prior_tangent isa Tangent ? prior_tangent.precision : NoTangent()
+    combined_Q̄ = _is_zero_tangent(prior_Q̄_existing) ? Q̄ : prior_Q̄_existing + Q̄
+    return Tangent{typeof(prior)}(;
+        mean = prior_μ̄,
+        precision = combined_Q̄,
+        information_vector = NoTangent(),
+        Q_sqrt = NoTangent(),
+        linsolve_cache = NoTangent(),
+        rbmc_strategy = NoTangent(),
+    )
+end
+
+function _add_precision_tangent(prior_tangent, prior::ConstrainedGMRF, Q̄)
+    # Extract base_gmrf tangent from the nested structure
+    base_tangent = (prior_tangent isa Tangent && hasproperty(prior_tangent, :base_gmrf)) ?
+        prior_tangent.base_gmrf : NoTangent()
+    base_μ̄ = (!_is_zero_tangent(base_tangent) && base_tangent isa Tangent) ? base_tangent.mean : NoTangent()
+    base_Q̄_existing = (!_is_zero_tangent(base_tangent) && base_tangent isa Tangent) ? base_tangent.precision : NoTangent()
+    combined_Q̄ = _is_zero_tangent(base_Q̄_existing) ? Q̄ : base_Q̄_existing + Q̄
+
+    new_base_tangent = Tangent{typeof(prior.base_gmrf)}(;
+        mean = base_μ̄,
+        precision = combined_Q̄,
+        information_vector = NoTangent(),
+        Q_sqrt = NoTangent(),
+        linsolve_cache = NoTangent(),
+        rbmc_strategy = NoTangent(),
+    )
+
+    # Preserve any existing ConstrainedGMRF-level tangents from the VJP
+    return Tangent{typeof(prior)}(;
+        base_gmrf = new_base_tangent,
+        constraint_matrix = NoTangent(),
+        constraint_vector = NoTangent(),
+        A_tilde_T = NoTangent(),
+        L_c = NoTangent(),
+        constrained_mean = NoTangent(),
+        log_constraint_correction = NoTangent(),
+    )
+end
+
+# Unwrap a ConstrainedGMRF tangent through the _apply_constraints step.
+# For GMRF posteriors, this is a no-op. For ConstrainedGMRF posteriors,
+# it propagates the tangent back through ConstrainedGMRF(inner_gmrf, A, e)
+# to get the tangent for inner_gmrf.
+function _unwrap_constraints_tangent(ȳ, ::GMRF, ::Nothing, config)
+    return ȳ, NoTangent()
+end
+
+function _unwrap_constraints_tangent(ȳ, posterior::ConstrainedGMRF, constraints, config)
+    inner_gmrf = posterior.base_gmrf
+    A = constraints.A
+    e = constraints.e
+
+    # Use rrule_via_ad to differentiate through ConstrainedGMRF(inner_gmrf, A, e)
+    _, constructor_pullback = rrule_via_ad(
+        config, ConstrainedGMRF, inner_gmrf, A, e
+    )
+    _, inner_tangent, _, _ = constructor_pullback(ȳ)
+
+    return inner_tangent, NoTangent()
+end
+
+# Wrap a base GMRF tangent in a ConstrainedGMRF tangent if the prior is constrained.
+_wrap_prior_tangent(base_tangent, ::GMRF) = base_tangent
+function _wrap_prior_tangent(base_tangent, prior::ConstrainedGMRF)
+    return Tangent{typeof(prior)}(;
+        base_gmrf = base_tangent,
+        constraint_matrix = NoTangent(),
+        constraint_vector = NoTangent(),
+        A_tilde_T = NoTangent(),
+        L_c = NoTangent(),
+        constrained_mean = NoTangent(),
+        log_constraint_correction = NoTangent(),
+    )
+end
+
 """
     ChainRulesCore.rrule(config::RuleConfig{>:HasReverseMode}, ::typeof(gaussian_approximation),
                          prior_gmrf::Union{GMRF, ConstrainedGMRF}, obs_lik::ObservationLikelihood; kwargs...)
@@ -133,9 +258,8 @@ function ChainRulesCore.rrule(
 
     # === Pullback ===
     function gaussian_approximation_pullback(ȳ)
-        # Extract tangent components for the posterior GMRF
-        μ̄ = ȳ.mean
-        Q̄ = ȳ.precision
+        # Extract tangent components — handle both GMRF and ConstrainedGMRF posteriors
+        μ̄, Q̄ = _extract_posterior_tangents(ȳ, posterior)
 
         # Handle precision tangent through loghessian to get indirect x* dependence
         # The Hessian appears in the posterior precision: Q_post = Q_prior - loghessian(x*)
@@ -153,33 +277,30 @@ function ChainRulesCore.rrule(
         # Solve for λ combining BOTH mean tangent and indirect x* dependence from precision
         # H · λ = μ̄ + x_tangent_from_hess
         # This accounts for: ∂L/∂x* from direct (mean) path + indirect (precision→hessian→x*) path
-        cache = deepcopy(linsolve_cache(posterior))
+        cache = linsolve_cache(_base_gmrf(posterior))
+        b_saved = copy(cache.b)
         cache.b = _is_zero_tangent(x_tangent_from_hess) ? collect(μ̄) : collect(μ̄) .+ collect(x_tangent_from_hess)
-        λ = solve!(cache).u
+        λ = copy(solve!(cache).u)
 
-        # VJP through ∇ₓ_neg_log_posterior at x* to get gradients w.r.t. prior and likelihood
-        # IFT gives: dx*/dθ = -H⁻¹ · ∂∇/∂θ, so in the pullback we need -λ
-        _, ∇_pullback = rrule_via_ad(config, ∇ₓ_neg_log_posterior, prior_gmrf, obs_lik, x_star)
-        _, prior_gmrf_tangent, obs_lik_tangent, _ = ∇_pullback(-λ)  # Note the minus sign from IFT
+        # For constrained problems, project λ onto the constraint tangent space via
+        # the KKT Schur complement (same as forward pass Newton step projection).
+        λ = _constrain_step(λ, cache, _extract_constraints(prior_gmrf))
+        cache.b .= b_saved
 
-        # Add contribution from ȳ.precision to prior_gmrf tangent
+        # VJP through ∇ₓ_neg_log_posterior at x* to get gradients w.r.t. prior and likelihood.
+        # Use the BASE GMRF (not ConstrainedGMRF) to match the forward pass, which operates
+        # on the unconstrained GMRF with constraint-projected steps.
+        base_prior = _base_gmrf(prior_gmrf)
+        _, ∇_pullback = rrule_via_ad(config, ∇ₓ_neg_log_posterior, base_prior, obs_lik, x_star)
+        _, base_prior_tangent, obs_lik_tangent, _ = ∇_pullback(-λ)  # Note the minus sign from IFT
+
+        # Add contribution from ȳ.precision to base prior tangent
         if !_is_zero_tangent(Q̄)
-            # Extract mean tangent (from VJP) and combine with Q̄
-            prior_μ̄ = prior_gmrf_tangent isa Tangent ? prior_gmrf_tangent.mean : NoTangent()
-            prior_Q̄_existing = prior_gmrf_tangent isa Tangent ? prior_gmrf_tangent.precision : NoTangent()
-
-            # Combine precision gradients: add direct Q̄ to existing gradient from VJP
-            combined_Q̄ = _is_zero_tangent(prior_Q̄_existing) ? Q̄ : prior_Q̄_existing + Q̄
-
-            prior_gmrf_tangent = Tangent{typeof(prior_gmrf)}(
-                mean = prior_μ̄,
-                precision = combined_Q̄,
-                information_vector = NoTangent(),
-                Q_sqrt = NoTangent(),
-                linsolve_cache = NoTangent(),
-                rbmc_strategy = NoTangent()
-            )
+            base_prior_tangent = _add_precision_tangent(base_prior_tangent, base_prior, Q̄)
         end
+
+        # Wrap the base GMRF tangent in a ConstrainedGMRF tangent if needed
+        prior_gmrf_tangent = _wrap_prior_tangent(base_prior_tangent, prior_gmrf)
 
         # Combine tangents from mean path and precision path
         obs_lik_combined = _add_namedtuples(obs_lik_tangent, obs_lik_tangent_from_Q̄)
