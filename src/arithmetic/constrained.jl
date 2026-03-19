@@ -60,10 +60,10 @@ Create a constrained GMRF where `base_gmrf` is the unconstrained distribution,
 """
 struct ConstrainedGMRF{T <: Real, L <: Union{LinearMaps.LinearMap{T}, AbstractMatrix{T}}, G <: AbstractGMRF{T, L}} <: AbstractGMRF{T, L}
     base_gmrf::G
-    constraint_matrix::Matrix{T}
-    constraint_vector::Vector{T}
-    A_tilde_T::Matrix{T}
-    L_c::Cholesky{T, Matrix{T}}
+    constraint_matrix::Matrix{Float64}
+    constraint_vector::Vector{Float64}
+    A_tilde_T::Matrix{Float64}
+    L_c::Cholesky{Float64, Matrix{Float64}}
     constrained_mean::Vector{T}
     log_constraint_correction::T
 
@@ -79,18 +79,18 @@ struct ConstrainedGMRF{T <: Real, L <: Union{LinearMaps.LinearMap{T}, AbstractMa
         n == n_A || throw(ArgumentError("Constraint matrix size $(size(A)) incompatible with GMRF size $(n)"))
         m == length(e) || throw(ArgumentError("Constraint matrix rows $(m) != constraint vector length $(length(e))"))
 
-        # Convert to appropriate types
-        T_result = promote_type(T, eltype(A), eltype(e))
-        A_dense = Matrix{T_result}(A)  # Convert to dense matrix for efficiency
-        e_vec = Vector{T_result}(e)
+        # Convert constraint matrix/vector to Float64 (they define model structure, not hyperparameters)
+        T_result = T
+        A_dense = Matrix{Float64}(A)
+        e_vec = Vector{Float64}(e)
 
         # Get the base mean and precision
         μ_base = mean(base_gmrf)
         Q = precision_map(base_gmrf)
 
         # Step 1: Compute Ã^T := Q⁻¹A^T by solving Q * Ã^T = A^T column-by-column.
-        # Save and restore cache.b to avoid mutating the base GMRF's state.
-        A_tilde_T = Matrix{T_result}(undef, n, m)
+        # A_tilde_T is always Float64 (from the primal factorization, independent of Dual types).
+        A_tilde_T = Matrix{Float64}(undef, n, m)
         cache = linsolve_cache(base_gmrf)
         b_saved = copy(cache.b)
         for i in 1:m
@@ -117,8 +117,8 @@ struct ConstrainedGMRF{T <: Real, L <: Union{LinearMaps.LinearMap{T}, AbstractMa
         resid_e = e_vec - A_dense * μ_base
         r = length(resid_e)
         log_constraint_correction =
-            T_result(0.5) * (r * log(T_result(2π)) + logdet(L_c) + dot(resid_e, L_c \ resid_e)) -
-            T_result(0.5) * logdet(cholesky(Symmetric(A_dense * A_dense')))
+            0.5 * (r * log(2π) + logdet(L_c) + dot(resid_e, L_c \ resid_e)) -
+            0.5 * logdet(cholesky(Symmetric(A_dense * A_dense')))
 
         return new{T_result, L, G}(
             base_gmrf, A_dense, e_vec, A_tilde_T, L_c, constrained_mean,
