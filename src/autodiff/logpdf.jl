@@ -23,6 +23,33 @@ Uses the existing logpdf implementation from Distributions.jl
 The key insight is using `selinv(chol)` to compute only the nonzero entries of Q⁻¹
 efficiently, avoiding the O(n³) cost of full matrix inversion.
 """
+# ConstrainedGMRF logpdf rrule: decomposes into base GMRF logpdf + correction scalar.
+# The correction tangent flows back through the ConstrainedGMRF struct to differentiate
+# through its construction (where the correction depends on Q and μ).
+function ChainRulesCore.rrule(::typeof(logpdf), x::ConstrainedGMRF, z::AbstractVector)
+    # Delegate to base GMRF rrule for the main logpdf computation
+    base_val, base_pullback = rrule(logpdf, x.base_gmrf, z)
+    val = base_val + x.log_constraint_correction
+
+    function constrained_logpdf_pullback(ȳ)
+        _, base_x̄, z̄ = base_pullback(ȳ)
+
+        x̄ = Tangent{typeof(x)}(;
+            base_gmrf = base_x̄,
+            constraint_matrix = NoTangent(),
+            constraint_vector = NoTangent(),
+            A_tilde_T = NoTangent(),
+            L_c = NoTangent(),
+            constrained_mean = NoTangent(),
+            log_constraint_correction = ȳ,
+        )
+
+        return NoTangent(), x̄, z̄
+    end
+
+    return val, constrained_logpdf_pullback
+end
+
 function ChainRulesCore.rrule(::typeof(logpdf), x::AbstractGMRF, z::AbstractVector)
     μ = mean(x)
     Q = precision_matrix(x)

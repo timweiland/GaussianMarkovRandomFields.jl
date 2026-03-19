@@ -403,6 +403,34 @@ using Test
         @test maximum(rel_error) < 5.0e-2
     end
 
+    @testset "gaussian_approximation - ConstrainedGMRF (RW1) Poisson" begin
+        Random.seed!(42)
+        k = 10
+        y = [2, 1, 3, 2, 1, 4, 2, 1, 3, 2]
+        x = randn(k) .+ 0.5
+        model = RW1Model(k)
+
+        function constrained_rw1_pipeline(θ, model, y, x)
+            prior = model(; τ = exp(θ[1]))
+            obs_lik = ExponentialFamily(Poisson)(PoissonObservations(y))
+            posterior = gaussian_approximation(prior, obs_lik)
+            x_star = mean(posterior)
+            return -logpdf(prior, x_star) - loglik(x_star, obs_lik) + logpdf(posterior, x_star)
+        end
+
+        θ = [exp(2.0)]
+        f = θ -> constrained_rw1_pipeline(θ, model, y, x)
+        grad_fwd = ForwardDiff.gradient(f, θ)
+        grad_fin = FiniteDiff.finite_difference_gradient(f, θ)
+
+        abs_error = abs.(grad_fwd - grad_fin)
+        rel_error = abs_error ./ (abs.(grad_fin) .+ 1.0e-10)
+
+        @test all(isfinite.(grad_fwd))
+        @test maximum(abs_error) < 1.0e-2
+        @test maximum(rel_error) < 5.0e-2
+    end
+
     @testset "Integration with higher-level operations (logpdf)" begin
         # Test that ForwardDiff works through full pipeline
         using Distributions: logpdf

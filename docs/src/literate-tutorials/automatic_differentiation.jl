@@ -138,9 +138,9 @@ println("  Converged: $(Optim.converged(result))")
 # If n is sufficiently small or n << m, use forward-mode.
 # Else, use reverse-mode.
 #
-# This same advice applies here, with the added caveat that ForwardDiff currently does not
-# support Gaussian approximations.
-# If you need to autodiff through Gaussian approximations, use Zygote or Enzyme.
+# This same advice applies here. ForwardDiff, Zygote, and Enzyme all support
+# AD through Gaussian approximations. Constrained priors (e.g. RW, Besag) are
+# supported by ForwardDiff and Zygote.
 #
 # Both Zygote and Enzyme produce identical gradients, so the choice between them
 # comes down to performance and ease of use.

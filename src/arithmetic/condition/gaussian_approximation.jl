@@ -128,7 +128,7 @@ function gaussian_approximation(
     x_k = x0 === nothing ? mean(prior_gmrf) : copy(x0)
 
     cache = deepcopy(linsolve_cache(base_gmrf))
-    Q_base = cache.A
+    Q_base = precision_matrix(base_gmrf)
 
     # Adaptive stepsize state (persists across outer iterations)
     α = 1.0

@@ -32,6 +32,10 @@ function _primal_precision(precision::Diagonal)
     return Diagonal(ForwardDiff.value.(precision.diag))
 end
 
+function _primal_precision(precision::Symmetric{<:ForwardDiff.Dual, <:SparseMatrixCSC})
+    return Symmetric(ForwardDiff.value.(precision.data))
+end
+
 function _primal_precision(precision::LinearMaps.LinearMap)
     return ForwardDiff.value.(to_matrix(precision))
 end
@@ -227,7 +231,8 @@ function _forwarddiff_gaussian_approximation(
     n = length(x_star)
 
     # Reuse the factored posterior Hessian for back-substitution
-    cache = deepcopy(GMRFs.linsolve_cache(posterior_primal))
+    cache = GMRFs.linsolve_cache(posterior_primal)
+    b_saved = copy(cache.b)
 
     # Solve H · ẋ*_j = -partials_j(neg_grad_dual) for each partial direction j
     dx = Matrix{V}(undef, n, N)
@@ -237,6 +242,7 @@ function _forwarddiff_gaussian_approximation(
         end
         dx[:, j] .= solve!(cache).u
     end
+    cache.b .= b_saved
 
     # --- Step 4: Construct Dual-valued x* ---
     x_star_dual = map(1:n) do i
@@ -253,6 +259,98 @@ function _forwarddiff_gaussian_approximation(
     # --- Step 6: Construct result GMRF ---
     alg = GMRFs.linsolve_cache(posterior_primal).alg
     return GMRF(x_star_dual, Q_post_dual, alg)
+end
+
+# ============================================================================
+# Forward-mode IFT for ConstrainedGMRF
+# ============================================================================
+
+function _primal_constrained_gmrf(prior::GMRFs.ConstrainedGMRF{<:ForwardDiff.Dual})
+    primal_base = _primal_gmrf(prior.base_gmrf)
+    return GMRFs.ConstrainedGMRF(primal_base, prior.constraint_matrix, prior.constraint_vector)
+end
+
+function _forwarddiff_gaussian_approximation_constrained(
+        prior_gmrf::GMRFs.ConstrainedGMRF{D},
+        obs_lik;
+        kwargs...
+    ) where {D <: ForwardDiff.Dual}
+    # --- Step 1: Primal forward pass ---
+    primal_prior = _primal_constrained_gmrf(prior_gmrf)
+    primal_obs_lik = _primal_obs_lik(obs_lik)
+    posterior_primal = GMRFs.gaussian_approximation(primal_prior, primal_obs_lik; kwargs...)
+    x_star = GMRFs.mean(posterior_primal)
+
+    # --- Step 2: Compute ∂g/∂θ · θ̇ ---
+    # Use the base GMRF (matching the forward pass which operates on the unconstrained GMRF)
+    base_prior_dual = prior_gmrf.base_gmrf
+    neg_grad_dual = GMRFs.∇ₓ_neg_log_posterior(base_prior_dual, obs_lik, x_star)
+
+    # --- Step 3: Extract partials and solve N linear systems with constraint projection ---
+    Tag = ForwardDiff.tagtype(D)
+    V = ForwardDiff.valtype(D)
+    N = ForwardDiff.npartials(D)
+    n = length(x_star)
+
+    cache = GMRFs.linsolve_cache(posterior_primal.base_gmrf)
+    b_saved = copy(cache.b)
+    constraints = GMRFs._extract_constraints(primal_prior)
+
+    dx = Matrix{V}(undef, n, N)
+    for j in 1:N
+        for i in 1:n
+            cache.b[i] = -ForwardDiff.partials(neg_grad_dual[i], j)
+        end
+        step = copy(solve!(cache).u)
+        # Project onto constraint tangent space (KKT Schur complement)
+        dx[:, j] .= GMRFs._constrain_step(step, cache, constraints)
+    end
+    cache.b .= b_saved
+
+    # --- Step 4: Construct Dual-valued x* ---
+    x_star_dual = map(1:n) do i
+        ForwardDiff.Dual{Tag, V, N}(x_star[i], ForwardDiff.Partials{N, V}(ntuple(j -> dx[i, j], N)))
+    end
+
+    # --- Step 5: Compute posterior precision with Duals ---
+    H_dual = GMRFs.loghessian(x_star_dual, obs_lik)
+    Q_prior_dual = GMRFs.precision_matrix(base_prior_dual)
+    Q_post_dual = Q_prior_dual - H_dual
+
+    # --- Step 6: Construct result ConstrainedGMRF with Duals ---
+    # Build the base GMRF with Dual values, then wrap in ConstrainedGMRF.
+    # The ConstrainedGMRF constructor will compute correction and constrained_mean
+    # using Dual arithmetic, so their derivatives are automatically tracked.
+    alg = posterior_primal.base_gmrf.linsolve_cache.alg
+    base_post_dual = GMRF(x_star_dual, Q_post_dual, alg)
+    return GMRFs.ConstrainedGMRF(
+        base_post_dual, prior_gmrf.constraint_matrix, prior_gmrf.constraint_vector
+    )
+end
+
+# ConstrainedGMRF dispatch methods
+function GMRFs.gaussian_approximation(
+        prior_gmrf::GMRFs.ConstrainedGMRF{D},
+        obs_lik::GMRFs.ObservationLikelihood;
+        kwargs...
+    ) where {D <: ForwardDiff.Dual}
+    return _forwarddiff_gaussian_approximation_constrained(prior_gmrf, obs_lik; kwargs...)
+end
+
+function GMRFs.gaussian_approximation(
+        prior_gmrf::GMRFs.ConstrainedGMRF{D},
+        obs_lik::GMRFs.NormalLikelihood{GMRFs.IdentityLink};
+        kwargs...
+    ) where {D <: ForwardDiff.Dual}
+    return _forwarddiff_gaussian_approximation_constrained(prior_gmrf, obs_lik; kwargs...)
+end
+
+function GMRFs.gaussian_approximation(
+        prior_gmrf::GMRFs.ConstrainedGMRF{D},
+        obs_lik::GMRFs.LinearlyTransformedLikelihood{<:GMRFs.NormalLikelihood{GMRFs.IdentityLink}};
+        kwargs...
+    ) where {D <: ForwardDiff.Dual}
+    return _forwarddiff_gaussian_approximation_constrained(prior_gmrf, obs_lik; kwargs...)
 end
 
 # Main dispatch: GMRF{Dual} with any ObservationLikelihood

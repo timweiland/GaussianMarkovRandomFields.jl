@@ -253,4 +253,45 @@ end
             end
         end
     end
+
+    @testset "Constrained GMRF (RW1) with Poisson" begin
+        k = 10
+        y = [2, 1, 3, 2, 1, 4, 2, 1, 3, 2]
+        Random.seed!(42)
+        x = randn(k) .+ 0.5
+
+        # Pre-build constraints outside differentiable code (Zygote can't trace
+        # through the in-place array construction in constraints())
+        rw1_ref = RW1Model(k)(; τ = 1.0)
+        A_const = copy(rw1_ref.constraint_matrix)
+        e_const = copy(rw1_ref.constraint_vector)
+
+        function constrained_rw1_pipeline(θ, y, x, k, A, e)
+            Q = sparse(precision_matrix(RW1Model(k); τ = exp(θ[1])))
+            base = GMRF(zeros(k), Q, LinearSolve.CHOLMODFactorization())
+            prior = ConstrainedGMRF(base, A, e)
+            obs_lik = ExponentialFamily(Poisson)(PoissonObservations(y))
+            posterior = gaussian_approximation(prior, obs_lik)
+            return logpdf(posterior, x)
+        end
+
+        θ = [log(2.0)]
+        grad_test = DifferentiationInterface.gradient(
+            θ -> constrained_rw1_pipeline(θ, y, x, k, A_const, e_const),
+            backend,
+            θ
+        )
+
+        grad_fd = DifferentiationInterface.gradient(
+            θ -> constrained_rw1_pipeline(θ, y, x, k, A_const, e_const),
+            fd_backend,
+            θ
+        )
+
+        abs_error = abs.(grad_test - grad_fd)
+        rel_error = abs_error ./ (abs.(grad_fd) .+ 1.0e-10)
+
+        @test maximum(abs_error) < 1.0e-2
+        @test maximum(rel_error) < 5.0e-2
+    end
 end
