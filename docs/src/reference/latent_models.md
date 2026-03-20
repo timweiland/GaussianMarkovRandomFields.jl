@@ -62,6 +62,7 @@ FixedEffectsModel
 
 ```@docs
 CombinedModel
+component_model
 SeparableModel
 ```
 
