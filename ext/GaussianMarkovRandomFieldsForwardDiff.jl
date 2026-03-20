@@ -353,6 +353,112 @@ function GMRFs.gaussian_approximation(
     return _forwarddiff_gaussian_approximation_constrained(prior_gmrf, obs_lik; kwargs...)
 end
 
+# ============================================================================
+# Forward-mode IFT when only obs_lik carries Dual hyperparameters
+# ============================================================================
+
+# Detect Dual-valued observation likelihoods via their type parameter T
+const _DualNormalLik = GMRFs.NormalLikelihood{<:GMRFs.LinkFunction, <:Any, <:ForwardDiff.Dual}
+const _DualNegBinLik = GMRFs.NegBinLikelihood{<:GMRFs.LinkFunction, <:Any, <:Any, <:ForwardDiff.Dual}
+const _DualGammaLik = GMRFs.GammaLikelihood{<:GMRFs.LinkFunction, <:Any, <:ForwardDiff.Dual}
+const _DualStudentTLik = GMRFs.StudentTLikelihood{<:GMRFs.LinkFunction, <:Any, <:ForwardDiff.Dual}
+const _DualObsLik = Union{_DualNormalLik, _DualNegBinLik, _DualGammaLik, _DualStudentTLik}
+
+function _dual_type_from_obs_lik(::GMRFs.NormalLikelihood{L, I, D}) where {L, I, D}
+    return D
+end
+function _dual_type_from_obs_lik(::GMRFs.NegBinLikelihood{L, I, O, D}) where {L, I, O, D}
+    return D
+end
+function _dual_type_from_obs_lik(::GMRFs.GammaLikelihood{L, I, D}) where {L, I, D}
+    return D
+end
+function _dual_type_from_obs_lik(::GMRFs.StudentTLikelihood{L, I, D}) where {L, I, D}
+    return D
+end
+
+function _forwarddiff_gaussian_approximation_obs_dual(
+        prior_gmrf,
+        obs_lik;
+        kwargs...
+    )
+    D = _dual_type_from_obs_lik(obs_lik)
+
+    # --- Step 1: Primal forward pass (prior is already Float64) ---
+    primal_obs_lik = _primal_obs_lik(obs_lik)
+    posterior_primal = GMRFs.gaussian_approximation(prior_gmrf, primal_obs_lik; kwargs...)
+    x_star = GMRFs.mean(posterior_primal)
+
+    # --- Step 2: Compute ∂g/∂θ · θ̇ ---
+    neg_grad_dual = GMRFs.∇ₓ_neg_log_posterior(prior_gmrf, obs_lik, x_star)
+
+    # --- Step 3: Extract partials and solve ---
+    Tag = ForwardDiff.tagtype(D)
+    V = ForwardDiff.valtype(D)
+    N = ForwardDiff.npartials(D)
+    n = length(x_star)
+
+    cache = GMRFs.linsolve_cache(GMRFs._base_gmrf(posterior_primal))
+    b_saved = copy(cache.b)
+
+    dx = Matrix{V}(undef, n, N)
+    for j in 1:N
+        for i in 1:n
+            cache.b[i] = -ForwardDiff.partials(neg_grad_dual[i], j)
+        end
+        step = copy(solve!(cache).u)
+        dx[:, j] .= GMRFs._constrain_step(step, cache, GMRFs._extract_constraints(prior_gmrf))
+    end
+    cache.b .= b_saved
+
+    # --- Step 4: Construct Dual-valued x* ---
+    x_star_dual = map(1:n) do i
+        ForwardDiff.Dual{Tag, V, N}(x_star[i], ForwardDiff.Partials{N, V}(ntuple(j -> dx[i, j], N)))
+    end
+
+    # --- Step 5: Compute posterior precision with Duals ---
+    H_dual = GMRFs.loghessian(x_star_dual, obs_lik)
+    Q_prior = GMRFs.precision_matrix(GMRFs._base_gmrf(prior_gmrf))
+    Q_post_dual = Q_prior - H_dual
+
+    # --- Step 6: Construct result ---
+    alg = GMRFs.linsolve_cache(GMRFs._base_gmrf(posterior_primal)).alg
+    base_post = GMRF(x_star_dual, Q_post_dual, alg)
+    constraints = GMRFs._extract_constraints(prior_gmrf)
+    return constraints === nothing ? base_post :
+        GMRFs.ConstrainedGMRF(base_post, prior_gmrf.constraint_matrix, prior_gmrf.constraint_vector)
+end
+
+# Dispatch: Float64 prior + Dual obs_lik
+function GMRFs.gaussian_approximation(
+        prior_gmrf::GMRF{Float64}, obs_lik::_DualObsLik; kwargs...
+    )
+    return _forwarddiff_gaussian_approximation_obs_dual(prior_gmrf, obs_lik; kwargs...)
+end
+
+function GMRFs.gaussian_approximation(
+        prior_gmrf::GMRFs.ConstrainedGMRF{Float64}, obs_lik::_DualObsLik; kwargs...
+    )
+    return _forwarddiff_gaussian_approximation_obs_dual(prior_gmrf, obs_lik; kwargs...)
+end
+
+# Disambiguation: conjugate Normal with Dual σ + Float64 prior
+function GMRFs.gaussian_approximation(
+        prior_gmrf::GMRF{Float64},
+        obs_lik::GMRFs.NormalLikelihood{GMRFs.IdentityLink, <:Any, <:ForwardDiff.Dual};
+        kwargs...
+    )
+    return _forwarddiff_gaussian_approximation_obs_dual(prior_gmrf, obs_lik; kwargs...)
+end
+
+function GMRFs.gaussian_approximation(
+        prior_gmrf::GMRFs.ConstrainedGMRF{Float64},
+        obs_lik::GMRFs.NormalLikelihood{GMRFs.IdentityLink, <:Any, <:ForwardDiff.Dual};
+        kwargs...
+    )
+    return _forwarddiff_gaussian_approximation_obs_dual(prior_gmrf, obs_lik; kwargs...)
+end
+
 # Main dispatch: GMRF{Dual} with any ObservationLikelihood
 function GMRFs.gaussian_approximation(
         prior_gmrf::GMRF{D},

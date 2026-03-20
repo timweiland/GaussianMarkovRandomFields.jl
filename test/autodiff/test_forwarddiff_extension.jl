@@ -403,6 +403,33 @@ using Test
         @test maximum(rel_error) < 5.0e-2
     end
 
+    @testset "gaussian_approximation - obs_lik-only Dual (Normal σ)" begin
+        Random.seed!(42)
+        k = 6
+        y = randn(k) .* 0.3 .+ 0.2
+        x = randn(k)
+
+        function obs_only_dual_pipeline(θ, y, x, k)
+            # Prior is Float64 — only σ in obs_lik depends on θ
+            Q = ar_precision(0.3, k)
+            μ = 0.1 * ones(k)
+            prior = GMRF(μ, Q, LinearSolve.CHOLMODFactorization())
+            obs_lik = ExponentialFamily(Normal)(y; σ = exp(θ[1]))
+            posterior = gaussian_approximation(prior, obs_lik)
+            return logpdf(posterior, x)
+        end
+
+        θ = [log(0.5)]
+        grad_fwd = ForwardDiff.gradient(θ -> obs_only_dual_pipeline(θ, y, x, k), θ)
+        grad_fin = FiniteDiff.finite_difference_gradient(θ -> obs_only_dual_pipeline(θ, y, x, k), θ)
+
+        abs_error = abs.(grad_fwd - grad_fin)
+        rel_error = abs_error ./ (abs.(grad_fin) .+ 1.0e-10)
+
+        @test maximum(abs_error) < 1.0e-3
+        @test maximum(rel_error) < 5.0e-2
+    end
+
     @testset "gaussian_approximation - ConstrainedGMRF (RW1) Poisson" begin
         Random.seed!(42)
         k = 10
