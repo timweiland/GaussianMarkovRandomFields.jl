@@ -103,6 +103,30 @@ function _latent_model(term::BYM2Term, _)
     )
 end
 
+# Matérn SPDE model construction
+function _latent_model(term::MaternTerm, data)
+    if term.discretization !== nothing
+        return GaussianMarkovRandomFields.MaternModel(
+            term.discretization;
+            smoothness = term.smoothness,
+            alg = term.alg,
+            constraint = term.constraint,
+        )
+    else
+        # Build from observation coordinates
+        x = _getcolumn(data, term.coord_variables[1])
+        y = _getcolumn(data, term.coord_variables[2])
+        points = hcat(Float64.(x), Float64.(y))
+        return GaussianMarkovRandomFields.MaternModel(
+            points;
+            smoothness = term.smoothness,
+            element_order = term.element_order,
+            alg = term.alg,
+            constraint = term.constraint,
+        )
+    end
+end
+
 # Separable model construction
 function _latent_model(term::SeparableTerm, data)
     # Convert each component term to a LatentModel

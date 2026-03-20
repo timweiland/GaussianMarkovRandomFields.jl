@@ -243,7 +243,7 @@ Prefer writing models with formulas? The latent components discussed here can be
 constructed via formula terms and assembled automatically into a combined model
 and design matrix. See the Formula Interface reference for details:
 
-- [Formula Interface](@ref) — terms (`IID`, `RandomWalk`, `AR1`, `Besag`) and
+- [Formula Interface](@ref) — terms (`IID`, `RandomWalk`, `AR1`, `Besag`, `Matern`) and
   `build_formula_components`.
 - For a worked example combining Besag + IID + fixed effects under a Poisson
   likelihood with offset, see the tutorial:

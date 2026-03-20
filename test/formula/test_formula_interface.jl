@@ -103,6 +103,72 @@ using SparseArrays
     end
 end
 
+@testset "Formula Interface - Matern SPDE" begin
+    # Generate random 2D observation points
+    n_pts = 20
+    x_coords = randn(n_pts)
+    y_coords = randn(n_pts)
+    data_spde = (
+        y = randn(n_pts),
+        x_coord = x_coords,
+        y_coord = y_coords,
+    )
+
+    @testset "Matern auto-mesh (no intercept)" begin
+        matern = Matern(smoothness = 1)
+        comp = build_formula_components(@formula(y ~ 0 + matern(x_coord, y_coord)), data_spde; family = Normal)
+
+        # Design matrix: n_obs × ndofs (mesh DOFs >= n_obs for convex hull)
+        @test size(comp.A, 1) == n_pts
+        @test size(comp.A, 2) > 0
+        @test comp.meta.n_random == 1
+        @test comp.meta.n_fixed == 0
+
+        # Hyperparameters should include range
+        ks = Set(keys(comp.hyperparams))
+        @test :range_matern in ks
+
+        # Latent dimension must match design matrix columns
+        @test length(comp.combined_model) == size(comp.A, 2)
+
+        # Should produce a valid GMRF
+        gmrf = comp.combined_model(range_matern = 1.0)
+        @test length(gmrf) == size(comp.A, 2)
+    end
+
+    @testset "Matern with intercept" begin
+        matern = Matern(smoothness = 1)
+        comp = build_formula_components(@formula(y ~ 1 + matern(x_coord, y_coord)), data_spde; family = Normal)
+
+        @test size(comp.A, 1) == n_pts
+        @test comp.meta.n_random == 1
+        @test comp.meta.n_fixed == 1
+        @test length(comp.combined_model) == size(comp.A, 2)
+    end
+
+    @testset "Matern with pre-built discretization" begin
+        # Build a MaternModel to extract its discretization
+        points = hcat(x_coords, y_coords)
+        ref_model = MaternModel(points; smoothness = 1)
+        disc = ref_model.discretization
+
+        matern = Matern(disc; smoothness = 1)
+        comp = build_formula_components(@formula(y ~ 0 + matern(x_coord, y_coord)), data_spde; family = Normal)
+
+        @test size(comp.A) == (n_pts, length(ref_model))
+        @test length(comp.combined_model) == length(ref_model)
+    end
+
+    @testset "Matern with smoothness=2" begin
+        matern = Matern(smoothness = 2)
+        comp = build_formula_components(@formula(y ~ 0 + matern(x_coord, y_coord)), data_spde; family = Normal)
+
+        @test size(comp.A, 1) == n_pts
+        ks = Set(keys(comp.hyperparams))
+        @test :range_matern in ks
+    end
+end
+
 @testset "Formula Interface with Constraints" begin
     # Common test data
     n = 20

@@ -1,4 +1,4 @@
-export IID, RandomWalk, AR1, AR, Besag, BYM2, Separable, build_formula_components
+export IID, RandomWalk, AR1, AR, Besag, BYM2, Separable, Matern, build_formula_components
 
 """
     build_formula_components(formula, data; kwargs...)
@@ -304,6 +304,79 @@ struct BYM2{WT <: AbstractMatrix, MT}
 end
 
 (::BYM2)(args...) = error("BYM2(...) functor is only intended for use inside @formula; not callable directly.")
+
+"""
+    Matern(; smoothness = 1, element_order = 1, alg = CHOLMODFactorization(), constraint = nothing)
+    Matern(discretization::FEMDiscretization; smoothness = 1, alg = CHOLMODFactorization(), constraint = nothing)
+
+Formula functor for Matérn SPDE spatial random effects.
+
+# Two Construction Modes
+
+1. **Automatic mesh**: Pass only keyword arguments; the mesh is generated from coordinate
+   columns at formula evaluation time.
+2. **Pre-built discretization**: Pass a `FEMDiscretization` for full control over the mesh.
+
+# Arguments
+- `discretization`: Optional pre-built `FEMDiscretization`
+- `smoothness`: Smoothness parameter (integer ≥ 0, default: 1)
+- `element_order`: FEM element order for automatic mesh generation (default: 1)
+- `alg`: LinearSolve algorithm (default: `CHOLMODFactorization()`)
+- `constraint`: Optional constraint specification (default: nothing)
+
+# Usage
+```julia
+# Automatic mesh from coordinate columns (recommended)
+matern = Matern(smoothness=1)
+@formula(y ~ 1 + matern(x_coord, y_coord))
+
+# With pre-built discretization
+disc = FEMDiscretization(grid, interp, quad)
+matern = Matern(disc; smoothness=2)
+@formula(y ~ 1 + matern(x_coord, y_coord))
+```
+
+# Notes
+- The formula term expects exactly two coordinate column arguments (2D spatial)
+- Coordinates are extracted from the DataFrame at formula evaluation time
+- The evaluation matrix mapping observations to FEM nodes is built automatically
+- You must create a Matern instance before using it in a formula
+- Calling the functor directly is unsupported outside formula parsing
+"""
+struct Matern{F, S <: Integer, Alg, C}
+    discretization::F
+    smoothness::S
+    element_order::Int
+    alg::Alg
+    constraint::C
+
+    function Matern(
+            discretization::FEMDiscretization;
+            smoothness::Integer = 1,
+            alg = CHOLMODFactorization(),
+            constraint = nothing,
+        )
+        smoothness >= 0 || throw(ArgumentError("Smoothness must be non-negative, got smoothness=$smoothness"))
+        return new{typeof(discretization), typeof(smoothness), typeof(alg), typeof(constraint)}(
+            discretization, smoothness, 1, alg, constraint
+        )
+    end
+
+    function Matern(;
+            smoothness::Integer = 1,
+            element_order::Int = 1,
+            alg = CHOLMODFactorization(),
+            constraint = nothing,
+        )
+        smoothness >= 0 || throw(ArgumentError("Smoothness must be non-negative, got smoothness=$smoothness"))
+        element_order >= 1 || throw(ArgumentError("Element order must be >= 1, got element_order=$element_order"))
+        return new{Nothing, typeof(smoothness), typeof(alg), typeof(constraint)}(
+            nothing, smoothness, element_order, alg, constraint
+        )
+    end
+end
+
+(::Matern)(args...) = error("Matern(...) functor is only intended for use inside @formula; not callable directly.")
 
 """
     Separable(components...)
