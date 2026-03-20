@@ -156,18 +156,10 @@ end
 
 function precision_matrix(model::MaternModel{F, S}; range::Real, kwargs...) where {F, S}
     _validate_matern_parameters(; range = range)
-
-    # Extract dimension from discretization
     D = ndim(model.discretization)
-
-    # Create MaternSPDE with the given range and model's smoothness
-    spde = MaternSPDE{D}(range = range, smoothness = model.smoothness, σ² = 1.0)
-
-    # Discretize using existing infrastructure - this returns a GMRF
-    gmrf = discretize(spde, model.discretization)
-
-    # Extract and return the precision matrix
-    return precision_map(gmrf)
+    ν = smoothness_to_ν(model.smoothness, D)
+    κ = range_to_κ(range, ν)
+    return matern_precision_only(model.discretization, model.smoothness, κ)
 end
 
 function mean(model::MaternModel; kwargs...)

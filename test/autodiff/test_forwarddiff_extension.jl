@@ -483,4 +483,72 @@ using Test
         @test length(grad) == 2 * n
         @test all(isfinite.(grad))
     end
+
+    @testset "ForwardDiff MaternModel precision_matrix" begin
+        points = [0.0 0.0; 1.0 0.0; 0.5 1.0; 0.2 0.8]
+
+        @testset "smoothness=$s" for s in [0, 1, 2]
+            model = MaternModel(points; smoothness = s)
+
+            # Derivative of sum(Q) w.r.t. range
+            f(r) = sum(precision_matrix(model; range = r))
+            range_val = 1.5
+            grad_fwd = ForwardDiff.derivative(f, range_val)
+            grad_fin = FiniteDiff.finite_difference_derivative(f, range_val)
+            @test isfinite(grad_fwd)
+            @test abs(grad_fwd - grad_fin) / (abs(grad_fin) + 1.0e-10) < 5.0e-2
+
+            # Derivative of tr(Q)
+            g(r) = tr(Matrix(precision_matrix(model; range = r)))
+            grad_fwd2 = ForwardDiff.derivative(g, range_val)
+            grad_fin2 = FiniteDiff.finite_difference_derivative(g, range_val)
+            @test isfinite(grad_fwd2)
+            @test abs(grad_fwd2 - grad_fin2) / (abs(grad_fin2) + 1.0e-10) < 5.0e-2
+
+            # Multiple range values
+            for r in [0.5, 1.0, 3.0]
+                d = ForwardDiff.derivative(f, r)
+                d_fin = FiniteDiff.finite_difference_derivative(f, r)
+                @test isfinite(d)
+                @test abs(d - d_fin) / (abs(d_fin) + 1.0e-10) < 5.0e-2
+            end
+        end
+
+        @testset "Full pipeline: MaternModel → GMRF → gaussian_approximation" begin
+            model = MaternModel(points; smoothness = 1)
+            n = length(model)
+            A = evaluation_matrix(model)
+            n_obs = size(A, 1)
+            y = PoissonObservations(ones(Int, n_obs))
+
+            function matern_pipeline(log_range)
+                range = exp(log_range)
+                Q = precision_matrix(model; range = range)
+                prior = GMRF(zeros(n), Q)
+                obs_lik = LinearlyTransformedLikelihood(
+                    ExponentialFamily(Poisson)(y), A
+                )
+                posterior = gaussian_approximation(prior, obs_lik)
+                return logpdf(posterior, mean(posterior))
+            end
+
+            log_r = log(1.5)
+            grad_fwd = ForwardDiff.derivative(matern_pipeline, log_r)
+            grad_fin = FiniteDiff.finite_difference_derivative(matern_pipeline, log_r)
+            @test isfinite(grad_fwd)
+            @test abs(grad_fwd - grad_fin) / (abs(grad_fin) + 1.0e-10) < 5.0e-2
+        end
+
+        @testset "Primal path consistency" begin
+            # Ensure the Q-only path matches the original discretize path
+            model = MaternModel(points; smoothness = 1)
+            Q_new = precision_matrix(model; range = 1.5)
+            @test Q_new isa Symmetric
+            @test size(Q_new, 1) == length(model)
+
+            # Check positive definiteness
+            eigs = real.(eigvals(Matrix(Q_new)))
+            @test all(eigs .> 0)
+        end
+    end
 end

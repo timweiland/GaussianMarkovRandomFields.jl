@@ -184,6 +184,111 @@ function matern_mean_precision(
 end
 
 """
+    _matern_precision_only(C, K, α, ch, constraint_noise, scaling_factor)
+
+Compute the Matérn precision matrix Q without factorizations (no Cholesky, no LU).
+Same recursion as `matern_mean_precision` but skips μ and Q_sqrt computation.
+Supports arbitrary numeric types (e.g., ForwardDiff.Dual) for K and scaling_factor.
+"""
+function _matern_precision_only(
+        C::SparseMatrixCSC,
+        K::SparseMatrixCSC{Ts},
+        α::Integer,
+        ch,
+        constraint_noise,
+        scaling_factor = one(Ts),
+    ) where {Ts}
+    if α < 1
+        throw(ArgumentError("α must be positive and non-zero"))
+    end
+
+    n = size(K, 1)
+    C_inv = spdiagm(0 => 1 ./ diag(C))
+    scale_diag = fill(scaling_factor, n)
+    for dof in ch.prescribed_dofs
+        scale_diag[dof] = one(Ts)
+    end
+    scale_mat = spdiagm(0 => scale_diag)
+
+    if α == 1
+        K_work = copy(K)
+        for dof in ch.prescribed_dofs
+            constraint_idx = ch.dofmapping[dof]
+            if ch.dofcoefficients[constraint_idx] !== nothing
+                throw(ArgumentError("Non-Dirichlet BCs not supported for odd α"))
+            end
+            K_work[dof, :] .= zero(Ts)
+            K_work[:, dof] .= zero(Ts)
+            K_work[dof, dof] = one(Ts)
+        end
+
+        for dof in ch.prescribed_dofs
+            constraint_idx = ch.dofmapping[dof]
+            K_work[dof, dof] = convert(Ts, constraint_noise[constraint_idx]^(-2))
+        end
+
+        return Symmetric(scale_mat * K_work)
+    elseif α == 2
+        Q_rhs = C_inv
+    else
+        Q_inner = _matern_precision_only(copy(C), copy(K), α - 2, ch, constraint_noise)
+        Q_rhs = C_inv * sparse(Q_inner) * C_inv
+    end
+
+    # Apply soft constraints for α ≥ 2
+    apply_soft_constraints!(
+        ch,
+        constraint_noise;
+        K = K,
+        Q_rhs = Q_rhs,
+    )
+
+    return Symmetric(K' * (scale_mat * Q_rhs) * K)
+end
+
+"""
+    matern_precision_only(disc::FEMDiscretization{D}, smoothness::Integer, κ; σ²=1.0) where {D}
+
+Compute the Matérn precision matrix directly from a FEM discretization without
+constructing a GMRF. Avoids all factorizations, so supports ForwardDiff.Dual values for κ.
+"""
+function matern_precision_only(
+        disc::FEMDiscretization{D},
+        smoothness::Integer,
+        κ;
+        σ² = 1.0,
+    ) where {D}
+    ν = smoothness_to_ν(smoothness, D)
+    α_val = Integer(ν + D // 2)
+
+    # Assemble FEM matrices at Float64 (κ-independent)
+    cellvalues = CellValues(
+        disc.quadrature_rule,
+        disc.interpolation,
+        disc.geom_interpolation,
+    )
+    diffusion_factor = Matrix{Float64}(I, D, D)
+    C, G = assemble_C_G_matrices(
+        cellvalues,
+        disc.dof_handler,
+        disc.interpolation,
+        diffusion_factor,
+    )
+
+    # Form K (may carry Dual type from κ)
+    K = κ^2 * C + G
+
+    # Variance ratio (Dual-safe: gamma is called on constants only)
+    ratio = one(typeof(κ))
+    if ν > 0
+        σ²_natural = gamma(ν) / (gamma(ν + D / 2) * (4π)^(D / 2) * κ^(2 * ν))
+        ratio = σ²_natural / σ²
+    end
+
+    return _matern_precision_only(C, K, α_val, disc.constraint_handler, disc.constraint_noise, ratio)
+end
+
+"""
     discretize(𝒟::MaternSPDE{D}, discretization::FEMDiscretization{D})::AbstractGMRF where {D}
 
 Discretize a Matérn SPDE using a Finite Element Method (FEM) discretization.
