@@ -72,9 +72,9 @@ known for.
 samp = rand(x)  # Sample
 Q = precision_map(x)  # Sparse precision matrix
 
-# Form posterior under point observations using new helpers
+# Form posterior under point observations
 using Distributions: Normal
-obs_model = PointEvaluationObsModel(model.discretization, points, Normal)
+obs_model = PointEvaluationObsModel(model, Normal)
 y = [0.83, 0.12, 0.45, -0.21]
 obs_likelihood = obs_model(y; σ = 0.1)
 x_cond = gaussian_approximation(x, obs_likelihood)  # Posterior GMRF!
