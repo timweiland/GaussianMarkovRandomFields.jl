@@ -111,4 +111,52 @@ using GaussianMarkovRandomFields
         custom_gmrf = custom_model(τ_iid = 1.0, τ_ar1 = 1.0, ρ_ar1 = 0.5)
         @test custom_gmrf.linsolve_cache.alg isa LDLtFactorization
     end
+
+    @testset "Named component access" begin
+        besag = BesagModel(sparse([0 1; 1 0]))
+        iid = IIDModel(3)
+        ar1 = AR1Model(5)
+        model = CombinedModel(besag, iid, ar1)
+
+        # Property syntax
+        @test model.besag === besag
+        @test model.iid === iid
+        @test model.ar1 === ar1
+
+        # component_model function
+        @test component_model(model, :besag) === besag
+        @test component_model(model, :iid) === iid
+        @test component_model(model, :ar1) === ar1
+
+        # Struct fields still work
+        @test model.components == [besag, iid, ar1]
+        @test model.total_size == 2 + 3 + 5
+
+        # propertynames includes both fields and components
+        pnames = propertynames(model)
+        @test :components in pnames
+        @test :besag in pnames
+        @test :iid in pnames
+        @test :ar1 in pnames
+
+        # Missing component throws
+        @test_throws ArgumentError model.nonexistent
+    end
+
+    @testset "Named component access with duplicates" begin
+        iid1 = IIDModel(3)
+        iid2 = IIDModel(5)
+        iid3 = IIDModel(7)
+        model = CombinedModel(iid1, iid2, iid3)
+
+        # First gets bare name, rest get _2, _3
+        @test model.iid === iid1
+        @test model.iid_2 === iid2
+        @test model.iid_3 === iid3
+
+        pnames = propertynames(model)
+        @test :iid in pnames
+        @test :iid_2 in pnames
+        @test :iid_3 in pnames
+    end
 end
