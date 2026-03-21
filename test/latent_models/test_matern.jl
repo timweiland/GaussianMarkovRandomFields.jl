@@ -14,6 +14,7 @@ using Ferrite
         model = MaternModel(discretization; smoothness = 2)
         @test model.discretization === discretization
         @test model.smoothness == 2
+        @test model.observation_points === nothing
 
         # Test type parameters - now F<:FEMDiscretization, S<:Integer
         @test model isa MaternModel{<:FEMDiscretization, Int}
@@ -25,6 +26,11 @@ using Ferrite
         # Zero smoothness should be valid
         model_zero = MaternModel(discretization; smoothness = 0)
         @test model_zero.smoothness == 0
+
+        # Direct constructor with explicit observation_points
+        pts = [0.3 0.3; 0.7 0.7]
+        model_pts = MaternModel(discretization; smoothness = 1, observation_points = pts)
+        @test model_pts.observation_points === pts
     end
 
     @testset "Automatic Constructor - 2D" begin
@@ -37,9 +43,13 @@ using Ferrite
         @test model.smoothness == 1
         @test length(model) > 0  # Should have created some DOFs
 
+        # Observation points should be stored
+        @test model.observation_points === points
+
         # Valid construction with custom parameters
         model2 = MaternModel(points; smoothness = 2, element_order = 1)
         @test model2.smoothness == 2
+        @test model2.observation_points === points
 
         # Invalid inputs
         @test_throws ArgumentError MaternModel([0.0 0.0; 1.0 0.0]; smoothness = 1)  # Too few points
@@ -240,6 +250,51 @@ using Ferrite
         # GMRF construction should be type stable
         gmrf = model(range = 1.0)
         @test gmrf isa GMRF{Float64}
+    end
+
+    @testset "Observation Points and Convenience Methods" begin
+        points = [0.0 0.0; 1.0 0.0; 0.5 1.0; 0.2 0.8]
+        model = MaternModel(points; smoothness = 1)
+
+        # evaluation_matrix convenience method
+        A = evaluation_matrix(model)
+        A_explicit = evaluation_matrix(model.discretization, points)
+        @test A == A_explicit
+        @test size(A, 1) == size(points, 1)
+        @test size(A, 2) == length(model)
+
+        # PointEvaluationObsModel convenience method
+        import Distributions
+        obs_model = PointEvaluationObsModel(model, Distributions.Normal)
+        obs_model_explicit = PointEvaluationObsModel(model.discretization, points, Distributions.Normal)
+        @test obs_model isa LinearlyTransformedObservationModel
+        @test obs_model.design_matrix == obs_model_explicit.design_matrix
+
+        # evaluation_matrix with new points (prediction)
+        new_points = [0.3 0.3; 0.7 0.2]
+        A_new = evaluation_matrix(model, new_points)
+        A_new_explicit = evaluation_matrix(model.discretization, new_points)
+        @test A_new == A_new_explicit
+        @test size(A_new, 1) == size(new_points, 1)
+        @test size(A_new, 2) == length(model)
+
+        # PointEvaluationObsModel with new points (prediction)
+        obs_new = PointEvaluationObsModel(model, new_points, Distributions.Normal)
+        obs_new_explicit = PointEvaluationObsModel(model.discretization, new_points, Distributions.Normal)
+        @test obs_new isa LinearlyTransformedObservationModel
+        @test obs_new.design_matrix == obs_new_explicit.design_matrix
+
+        # Direct construction without points should error on no-arg convenience methods
+        grid = generate_grid(Triangle, (2, 2))
+        disc = FEMDiscretization(grid, Lagrange{RefTriangle, 1}(), QuadratureRule{RefTriangle}(2))
+        model_no_pts = MaternModel(disc; smoothness = 1)
+        @test model_no_pts.observation_points === nothing
+        @test_throws ArgumentError evaluation_matrix(model_no_pts)
+        @test_throws ArgumentError PointEvaluationObsModel(model_no_pts, Distributions.Normal)
+
+        # But passing points explicitly should still work
+        A_explicit = evaluation_matrix(model_no_pts, [0.3 0.3; 0.7 0.7])
+        @test size(A_explicit, 1) == 2
     end
 
     @testset "1D MaternModel" begin

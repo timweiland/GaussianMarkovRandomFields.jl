@@ -247,6 +247,56 @@ function StatsModels.modelcols(term::BYM2Term, data)
     return sparse(I_combined, J_combined, V_combined, n_obs, 2 * n_nodes)
 end
 
+# Matern(x_coord, y_coord)
+struct MaternTerm{F, S <: Integer, Alg, C} <: FormulaRandomEffectTerm
+    coord_variables::Tuple{Symbol, Symbol}
+    discretization::F            # FEMDiscretization or Nothing (auto-build)
+    smoothness::S
+    element_order::Int
+    alg::Alg
+    constraint::C
+end
+
+function StatsModels.apply_schema(
+        t::StatsModels.FunctionTerm{<:GaussianMarkovRandomFields.Matern},
+        ::StatsModels.Schema,
+        ::Type
+    )
+    length(t.args) == 2 || error("Matern formula term requires exactly 2 coordinate arguments, got $(length(t.args))")
+    x_sym = t.args[1].sym
+    y_sym = t.args[2].sym
+    return MaternTerm(
+        (x_sym, y_sym),
+        t.f.discretization,
+        t.f.smoothness,
+        t.f.element_order,
+        t.f.alg,
+        t.f.constraint,
+    )
+end
+
+StatsModels.termvars(term::MaternTerm) = [term.coord_variables[1], term.coord_variables[2]]
+
+function StatsModels.modelcols(term::MaternTerm, data)
+    x = _getcolumn(data, term.coord_variables[1])
+    y = _getcolumn(data, term.coord_variables[2])
+    n_obs = length(x)
+    length(y) == n_obs || error("Coordinate columns must have equal length")
+
+    # Build observation points matrix (N×2)
+    points = hcat(Float64.(x), Float64.(y))
+
+    # Get or build the FEM discretization
+    disc = if term.discretization !== nothing
+        term.discretization
+    else
+        GaussianMarkovRandomFields.MaternModel(points; smoothness = term.smoothness, element_order = term.element_order, alg = term.alg, constraint = term.constraint).discretization
+    end
+
+    # Build evaluation matrix: maps FEM DOFs → observation locations
+    return GaussianMarkovRandomFields.evaluation_matrix(disc, points)
+end
+
 # Separable(component1, component2, ..., componentN)
 struct SeparableTerm{T <: Tuple} <: FormulaRandomEffectTerm
     component_terms::T  # Stores the actual term objects (IIDTerm, AR1Term, etc.)

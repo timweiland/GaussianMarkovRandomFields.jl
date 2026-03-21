@@ -2,7 +2,7 @@ using SparseArrays
 using LinearAlgebra
 using LinearSolve
 
-export CombinedModel
+export CombinedModel, component_model
 
 """
     CombinedModel(components::Vector{<:LatentModel}; alg=CHOLMODFactorization())
@@ -208,6 +208,63 @@ end
 
 function model_name(::CombinedModel)
     return :combined
+end
+
+# Named component access: combined_model.matern, combined_model.iid, etc.
+
+function _component_names(model::CombinedModel)
+    names = Symbol[]
+    name_counts = Dict{Symbol, Int}()
+    for comp in getfield(model, :components)
+        base = model_name(comp)
+        name_counts[base] = get(name_counts, base, 0) + 1
+        suffix = name_counts[base] == 1 ? "" : "_$(name_counts[base])"
+        push!(names, Symbol("$(base)$(suffix)"))
+    end
+    return Tuple(names)
+end
+
+"""
+    component_model(model::CombinedModel, name::Symbol)
+
+Retrieve a component latent model by name. Names follow the same convention as
+hyperparameter prefixes (e.g., `:matern`, `:besag`, `:iid`, `:iid_2`).
+
+Also accessible via property syntax: `model.matern`, `model.iid`, etc.
+
+# Example
+```julia
+combined = CombinedModel(MaternModel(pts; smoothness=1), IIDModel(10))
+matern = combined.matern          # or component_model(combined, :matern)
+iid    = combined.iid             # or component_model(combined, :iid)
+```
+"""
+function component_model(model::CombinedModel, name::Symbol)
+    name_counts = Dict{Symbol, Int}()
+    for comp in getfield(model, :components)
+        base = model_name(comp)
+        name_counts[base] = get(name_counts, base, 0) + 1
+        suffix = name_counts[base] == 1 ? "" : "_$(name_counts[base])"
+        comp_name = Symbol("$(base)$(suffix)")
+        if comp_name == name
+            return comp
+        end
+    end
+    available = join(string.(_component_names(model)), ", ")
+    throw(ArgumentError("No component named :$name in CombinedModel. Available: $available"))
+end
+
+const _COMBINED_MODEL_FIELDS = (:components, :component_sizes, :total_size, :alg)
+
+function Base.getproperty(model::CombinedModel, name::Symbol)
+    if name in _COMBINED_MODEL_FIELDS
+        return getfield(model, name)
+    end
+    return component_model(model, name)
+end
+
+function Base.propertynames(model::CombinedModel, private::Bool = false)
+    return (_COMBINED_MODEL_FIELDS..., _component_names(model)...)
 end
 
 # Helper to ensure matrix is sparse

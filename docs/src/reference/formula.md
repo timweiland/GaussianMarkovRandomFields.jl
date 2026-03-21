@@ -123,6 +123,8 @@ comp = build_formula_components(@formula(y ~ 0 + iid_custom(group)), data; famil
   - Always has built-in sum-to-zero
   - Optional `additional_constraints` for extra constraints beyond sum-to-zero
 
+- **`Matern(constraint=...)`**: Same as IID
+
 - **`Besag(...)`**: Always has built-in sum-to-zero constraints per connected component
 
 - **`BYM2(W; iid_constraint=..., additional_constraints=...)`**:
@@ -144,6 +146,78 @@ iid_sz = IID(constraint=:sumtozero)
 comp2 = build_formula_components(@formula(y ~ 0 + iid_sz(group)), data; family=Normal)
 gmrf2 = comp2.combined_model(τ_iid=1.0)  # ConstrainedGMRF
 ```
+
+## Spatial SPDE Models (Matérn)
+
+For continuous spatial random effects based on the Matérn SPDE, use the `Matern` functor.
+It automatically handles mesh generation, FEM discretization, and evaluation matrix
+construction — all the boilerplate that the manual `MaternModel` + `evaluation_matrix` +
+`LinearlyTransformedObservationModel` workflow requires.
+
+### Basic Usage
+
+```julia
+using GaussianMarkovRandomFields, StatsModels, Distributions
+
+# Coordinate columns in your DataFrame
+data = (
+    y = randn(100),
+    x_coord = randn(100),
+    y_coord = randn(100),
+)
+
+# Auto-mesh from coordinates (recommended for most cases)
+matern = Matern(smoothness=1)
+comp = build_formula_components(
+    @formula(y ~ 1 + matern(x_coord, y_coord)),
+    data;
+    family = Normal
+)
+
+# Instantiate the GMRF — 'range' controls spatial correlation distance
+gmrf = comp.combined_model(range_matern=2.0)
+```
+
+### Pre-built Discretization
+
+When you need full control over the mesh (e.g., custom domain, element order), pass a
+`FEMDiscretization` directly:
+
+```julia
+using Ferrite
+
+# Build your own mesh and discretization
+disc = FEMDiscretization(grid, Lagrange{RefTriangle, 1}(), QuadratureRule{RefTriangle}(2))
+
+matern = Matern(disc; smoothness=2)
+comp = build_formula_components(
+    @formula(y ~ 1 + matern(x_coord, y_coord)),
+    data;
+    family = Normal
+)
+```
+
+### Configuration Options
+
+- `smoothness`: Matérn smoothness parameter (integer ≥ 0, default: 1)
+- `element_order`: FEM element order for auto-mesh (default: 1)
+- `alg`: LinearSolve algorithm (default: `CHOLMODFactorization()`)
+- `constraint`: Optional constraint (e.g., `:sumtozero`, `(A, e)`)
+
+### Hyperparameters
+
+The Matérn formula term exposes a single hyperparameter:
+- `range_matern`: Range parameter (range > 0) controlling spatial correlation distance
+
+### When to Use Manual vs Formula
+
+| Use **formula** (`Matern`) | Use **manual** (`MaternModel`) |
+|---|---|
+| INLA-style inference pipelines | Custom meshes with boundary conditions |
+| Quick spatial modeling | Prediction at new locations via VTK |
+| Combined with other formula terms | Need direct access to discretization |
+
+For the manual workflow, see the [Spatial Modelling with SPDEs](@ref) tutorial.
 
 ## Separable Models (Kronecker Products)
 
@@ -293,6 +367,7 @@ GaussianMarkovRandomFields.AR1
 GaussianMarkovRandomFields.AR
 GaussianMarkovRandomFields.Besag
 GaussianMarkovRandomFields.BYM2
+GaussianMarkovRandomFields.Matern
 GaussianMarkovRandomFields.Separable
 GaussianMarkovRandomFields.build_formula_components
 ```

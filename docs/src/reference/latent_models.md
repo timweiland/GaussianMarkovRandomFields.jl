@@ -62,6 +62,7 @@ FixedEffectsModel
 
 ```@docs
 CombinedModel
+component_model
 SeparableModel
 ```
 
@@ -74,10 +75,14 @@ SeparableModel
 ar1 = AR1Model(100)
 gmrf = ar1(τ=2.0, ρ=0.8)
 
-# Spatial Matérn model from points
+# Spatial Matérn model from points (stores observation coordinates)
 points = [0.0 0.0; 1.0 0.0; 0.5 1.0]  # N×2 matrix
 matern = MaternModel(points; smoothness = 2)
 gmrf = matern(range=1.5)
+
+# Convenience: evaluation matrix and observation model from stored points
+A = evaluation_matrix(matern)
+obs_model = PointEvaluationObsModel(matern, Normal)
 
 # Spatial Besag model
 W = sparse_adjacency_matrix
@@ -243,7 +248,7 @@ Prefer writing models with formulas? The latent components discussed here can be
 constructed via formula terms and assembled automatically into a combined model
 and design matrix. See the Formula Interface reference for details:
 
-- [Formula Interface](@ref) — terms (`IID`, `RandomWalk`, `AR1`, `Besag`) and
+- [Formula Interface](@ref) — terms (`IID`, `RandomWalk`, `AR1`, `Besag`, `Matern`) and
   `build_formula_components`.
 - For a worked example combining Besag + IID + fixed effects under a Poisson
   likelihood with offset, see the tutorial:

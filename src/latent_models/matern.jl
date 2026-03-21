@@ -1,3 +1,4 @@
+using Distributions
 using Ferrite
 using GeometryBasics
 using LinearSolve
@@ -5,7 +6,7 @@ using LinearSolve
 export MaternModel
 
 """
-    MaternModel{F<:FEMDiscretization,S<:Integer,Alg}(discretization::F, smoothness::S, alg::Alg)
+    MaternModel{F<:FEMDiscretization,S<:Integer,Alg,C,P}(...)
 
 A Matérn latent model for constructing spatial GMRFs from discretized Matérn SPDEs.
 
@@ -33,6 +34,8 @@ This leads to a Matérn covariance function with range and smoothness parameters
 - `discretization::F`: The finite element discretization
 - `smoothness::S`: The smoothness parameter (Integer, controls differentiability)
 - `alg::Alg`: LinearSolve algorithm for solving linear systems
+- `constraint::C`: Optional constraint specification
+- `observation_points::P`: N×D matrix of observation coordinates, or `nothing`
 
 # Examples
 ```julia
@@ -41,37 +44,41 @@ disc = FEMDiscretization(grid, interpolation, quadrature)
 model = MaternModel(disc; smoothness = 2)
 gmrf = model(range=2.0)
 
-# Automatic construction from points
+# Automatic construction from points (stores observation_points)
 points = [0.0 0.0; 1.0 0.0; 0.5 1.0]  # N×2 matrix
 model = MaternModel(points; smoothness = 1, element_order = 1)
 gmrf = model(range=2.0)
+
+# Convenience: evaluation matrix from stored points
+A = evaluation_matrix(model)
 
 # With custom algorithm
 model = MaternModel(disc; smoothness = 2, alg = LDLtFactorization())
 gmrf = model(range=2.0)
 ```
 """
-struct MaternModel{F <: FEMDiscretization, S <: Integer, Alg, C} <: LatentModel
+struct MaternModel{F <: FEMDiscretization, S <: Integer, Alg, C, P} <: LatentModel
     discretization::F
     smoothness::S
     alg::Alg
     constraint::C
+    observation_points::P
 
-    function MaternModel{F, S, Alg, C}(discretization::F, smoothness::S, alg::Alg, constraint::C) where {F <: FEMDiscretization, S <: Integer, Alg, C}
+    function MaternModel{F, S, Alg, C, P}(discretization::F, smoothness::S, alg::Alg, constraint::C, observation_points::P) where {F <: FEMDiscretization, S <: Integer, Alg, C, P}
         smoothness >= 0 || throw(ArgumentError("Smoothness must be non-negative, got smoothness=$smoothness"))
-        return new{F, S, Alg, C}(discretization, smoothness, alg, constraint)
+        return new{F, S, Alg, C, P}(discretization, smoothness, alg, constraint, observation_points)
     end
 end
 
 """
-    MaternModel(discretization::F; smoothness::S, alg=CHOLMODFactorization(), constraint=nothing) where {F<:FEMDiscretization, S<:Integer}
+    MaternModel(discretization::F; smoothness::S, alg=CHOLMODFactorization(), constraint=nothing, observation_points=nothing) where {F<:FEMDiscretization, S<:Integer}
 
 Direct construction with a pre-built FEMDiscretization.
 """
-function MaternModel(discretization::F; smoothness::S, alg = CHOLMODFactorization(), constraint = nothing) where {F <: FEMDiscretization, S <: Integer}
+function MaternModel(discretization::F; smoothness::S, alg = CHOLMODFactorization(), constraint = nothing, observation_points = nothing) where {F <: FEMDiscretization, S <: Integer}
     n = ndofs(discretization)
     processed_constraint = _process_constraint(constraint, n)
-    return MaternModel{F, S, typeof(alg), typeof(processed_constraint)}(discretization, smoothness, alg, processed_constraint)
+    return MaternModel{F, S, typeof(alg), typeof(processed_constraint), typeof(observation_points)}(discretization, smoothness, alg, processed_constraint, observation_points)
 end
 
 """
@@ -131,7 +138,7 @@ function MaternModel(
     # Create FEMDiscretization
     discretization = FEMDiscretization(grid, interpolation, quadrature)
 
-    return MaternModel(discretization; smoothness = smoothness, alg = alg, constraint = constraint)
+    return MaternModel(discretization; smoothness = smoothness, alg = alg, constraint = constraint, observation_points = points)
 end
 
 function Base.length(model::MaternModel)
@@ -173,4 +180,76 @@ end
 
 function model_name(::MaternModel)
     return :matern
+end
+
+"""
+    evaluation_matrix(model::MaternModel)
+
+Return the evaluation matrix mapping FEM DOFs to the stored observation points.
+Only available when the model was constructed from points (i.e., `observation_points` is not `nothing`).
+"""
+function evaluation_matrix(model::MaternModel)
+    model.observation_points === nothing && throw(
+        ArgumentError(
+            "No observation points stored. Use `evaluation_matrix(model, points)` " *
+                "or construct the MaternModel from points to store them automatically."
+        )
+    )
+    return evaluation_matrix(model.discretization, model.observation_points)
+end
+
+"""
+    evaluation_matrix(model::MaternModel, points::AbstractMatrix)
+
+Return the evaluation matrix mapping FEM DOFs to arbitrary spatial `points`.
+Useful for prediction at new locations.
+
+# Example
+```julia
+model = MaternModel(train_points; smoothness = 1)
+A_pred = evaluation_matrix(model, test_points)
+```
+"""
+function evaluation_matrix(model::MaternModel, points::AbstractMatrix)
+    return evaluation_matrix(model.discretization, points)
+end
+
+"""
+    PointEvaluationObsModel(model::MaternModel, family::Type{<:Distribution})
+
+Convenience method that uses the observation points stored in a `MaternModel`.
+
+Equivalent to `PointEvaluationObsModel(model.discretization, model.observation_points, family)`.
+
+# Example
+```julia
+model = MaternModel(points; smoothness = 1)
+obs_model = PointEvaluationObsModel(model, Normal)
+```
+"""
+function PointEvaluationObsModel(model::MaternModel, family::Type{<:Distribution})
+    model.observation_points === nothing && throw(
+        ArgumentError(
+            "No observation points stored in MaternModel. " *
+                "Use `PointEvaluationObsModel(model, points, family)` instead, " *
+                "or construct the MaternModel from points to store them automatically."
+        )
+    )
+    return PointEvaluationObsModel(model.discretization, model.observation_points, family)
+end
+
+"""
+    PointEvaluationObsModel(model::MaternModel, points::AbstractMatrix, family::Type{<:Distribution})
+
+Create an observation model for function value observations at arbitrary spatial `points`.
+Useful for prediction at new locations.
+
+# Example
+```julia
+model = MaternModel(train_points; smoothness = 1)
+obs_test = PointEvaluationObsModel(model, test_points, Normal)
+```
+"""
+function PointEvaluationObsModel(model::MaternModel, points::AbstractMatrix, family::Type{<:Distribution})
+    return PointEvaluationObsModel(model.discretization, points, family)
 end
