@@ -146,20 +146,22 @@ function Base.length(model::MaternModel)
 end
 
 function hyperparameters(model::MaternModel)
-    return (range = Real,)
+    return (τ = Real, range = Real)
 end
 
-function _validate_matern_parameters(; range::Real)
+function _validate_matern_parameters(; τ::Real, range::Real)
+    τ > 0 || throw(ArgumentError("Precision parameter τ must be positive, got τ=$τ"))
     range > 0 || throw(ArgumentError("Range parameter must be positive, got range=$range"))
     return nothing
 end
 
-function precision_matrix(model::MaternModel{F, S}; range::Real, kwargs...) where {F, S}
-    _validate_matern_parameters(; range = range)
+function precision_matrix(model::MaternModel{F, S}; τ::Real, range::Real, kwargs...) where {F, S}
+    _validate_matern_parameters(; τ = τ, range = range)
     D = ndim(model.discretization)
     ν = smoothness_to_ν(model.smoothness, D)
     κ = range_to_κ(range, ν)
-    return matern_precision_only(model.discretization, model.smoothness, κ)
+    Q_unscaled = matern_precision_only(model.discretization, model.smoothness, κ)
+    return τ * Q_unscaled
 end
 
 function mean(model::MaternModel; kwargs...)
