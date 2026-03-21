@@ -490,6 +490,49 @@ end
         @test_throws ArgumentError predict_cols(term, rw_model, (year = [2000],))
     end
 
+    @testset "RW with gaps fills unobserved nodes" begin
+        # Training data has years 1900, 1901, 1903, 1905 (gaps at 1902, 1904)
+        train = (y = randn(8), year = repeat([1900, 1901, 1903, 1905], 2))
+        rw1 = RandomWalk()
+
+        f = @formula(y ~ 0 + rw1(year))
+        comp = build_formula_components(f, train; family = Normal)
+        rw_model = comp.combined_model.rw1
+        term = _random_terms(f, train)[1]
+
+        # Model should span full range including gaps
+        @test length(rw_model) == 6  # 1900:1905
+        @test rw_model.levels == collect(1900:1905)
+
+        # Design matrix should have 6 columns, not 4
+        @test size(comp.A, 2) == 6
+
+        # Year 1900 → col 1, year 1903 → col 4 (not col 3!)
+        A = comp.A
+        @test A[1, 1] == 1.0   # first obs is year 1900 → col 1
+        @test A[3, 4] == 1.0   # third obs is year 1903 → col 4
+
+        # Can predict at gap year 1902
+        test = (year = [1902],)
+        A_pred = predict_cols(term, rw_model, test)
+        @test size(A_pred) == (1, 6)
+        @test A_pred[1, 3] == 1.0  # 1902 → col 3
+    end
+
+    @testset "RW/AR require integer indices" begin
+        rw1 = RandomWalk()
+        ar1 = AR1()
+
+        # Float indices should error
+        train_float = (y = randn(3), time = [1.0, 2.0, 3.0])
+        @test_throws ArgumentError build_formula_components(@formula(y ~ 0 + rw1(time)), train_float; family = Normal)
+        @test_throws ArgumentError build_formula_components(@formula(y ~ 0 + ar1(time)), train_float; family = Normal)
+
+        # String indices should error
+        train_str = (y = randn(3), time = ["a", "b", "c"])
+        @test_throws ArgumentError build_formula_components(@formula(y ~ 0 + rw1(time)), train_str; family = Normal)
+    end
+
     @testset "Besag — same as modelcols" begin
         W = spzeros(3, 3)
         W[1, 2] = 1; W[2, 1] = 1; W[2, 3] = 1; W[3, 2] = 1

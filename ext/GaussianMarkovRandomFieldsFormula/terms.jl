@@ -79,7 +79,8 @@ StatsModels.termvars(term::ARTerm) = [term.variable]
 
 function StatsModels.modelcols(term::ARTerm, data)
     v = _getcolumn(data, term.variable)
-    return _indicator_mapping(v)
+    A, _ = _ordered_indicator(v)
+    return A
 end
 
 # Besag(region; W = adjacency)
@@ -157,6 +158,30 @@ function _indicator_mapping(vec)
     return sparse(I, J, V, n, m)
 end
 
+# Integer-range indicator for ordered models (RW, AR).
+# Maps integer values to columns via offset: value → value - vmin + 1.
+# Creates n_cols = vmax - vmin + 1, filling gaps with unobserved nodes.
+function _ordered_indicator(vec)
+    all(v -> v isa Integer, vec) || throw(
+        ArgumentError(
+            "Ordered model terms (RandomWalk, AR) require integer-valued indices, " *
+                "got eltype $(eltype(vec)). Use integer time/space indices."
+        )
+    )
+    v = Int.(vec)
+    n = length(v)
+    vmin, vmax = extrema(v)
+    n_cols = vmax - vmin + 1
+    I = Vector{Int}(undef, n)
+    J = Vector{Int}(undef, n)
+    V = ones(Float64, n)
+    @inbounds for i in 1:n
+        I[i] = i
+        J[i] = v[i] - vmin + 1
+    end
+    return sparse(I, J, V, n, n_cols), vmin:vmax
+end
+
 # StatsModels.modelcols for random terms → return sparse mapping blocks
 function StatsModels.modelcols(term::IIDTerm, data)
     v = _getcolumn(data, term.variable)
@@ -165,12 +190,14 @@ end
 
 function StatsModels.modelcols(term::RandomWalkTerm, data)
     v = _getcolumn(data, term.variable)
-    return _indicator_mapping(v)
+    A, _ = _ordered_indicator(v)
+    return A
 end
 
 function StatsModels.modelcols(term::AR1Term, data)
     v = _getcolumn(data, term.variable)
-    return _indicator_mapping(v)
+    A, _ = _ordered_indicator(v)
+    return A
 end
 
 function StatsModels.modelcols(term::BesagTerm, data)
