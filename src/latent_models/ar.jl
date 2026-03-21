@@ -80,25 +80,25 @@ model3 = ARModel{3}(100)
 gmrf3 = model3(τ=1.0, pacf1=0.5, pacf2=-0.3, pacf3=0.2)
 ```
 """
-struct ARModel{P, Alg, C} <: LatentModel
+struct ARModel{P, Alg, C, L} <: LatentModel
     n::Int
     alg::Alg
     constraint::C
+    levels::L
 
-    function ARModel{P, Alg, C}(n::Int, alg::Alg, constraint::C) where {P, Alg, C}
+    function ARModel{P, Alg, C, L}(n::Int, alg::Alg, constraint::C, levels::L) where {P, Alg, C, L}
         P isa Int && P >= 1 || throw(ArgumentError("AR order P must be a positive integer, got P=$P"))
         n > 0 || throw(ArgumentError("Length n must be positive, got n=$n"))
-        # For P >= 2, require n > P. For P=1, allow n=1 (backward compat).
         if P >= 2
             n > P || throw(ArgumentError("AR$P requires length n > $P, got n=$n"))
         end
-        return new{P, Alg, C}(n, alg, constraint)
+        return new{P, Alg, C, L}(n, alg, constraint, levels)
     end
 end
 
-function ARModel{P}(n::Int; alg = _default_ar_alg(Val(P)), constraint = nothing) where {P}
+function ARModel{P}(n::Int; alg = _default_ar_alg(Val(P)), constraint = nothing, levels = nothing) where {P}
     processed_constraint = _process_constraint(constraint, n)
-    return ARModel{P, typeof(alg), typeof(processed_constraint)}(n, alg, processed_constraint)
+    return ARModel{P, typeof(alg), typeof(processed_constraint), typeof(levels)}(n, alg, processed_constraint, levels)
 end
 
 """Backward-compatible alias for `ARModel{1}`."""

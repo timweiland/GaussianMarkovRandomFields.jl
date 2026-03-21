@@ -15,7 +15,7 @@ function _latent_model(term::IIDTerm, data)
         end
     end
 
-    return IIDModel(n; constraint = term.constraint)
+    return IIDModel(n; constraint = term.constraint, levels = lvls)
 end
 
 function _latent_model(term::RandomWalkTerm{Order}, data) where {Order}
@@ -31,7 +31,7 @@ function _latent_model(term::RandomWalkTerm{Order}, data) where {Order}
         end
     end
 
-    return RWModel{Order}(n; additional_constraints = term.additional_constraints)
+    return RWModel{Order}(n; additional_constraints = term.additional_constraints, levels = lvls)
 end
 
 function _latent_model(term::ARTerm{P}, data) where {P}
@@ -46,7 +46,7 @@ function _latent_model(term::ARTerm{P}, data) where {P}
         end
     end
 
-    return ARModel{P}(n; constraint = term.constraint)
+    return ARModel{P}(n; constraint = term.constraint, levels = lvls)
 end
 
 function _latent_model(term::AR1Term, data)
@@ -62,7 +62,7 @@ function _latent_model(term::AR1Term, data)
         end
     end
 
-    return AR1Model(n; constraint = term.constraint)
+    return AR1Model(n; constraint = term.constraint, levels = lvls)
 end
 
 function _latent_model(term::BesagTerm, _)
@@ -134,6 +134,81 @@ function _latent_model(term::SeparableTerm, data)
 
     # Wrap in SeparableModel
     return SeparableModel(component_models...)
+end
+
+# ============================================================================
+# predict_cols: prediction projections reusing trained models
+# ============================================================================
+
+# Build an indicator mapping using the trained model's level-to-column mapping.
+# `levels` is the sorted vector of training levels (from model.levels).
+# Errors if prediction data contains a level not seen during training.
+function _predict_indicator(vec, levels::AbstractVector)
+    n = length(vec)
+    n_cols = length(levels)
+    idx = Dict{eltype(levels), Int}()
+    for (j, v) in enumerate(levels)
+        idx[v] = j
+    end
+    I = Vector{Int}(undef, n)
+    J = Vector{Int}(undef, n)
+    V = ones(Float64, n)
+    @inbounds for i in 1:n
+        j = get(idx, vec[i], 0)
+        j > 0 || throw(ArgumentError("Prediction data contains unseen level $(repr(vec[i])) not present in training levels"))
+        I[i] = i
+        J[i] = j
+    end
+    return sparse(I, J, V, n, n_cols)
+end
+
+function GaussianMarkovRandomFields.predict_cols(term::IIDTerm, model::GaussianMarkovRandomFields.IIDModel, data)
+    v = _getcolumn(data, term.variable)
+    model.levels === nothing && error("Model has no stored levels. Was it built via the formula interface?")
+    return _predict_indicator(v, model.levels)
+end
+
+function GaussianMarkovRandomFields.predict_cols(term::RandomWalkTerm, model::GaussianMarkovRandomFields.LatentModel, data)
+    v = _getcolumn(data, term.variable)
+    model.levels === nothing && error("Model has no stored levels. Was it built via the formula interface?")
+    return _predict_indicator(v, model.levels)
+end
+
+function GaussianMarkovRandomFields.predict_cols(term::AR1Term, model::GaussianMarkovRandomFields.LatentModel, data)
+    v = _getcolumn(data, term.variable)
+    model.levels === nothing && error("Model has no stored levels. Was it built via the formula interface?")
+    return _predict_indicator(v, model.levels)
+end
+
+function GaussianMarkovRandomFields.predict_cols(term::ARTerm, model::GaussianMarkovRandomFields.LatentModel, data)
+    v = _getcolumn(data, term.variable)
+    model.levels === nothing && error("Model has no stored levels. Was it built via the formula interface?")
+    return _predict_indicator(v, model.levels)
+end
+
+function GaussianMarkovRandomFields.predict_cols(term::BesagTerm, model::GaussianMarkovRandomFields.LatentModel, data)
+    # Reuse modelcols logic (handles id_to_node) but the adjacency already fixes n_cols
+    return StatsModels.modelcols(term, data)
+end
+
+function GaussianMarkovRandomFields.predict_cols(term::BYM2Term, model::GaussianMarkovRandomFields.LatentModel, data)
+    # Reuse modelcols logic (handles id_to_node); adjacency fixes n_cols
+    return StatsModels.modelcols(term, data)
+end
+
+function GaussianMarkovRandomFields.predict_cols(term::MaternTerm, model::GaussianMarkovRandomFields.MaternModel, data)
+    x = _getcolumn(data, term.coord_variables[1])
+    y = _getcolumn(data, term.coord_variables[2])
+    points = hcat(Float64.(x), Float64.(y))
+    return GaussianMarkovRandomFields.evaluation_matrix(model, points)
+end
+
+function GaussianMarkovRandomFields.predict_cols(term::SeparableTerm, model::GaussianMarkovRandomFields.SeparableModel, data)
+    sub_blocks = [
+        GaussianMarkovRandomFields.predict_cols(sub_term, sub_model, data)
+            for (sub_term, sub_model) in zip(term.component_terms, model.components)
+    ]
+    return foldl(_khatri_rao, sub_blocks)
 end
 
 # Column widths for each term (avoid relying on internal StatsModels widths)
