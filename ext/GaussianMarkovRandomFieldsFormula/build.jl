@@ -20,10 +20,9 @@ end
 
 function _latent_model(term::RandomWalkTerm{Order}, data) where {Order}
     v = _getcolumn(data, term.variable)
-    lvls, _ = _levels_and_index(v)
-    n = length(lvls)
+    _, levels = _ordered_indicator(v)
+    n = length(levels)
 
-    # Validate custom constraint dimensions if provided
     if term.additional_constraints isa Tuple
         A, e = term.additional_constraints
         if size(A, 2) != n
@@ -31,13 +30,13 @@ function _latent_model(term::RandomWalkTerm{Order}, data) where {Order}
         end
     end
 
-    return RWModel{Order}(n; additional_constraints = term.additional_constraints, levels = lvls)
+    return RWModel{Order}(n; additional_constraints = term.additional_constraints, levels = collect(levels))
 end
 
 function _latent_model(term::ARTerm{P}, data) where {P}
     v = _getcolumn(data, term.variable)
-    lvls, _ = _levels_and_index(v)
-    n = length(lvls)
+    _, levels = _ordered_indicator(v)
+    n = length(levels)
 
     if term.constraint isa Tuple
         A, e = term.constraint
@@ -46,15 +45,14 @@ function _latent_model(term::ARTerm{P}, data) where {P}
         end
     end
 
-    return ARModel{P}(n; constraint = term.constraint, levels = lvls)
+    return ARModel{P}(n; constraint = term.constraint, levels = collect(levels))
 end
 
 function _latent_model(term::AR1Term, data)
     v = _getcolumn(data, term.variable)
-    lvls, _ = _levels_and_index(v)
-    n = length(lvls)
+    _, levels = _ordered_indicator(v)
+    n = length(levels)
 
-    # Validate custom constraint dimensions if provided
     if term.constraint isa Tuple
         A, e = term.constraint
         if size(A, 2) != n
@@ -62,7 +60,7 @@ function _latent_model(term::AR1Term, data)
         end
     end
 
-    return AR1Model(n; constraint = term.constraint, levels = lvls)
+    return AR1Model(n; constraint = term.constraint, levels = collect(levels))
 end
 
 function _latent_model(term::BesagTerm, _)
