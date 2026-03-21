@@ -81,27 +81,28 @@ model3 = RWModel{3}(100)
 gmrf3 = model3(τ=1.0)
 ```
 """
-struct RWModel{Order, Alg, C} <: LatentModel
+struct RWModel{Order, Alg, C, L} <: LatentModel
     n::Int
     regularization::Float64
     alg::Alg
     additional_constraints::C
+    levels::L
 
-    function RWModel{Order, Alg, C}(n::Int, regularization::Float64, alg::Alg, additional_constraints::C) where {Order, Alg, C}
+    function RWModel{Order, Alg, C, L}(n::Int, regularization::Float64, alg::Alg, additional_constraints::C, levels::L) where {Order, Alg, C, L}
         Order isa Int && Order >= 1 || throw(ArgumentError("Order must be a positive integer, got Order=$Order"))
         n > Order || throw(ArgumentError("RW$Order requires length n > $Order, got n=$n"))
         regularization >= 0 || throw(ArgumentError("Regularization must be non-negative, got $regularization"))
-        return new{Order, Alg, C}(n, regularization, alg, additional_constraints)
+        return new{Order, Alg, C, L}(n, regularization, alg, additional_constraints, levels)
     end
 end
 
-function RWModel{Order}(n::Int; regularization::Float64 = 1.0e-5, alg = _default_rw_alg(Val(Order)), additional_constraints = nothing) where {Order}
+function RWModel{Order}(n::Int; regularization::Float64 = 1.0e-5, alg = _default_rw_alg(Val(Order)), additional_constraints = nothing, levels = nothing) where {Order}
     if additional_constraints === :sumtozero
         throw(ArgumentError("RWModel already includes null space constraints by default. Use additional_constraints for extra constraints beyond the built-in ones."))
     end
 
     processed_additional = _process_constraint(additional_constraints, n)
-    return RWModel{Order, typeof(alg), typeof(processed_additional)}(n, regularization, alg, processed_additional)
+    return RWModel{Order, typeof(alg), typeof(processed_additional), typeof(levels)}(n, regularization, alg, processed_additional, levels)
 end
 
 """Backward-compatible alias for `RWModel{1}`."""

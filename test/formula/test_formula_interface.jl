@@ -413,3 +413,156 @@ end
         end
     end
 end
+
+@testset "predict_cols" begin
+    # Helper: extract random effect terms from a formula applied to data
+    function _random_terms(formula, data)
+        schema = StatsModels.schema(formula, data)
+        tf = StatsModels.apply_schema(formula, schema)
+        rhs = tf.rhs isa StatsModels.MatrixTerm ? tf.rhs.terms : [tf.rhs]
+        # Filter out standard StatsModels terms (InterceptTerm, ContinuousTerm, etc.)
+        return [t for t in rhs if !(t isa Union{StatsModels.InterceptTerm, StatsModels.ContinuousTerm, StatsModels.CategoricalTerm})]
+    end
+
+    @testset "IID / RW / AR1 — column count matches model" begin
+        n = 10
+        train = (y = randn(n), group = repeat(1:5, 2), time = collect(1:n))
+
+        iid = IID()
+        rw1 = RandomWalk()
+        ar1 = AR1()
+
+        f = @formula(y ~ 0 + iid(group) + rw1(time) + ar1(time))
+        comp = build_formula_components(f, train; family = Normal)
+        terms = _random_terms(f, train)
+        cm = comp.combined_model
+
+        # Prediction with subset of levels — columns must still match model dim
+        test_subset = (group = [2, 1], time = [3, 5])
+        for (term, model) in zip(terms, [cm.iid, cm.rw1, cm.ar1])
+            A_pred = predict_cols(term, model, test_subset)
+            @test size(A_pred, 1) == 2
+            @test size(A_pred, 2) == length(model)
+        end
+
+        # Non-contiguous levels: column indices use training level mapping
+        test_gap = (group = [1, 3, 5], time = [1, 5, 10])
+        iid_term = terms[1]
+        A_gap = predict_cols(iid_term, cm.iid, test_gap)
+        @test size(A_gap) == (3, length(cm.iid))
+        @test A_gap[1, 1] == 1.0  # group 1 → col 1
+        @test A_gap[2, 3] == 1.0  # group 3 → col 3
+        @test A_gap[3, 5] == 1.0  # group 5 → col 5
+
+        # Prediction with all levels — should also work
+        test_all = (group = [1, 2, 3, 4, 5], time = collect(1:n))
+        for (term, model) in zip(terms, [cm.iid, cm.rw1, cm.ar1])
+            A_pred = predict_cols(term, model, test_all)
+            @test size(A_pred, 2) == length(model)
+        end
+
+        # Unseen level should error
+        @test_throws ArgumentError predict_cols(iid_term, cm.iid, (group = [99],))
+    end
+
+    @testset "Non-1-indexed levels (e.g. years)" begin
+        years = repeat(1900:1904, 2)
+        train = (y = randn(10), year = years)
+        rw1 = RandomWalk()
+
+        f = @formula(y ~ 0 + rw1(year))
+        comp = build_formula_components(f, train; family = Normal)
+        rw_model = comp.combined_model.rw1
+        term = _random_terms(f, train)[1]
+
+        # Model should have 5 levels (1900..1904)
+        @test length(rw_model) == 5
+        @test rw_model.levels == collect(1900:1904)
+
+        # Predict at subset — year 1902 should map to column 3
+        test = (year = [1902, 1904],)
+        A_pred = predict_cols(term, rw_model, test)
+        @test size(A_pred) == (2, 5)
+        @test A_pred[1, 3] == 1.0  # 1902 → col 3
+        @test A_pred[2, 5] == 1.0  # 1904 → col 5
+
+        # Unseen year should error
+        @test_throws ArgumentError predict_cols(term, rw_model, (year = [2000],))
+    end
+
+    @testset "Besag — same as modelcols" begin
+        W = spzeros(3, 3)
+        W[1, 2] = 1; W[2, 1] = 1; W[2, 3] = 1; W[3, 2] = 1
+        besag = Besag(W)
+
+        train = (y = randn(6), region = [1, 2, 3, 2, 1, 3])
+        test = (region = [3, 1],)
+
+        f = @formula(y ~ 0 + besag(region))
+        comp = build_formula_components(f, train; family = Normal)
+        term = _random_terms(f, train)[1]
+
+        A_pred = predict_cols(term, comp.combined_model.besag, test)
+        A_mc = StatsModels.modelcols(term, test)
+        @test A_pred == A_mc
+    end
+
+    @testset "Matern — reuses discretization" begin
+        x_train = randn(20)
+        y_train = randn(20)
+        train = (y = randn(20), x_coord = x_train, y_coord = y_train)
+
+        x_test = randn(5)
+        y_test = randn(5)
+        test = (x_coord = x_test, y_coord = y_test)
+
+        matern = Matern(smoothness = 1)
+        f = @formula(y ~ 0 + matern(x_coord, y_coord))
+        comp = build_formula_components(f, train; family = Normal)
+        matern_model = comp.combined_model.matern
+        term = _random_terms(f, train)[1]
+
+        A_pred = predict_cols(term, matern_model, test)
+
+        # Should have n_test rows and same columns as model dimension
+        @test size(A_pred, 1) == 5
+        @test size(A_pred, 2) == length(matern_model)
+
+        # Should match direct evaluation_matrix call
+        pts = hcat(Float64.(x_test), Float64.(y_test))
+        A_direct = evaluation_matrix(matern_model, pts)
+        @test A_pred == A_direct
+    end
+
+    @testset "Separable — recursive predict_cols" begin
+        n_time = 5
+        n_space = 3
+        n_obs = n_time * n_space
+
+        W_space = spzeros(n_space, n_space)
+        for i in 1:(n_space - 1)
+            W_space[i, i + 1] = 1
+            W_space[i + 1, i] = 1
+        end
+
+        train = (
+            y = randn(n_obs),
+            time = repeat(1:n_time, outer = n_space),
+            space = repeat(1:n_space, inner = n_time),
+        )
+        test = (time = [2, 4], space = [1, 3])
+
+        rw1 = RandomWalk()
+        besag = Besag(W_space)
+        st = Separable(rw1, besag)
+
+        f = @formula(y ~ 0 + st(time, space))
+        comp = build_formula_components(f, train; family = Normal)
+        sep_model = comp.combined_model.separable
+        term = _random_terms(f, train)[1]
+
+        A_pred = predict_cols(term, sep_model, test)
+        @test size(A_pred, 1) == 2
+        @test size(A_pred, 2) == length(sep_model)
+    end
+end

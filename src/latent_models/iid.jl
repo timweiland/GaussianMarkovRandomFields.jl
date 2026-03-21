@@ -40,20 +40,21 @@ model = IIDModel(100, constraint=:sumtozero)
 gmrf = model(τ=2.0)  # Returns ConstrainedGMRF with sum-to-zero constraint
 ```
 """
-struct IIDModel{Alg, C} <: LatentModel
+struct IIDModel{Alg, C, L} <: LatentModel
     n::Int
     alg::Alg
     constraint::C
+    levels::L
 
-    function IIDModel{Alg, C}(n::Int, alg::Alg, constraint::C) where {Alg, C}
+    function IIDModel{Alg, C, L}(n::Int, alg::Alg, constraint::C, levels::L) where {Alg, C, L}
         n > 0 || throw(ArgumentError("Length n must be positive, got n=$n"))
-        return new{Alg, C}(n, alg, constraint)
+        return new{Alg, C, L}(n, alg, constraint, levels)
     end
 end
 
-function IIDModel(n::Int; alg = DiagonalFactorization(), constraint = nothing)
+function IIDModel(n::Int; alg = DiagonalFactorization(), constraint = nothing, levels = nothing)
     processed_constraint = _process_constraint(constraint, n)
-    return IIDModel{typeof(alg), typeof(processed_constraint)}(n, alg, processed_constraint)
+    return IIDModel{typeof(alg), typeof(processed_constraint), typeof(levels)}(n, alg, processed_constraint, levels)
 end
 
 function Base.length(model::IIDModel)

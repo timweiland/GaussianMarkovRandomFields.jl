@@ -358,6 +358,33 @@ sep = Separable(rw1_a, rw1_b)
 gmrf = comp.combined_model(τ_rw1_separable=1.0, τ_rw1_2_separable=1.5)
 ```
 
+## Prediction at New Data
+
+After fitting a model, use `predict_cols` to build a projection matrix onto new data points.
+Unlike `modelcols` (which builds both model and projection from scratch), `predict_cols` reuses
+the trained model — critical for Matérn terms where you want to project through the existing
+mesh rather than generating a new one.
+
+```julia
+# Fit model
+matern = Matern(smoothness=1)
+f = @formula(y ~ 1 + matern(x_coord, y_coord))
+comp = build_formula_components(f, train_data; family = Normal)
+
+# Get the trained model and its formula term
+model = comp.combined_model.matern  # via dot syntax
+
+# Build prediction matrix at new locations
+# (term is obtained from schema application — see predict_cols docstring)
+A_pred = predict_cols(term, model, test_data)
+```
+
+For non-spatial terms (IID, RW, AR1, Besag), `predict_cols` builds an indicator matrix
+similar to `modelcols`, but always sized to match the trained model dimension. This means
+prediction data with a subset of the training levels still produces a correctly-shaped
+projection matrix. An error is thrown if the prediction data contains levels outside the
+training range.
+
 ## Terms and Builders
 
 ```@docs
@@ -370,6 +397,7 @@ GaussianMarkovRandomFields.BYM2
 GaussianMarkovRandomFields.Matern
 GaussianMarkovRandomFields.Separable
 GaussianMarkovRandomFields.build_formula_components
+GaussianMarkovRandomFields.predict_cols
 ```
 
 ## See Also

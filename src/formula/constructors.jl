@@ -1,4 +1,4 @@
-export IID, RandomWalk, AR1, AR, Besag, BYM2, Separable, Matern, build_formula_components
+export IID, RandomWalk, AR1, AR, Besag, BYM2, Separable, Matern, build_formula_components, predict_cols
 
 """
     build_formula_components(formula, data; kwargs...)
@@ -7,6 +7,17 @@ Placeholder function for the formula interface. A concrete method is provided
 by the `GaussianMarkovRandomFieldsFormula` extension when `StatsModels` is loaded.
 """
 function build_formula_components end
+
+"""
+    predict_cols(term, component, data)
+
+Build a prediction projection matrix from a formula `term` and trained `component`
+onto new `data`. Unlike `modelcols` which builds both the model and projection from
+scratch, `predict_cols` reuses the existing trained model structure.
+
+Concrete methods are provided by the `GaussianMarkovRandomFieldsFormula` extension.
+"""
+function predict_cols end
 
 """
     IID(; constraint = nothing)
