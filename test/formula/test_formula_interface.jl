@@ -124,15 +124,16 @@ end
         @test comp.meta.n_random == 1
         @test comp.meta.n_fixed == 0
 
-        # Hyperparameters should include range
+        # Hyperparameters should include τ and range
         ks = Set(keys(comp.hyperparams))
+        @test :τ_matern in ks
         @test :range_matern in ks
 
         # Latent dimension must match design matrix columns
         @test length(comp.combined_model) == size(comp.A, 2)
 
         # Should produce a valid GMRF
-        gmrf = comp.combined_model(range_matern = 1.0)
+        gmrf = comp.combined_model(τ_matern = 1.0, range_matern = 1.0)
         @test length(gmrf) == size(comp.A, 2)
     end
 
@@ -165,6 +166,7 @@ end
 
         @test size(comp.A, 1) == n_pts
         ks = Set(keys(comp.hyperparams))
+        @test :τ_matern in ks
         @test :range_matern in ks
     end
 end

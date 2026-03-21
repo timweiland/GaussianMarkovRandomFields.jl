@@ -85,7 +85,7 @@ using Ferrite
 
             # hyperparameters method
             params = hyperparameters(model)
-            @test params == (range = Real,)
+            @test params == (τ = Real, range = Real)
 
             # model_name method
             @test model_name(model) == :matern
@@ -93,14 +93,22 @@ using Ferrite
 
         @testset "Parameter Validation" begin
             # Valid range should work
-            @test precision_matrix(model; range = 1.0) isa AbstractMatrix
-            @test precision_matrix(model; range = 0.1) isa AbstractMatrix
-            @test precision_matrix(model; range = 10.0) isa AbstractMatrix
+            @test precision_matrix(model; τ = 1.0, range = 1.0) isa AbstractMatrix
+            @test precision_matrix(model; τ = 1.0, range = 0.1) isa AbstractMatrix
+            @test precision_matrix(model; τ = 1.0, range = 10.0) isa AbstractMatrix
 
             # Invalid range should throw
-            @test_throws ArgumentError precision_matrix(model; range = 0.0)
-            @test_throws ArgumentError precision_matrix(model; range = -1.0)
-            @test_throws ArgumentError precision_matrix(model; range = -0.1)
+            @test_throws ArgumentError precision_matrix(model; τ = 1.0, range = 0.0)
+            @test_throws ArgumentError precision_matrix(model; τ = 1.0, range = -1.0)
+
+            # Invalid τ should throw
+            @test_throws ArgumentError precision_matrix(model; τ = 0.0, range = 1.0)
+            @test_throws ArgumentError precision_matrix(model; τ = -1.0, range = 1.0)
+
+            # τ scales precision matrix
+            Q1 = precision_matrix(model; τ = 1.0, range = 1.0)
+            Q2 = precision_matrix(model; τ = 2.0, range = 1.0)
+            @test Matrix(Q2) ≈ 2.0 * Matrix(Q1)
         end
 
         @testset "Mean Vector" begin
@@ -128,7 +136,7 @@ using Ferrite
             range_vals = [0.5, 1.0, 2.0]
 
             for range in range_vals
-                Q = precision_matrix(model; range = range)
+                Q = precision_matrix(model; τ = 1.0, range = range)
 
                 # Should be square matrix
                 @test size(Q, 1) == size(Q, 2)
@@ -152,14 +160,14 @@ using Ferrite
 
         # Construct GMRF
         range = 2.0
-        gmrf = model(range = range)
+        gmrf = model(τ = 1.0, range = range)
 
         @test gmrf isa GMRF  # Should return GMRF, not ConstrainedGMRF
         @test length(gmrf) == length(model)
         @test all(mean(gmrf) .== 0.0)
 
         # Precision matrix should match
-        Q_model = precision_matrix(model; range = range)
+        Q_model = precision_matrix(model; τ = 1.0, range = range)
         Q_gmrf = precision_map(gmrf)
         @test Matrix(Q_model) ≈ Matrix(Q_gmrf)
     end
@@ -175,8 +183,8 @@ using Ferrite
         model_auto = MaternModel(points; smoothness = 1)
 
         # Both should work and produce reasonable results
-        gmrf_direct = model_direct(range = 1.0)
-        gmrf_auto = model_auto(range = 1.0)
+        gmrf_direct = model_direct(τ = 1.0, range = 1.0)
+        gmrf_auto = model_auto(τ = 1.0, range = 1.0)
 
         @test gmrf_direct isa GMRF
         @test gmrf_auto isa GMRF
@@ -200,7 +208,7 @@ using Ferrite
             @test model.smoothness == smoothness
 
             # Should be able to construct GMRF
-            gmrf = model(range = range)
+            gmrf = model(τ = 1.0, range = range)
             @test gmrf isa GMRF
             @test length(gmrf) == length(model)
 
@@ -220,7 +228,7 @@ using Ferrite
         precision_matrices = []
 
         for range in ranges
-            Q = precision_matrix(model; range = range)
+            Q = precision_matrix(model; τ = 1.0, range = range)
             push!(precision_matrices, Q)
 
             # All should be valid precision matrices
@@ -241,14 +249,14 @@ using Ferrite
         model = MaternModel(discretization; smoothness = 1)
 
         # Test with different numeric types
-        Q_float64 = precision_matrix(model; range = 1.0)
-        Q_int = precision_matrix(model; range = 1)
+        Q_float64 = precision_matrix(model; τ = 1.0, range = 1.0)
+        Q_int = precision_matrix(model; τ = 1.0, range = 1)
 
         @test eltype(Matrix(Q_float64)) == Float64
         @test eltype(Matrix(Q_int)) == Float64  # Should promote
 
         # GMRF construction should be type stable
-        gmrf = model(range = 1.0)
+        gmrf = model(τ = 1.0, range = 1.0)
         @test gmrf isa GMRF{Float64}
     end
 
@@ -316,13 +324,13 @@ using Ferrite
         @test length(model_1d) > 0
 
         # Test GMRF construction in 1D
-        gmrf_1d = model_1d(range = 2.0)
+        gmrf_1d = model_1d(τ = 1.0, range = 2.0)
         @test gmrf_1d isa GMRF
         @test length(gmrf_1d) == length(model_1d)
         @test all(mean(gmrf_1d) .== 0.0)
 
         # Test precision matrix properties in 1D
-        Q_1d = precision_matrix(model_1d; range = 1.0)
+        Q_1d = precision_matrix(model_1d; τ = 1.0, range = 1.0)
         Q_1d_mat = Matrix(Q_1d)
         @test size(Q_1d_mat, 1) == length(model_1d)
         @test Q_1d_mat ≈ Q_1d_mat'  # Should be symmetric

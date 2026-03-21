@@ -491,7 +491,7 @@ using Test
             model = MaternModel(points; smoothness = s)
 
             # Derivative of sum(Q) w.r.t. range
-            f(r) = sum(precision_matrix(model; range = r))
+            f(r) = sum(precision_matrix(model; τ = 1.0, range = r))
             range_val = 1.5
             grad_fwd = ForwardDiff.derivative(f, range_val)
             grad_fin = FiniteDiff.finite_difference_derivative(f, range_val)
@@ -499,7 +499,7 @@ using Test
             @test abs(grad_fwd - grad_fin) / (abs(grad_fin) + 1.0e-10) < 5.0e-2
 
             # Derivative of tr(Q)
-            g(r) = tr(Matrix(precision_matrix(model; range = r)))
+            g(r) = tr(Matrix(precision_matrix(model; τ = 1.0, range = r)))
             grad_fwd2 = ForwardDiff.derivative(g, range_val)
             grad_fin2 = FiniteDiff.finite_difference_derivative(g, range_val)
             @test isfinite(grad_fwd2)
@@ -512,6 +512,13 @@ using Test
                 @test isfinite(d)
                 @test abs(d - d_fin) / (abs(d_fin) + 1.0e-10) < 5.0e-2
             end
+
+            # Derivative w.r.t. τ
+            h(t) = sum(precision_matrix(model; τ = t, range = 1.5))
+            grad_tau_fwd = ForwardDiff.derivative(h, 2.0)
+            grad_tau_fin = FiniteDiff.finite_difference_derivative(h, 2.0)
+            @test isfinite(grad_tau_fwd)
+            @test abs(grad_tau_fwd - grad_tau_fin) / (abs(grad_tau_fin) + 1.0e-10) < 5.0e-2
         end
 
         @testset "Full pipeline: MaternModel → GMRF → gaussian_approximation" begin
@@ -523,7 +530,7 @@ using Test
 
             function matern_pipeline(log_range)
                 range = exp(log_range)
-                Q = precision_matrix(model; range = range)
+                Q = precision_matrix(model; τ = 1.0, range = range)
                 prior = GMRF(zeros(n), Q)
                 obs_lik = LinearlyTransformedLikelihood(
                     ExponentialFamily(Poisson)(y), A
@@ -542,7 +549,7 @@ using Test
         @testset "Primal path consistency" begin
             # Ensure the Q-only path matches the original discretize path
             model = MaternModel(points; smoothness = 1)
-            Q_new = precision_matrix(model; range = 1.5)
+            Q_new = precision_matrix(model; τ = 1.0, range = 1.5)
             @test Q_new isa Symmetric
             @test size(Q_new, 1) == length(model)
 
