@@ -59,7 +59,7 @@ points = [0.1 0.0; -0.3 0.55; 0.2 0.8; -0.1 -0.2]  # N×2 matrix
 
 # Create Matérn latent model (automatically generates mesh and discretization)
 model = MaternModel(points; smoothness = 1)
-x = model(range = 0.3)  # Construct GMRF with specified range
+x = model(τ = 1.0, range = 0.3)  # Construct GMRF with specified parameters
 ```
 
 `x` is a Gaussian distribution, and we can compute all the things Gaussians are

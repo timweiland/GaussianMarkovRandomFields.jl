@@ -63,7 +63,7 @@ size(X_train, 1), size(X_test, 1)
 # This architecture makes it easy to construct the same GMRF structure many times for different hyperparameter values.
 using GaussianMarkovRandomFields
 latent_model = MaternModel(X; smoothness = 1)
-u_matern = latent_model(range = 400.0)
+u_matern = latent_model(τ = 1.0, range = 400.0)
 
 # Next, we create an observation model for function value observations at the training points.
 # `PointEvaluationObsModel` expresses that we're observing the value of our latent field at some specified points.

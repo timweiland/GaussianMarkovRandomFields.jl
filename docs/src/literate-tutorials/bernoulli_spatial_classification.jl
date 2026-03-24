@@ -73,7 +73,7 @@ X_test, y_test = X[test_idcs, :], y[test_idcs]
 # - `range`: controls the distance over which the field exhibits strong correlation.
 #   As a rule of thumb, set it to a fraction of the spatial extent of your data.
 latent = MaternModel(X; smoothness = 1)
-u = latent(range = 0.2)  # tune this to your dataset's scale
+u = latent(τ = 1.0, range = 0.2)  # tune this to your dataset's scale
 
 # ## Bernoulli observations (logit link)
 # We connect the latent field to point-wise labels using a Bernoulli exponential
