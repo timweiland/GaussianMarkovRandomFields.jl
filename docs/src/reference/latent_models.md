@@ -78,7 +78,7 @@ gmrf = ar1(τ=2.0, ρ=0.8)
 # Spatial Matérn model from points (stores observation coordinates)
 points = [0.0 0.0; 1.0 0.0; 0.5 1.0]  # N×2 matrix
 matern = MaternModel(points; smoothness = 2)
-gmrf = matern(range=1.5)
+gmrf = matern(τ=1.0, range=1.5)
 
 # Convenience: evaluation matrix and observation model from stored points
 A = evaluation_matrix(matern)
@@ -114,7 +114,7 @@ points = generate_observation_points()
 spatial_matern = MaternModel(points; smoothness = 1)
 independent_effects = IIDModel(length(points))
 combined = CombinedModel(spatial_matern, independent_effects)
-gmrf = combined(range=2.0, τ_iid=0.1)
+gmrf = combined(τ_matern=1.0, range_matern=2.0, τ_iid=0.1)
 ```
 
 ### Smart Parameter Naming

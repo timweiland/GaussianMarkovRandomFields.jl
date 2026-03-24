@@ -174,8 +174,8 @@ comp = build_formula_components(
     family = Normal
 )
 
-# Instantiate the GMRF — 'range' controls spatial correlation distance
-gmrf = comp.combined_model(range_matern=2.0)
+# Instantiate the GMRF — τ controls field precision, range controls correlation distance
+gmrf = comp.combined_model(τ_matern=1.0, range_matern=2.0)
 ```
 
 ### Pre-built Discretization
@@ -206,7 +206,8 @@ comp = build_formula_components(
 
 ### Hyperparameters
 
-The Matérn formula term exposes a single hyperparameter:
+The Matérn formula term exposes two hyperparameters:
+- `τ_matern`: Field precision (τ > 0) controlling marginal variance (~1/τ)
 - `range_matern`: Range parameter (range > 0) controlling spatial correlation distance
 
 ### When to Use Manual vs Formula

@@ -42,19 +42,19 @@ This leads to a Matérn covariance function with range and smoothness parameters
 # Direct construction
 disc = FEMDiscretization(grid, interpolation, quadrature)
 model = MaternModel(disc; smoothness = 2)
-gmrf = model(range=2.0)
+gmrf = model(τ=1.0, range=2.0)
 
 # Automatic construction from points (stores observation_points)
 points = [0.0 0.0; 1.0 0.0; 0.5 1.0]  # N×2 matrix
 model = MaternModel(points; smoothness = 1, element_order = 1)
-gmrf = model(range=2.0)
+gmrf = model(τ=1.0, range=2.0)
 
 # Convenience: evaluation matrix from stored points
 A = evaluation_matrix(model)
 
 # With custom algorithm
 model = MaternModel(disc; smoothness = 2, alg = LDLtFactorization())
-gmrf = model(range=2.0)
+gmrf = model(τ=1.0, range=2.0)
 ```
 """
 struct MaternModel{F <: FEMDiscretization, S <: Integer, Alg, C, P} <: LatentModel
