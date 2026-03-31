@@ -1,5 +1,6 @@
 using ChainRulesCore
 using LinearAlgebra
+using CliqueTrees.Multifrontal.Differential: ldivsym
 
 """
     _is_zero_tangent(x) -> Bool
@@ -313,12 +314,118 @@ function ChainRulesCore.rrule(
 end
 
 # Also handle case without RuleConfig for simpler usage
+
+# =============================================================================
+# ChordalGMRF rrule
+# =============================================================================
+
+# Extract tangents from ChordalGMRF posterior
+function _extract_posterior_tangents(ȳ, ::ChordalGMRF)
+    μ̄ = _is_zero_tangent(ȳ.μ) ? ZeroTangent() : ȳ.μ
+    Q̄ = _is_zero_tangent(ȳ.Q) ? ZeroTangent() : ȳ.Q
+    return (μ̄, Q̄)
+end
+
+# Add Q̄ contribution to prior tangent for ChordalGMRF
+function _add_precision_tangent(prior_tangent, prior::ChordalGMRF, Q̄)
+    prior_μ̄ = (prior_tangent isa Tangent && hasproperty(prior_tangent, :μ)) ? prior_tangent.μ : NoTangent()
+    prior_Q̄_existing = (prior_tangent isa Tangent && hasproperty(prior_tangent, :Q)) ? prior_tangent.Q : NoTangent()
+    combined_Q̄ = _is_zero_tangent(prior_Q̄_existing) ? Q̄ : prior_Q̄_existing + Q̄
+    return Tangent{typeof(prior)}(;
+        μ = prior_μ̄,
+        Q = combined_Q̄,
+        L = NoTangent(),
+        P = NoTangent(),
+    )
+end
+
+"""
+    ChainRulesCore.rrule(config::RuleConfig{>:HasReverseMode}, ::typeof(gaussian_approximation),
+                         prior_gmrf::ChordalGMRF, obs_lik::ObservationLikelihood; kwargs...)
+
+Automatic differentiation rule for `gaussian_approximation` with `ChordalGMRF` using the Implicit Function Theorem.
+
+Uses the chordal structure from CliqueTrees for efficient operations. The posterior precision
+is `Q_post = Q_prior - loghessian(x*, obs_lik)`.
+
+# Mathematical Approach
+Uses IFT on the optimality condition ∇ₓ neg_log_posterior(x*) = 0:
+- Forward: Solve via Fisher scoring
+- Backward:
+  1. Extract (μ̄, Q̄) from posterior tangent
+  2. Backprop Q̄ through loghessian to get x* and obs_lik contributions
+  3. Combine with μ̄ and solve Q_post λ = total_x̄ using chordal Cholesky
+  4. VJP through ∇ₓ_neg_log_posterior with -λ to get prior and obs_lik tangents
+  5. Add direct Q̄ contribution to prior
+"""
 function ChainRulesCore.rrule(
+        config::RuleConfig{>:HasReverseMode},
         ::typeof(gaussian_approximation),
-        prior_gmrf::Union{GMRF, ConstrainedGMRF},
+        prior_gmrf::ChordalGMRF,
         obs_lik::ObservationLikelihood;
         kwargs...
     )
-    # Delegate to the RuleConfig version with default config
-    return rrule(NoRuleConfig(), gaussian_approximation, prior_gmrf, obs_lik; kwargs...)
+    # === Forward pass ===
+    posterior = gaussian_approximation(prior_gmrf, obs_lik; kwargs...)
+
+    # Mode in unpermuted coordinates
+    x_star = mean(posterior)
+    P = posterior.P
+    S = posterior.L.S
+
+    # === Pullback ===
+    function chordal_gaussian_approximation_pullback(ȳ)
+        # Handle zero tangent case
+        if ȳ isa ZeroTangent
+            return (NoTangent(), ZeroTangent(), NoTangent())
+        end
+
+        # Extract tangent components
+        μ̄, Q̄ = _extract_posterior_tangents(ȳ, posterior)
+
+        # --- Q̄ path: backprop through Q_post = Q_prior - loghessian(x*, obs_lik) ---
+        if _is_zero_tangent(Q̄)
+            x̄_from_Q = ZeroTangent()
+            obs_lik_tangent_from_Q = NoTangent()
+        else
+            # Use rrule_via_ad on loghessian; Q_post = Q_prior - loghessian(...)
+            _, hess_pullback = rrule_via_ad(config, loghessian, x_star, obs_lik)
+            # -Q̄ because Q_post = Q_prior - loghessian(...)
+            _, x̄_from_Q, obs_lik_tangent_from_Q = hess_pullback(-Q̄)
+        end
+
+        # --- μ̄ path: μ_post = x*, so μ̄ flows directly to x* ---
+        x̄_from_μ = _is_zero_tangent(μ̄) ? ZeroTangent() : μ̄
+
+        # --- Combine x* tangents ---
+        if _is_zero_tangent(x̄_from_μ) && _is_zero_tangent(x̄_from_Q)
+            x̄_total = zeros(eltype(x_star), length(x_star))
+        elseif _is_zero_tangent(x̄_from_μ)
+            x̄_total = collect(x̄_from_Q)
+        elseif _is_zero_tangent(x̄_from_Q)
+            x̄_total = collect(x̄_from_μ)
+        else
+            x̄_total = collect(x̄_from_μ) .+ collect(x̄_from_Q)
+        end
+
+        # --- IFT: solve Q_post * λ = x̄_total using chordal Cholesky ---
+        λ = ldivsym(precision_matrix(posterior), posterior.L, P, x̄_total)
+
+        # --- VJP through ∇ₓ_neg_log_posterior at x* ---
+        _, ∇_pullback = rrule_via_ad(config, ∇ₓ_neg_log_posterior, prior_gmrf, obs_lik, x_star)
+        _, prior_tangent, obs_lik_tangent, _ = ∇_pullback(-λ)  # Minus sign from IFT
+
+        # --- Add direct Q̄ contribution to prior (Q_post = Q_prior - ...) ---
+        if !_is_zero_tangent(Q̄)
+            prior_tangent = _add_precision_tangent(prior_tangent, prior_gmrf, Q̄)
+        end
+
+        # --- Combine obs_lik tangents from both paths ---
+        obs_lik_combined = _add_namedtuples(obs_lik_tangent, obs_lik_tangent_from_Q)
+
+        return (NoTangent(), prior_tangent, obs_lik_combined)
+    end
+
+    return posterior, chordal_gaussian_approximation_pullback
 end
+

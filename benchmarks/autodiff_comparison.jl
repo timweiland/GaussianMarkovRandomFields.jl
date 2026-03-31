@@ -22,6 +22,8 @@ using Random
 
 using Zygote, Enzyme, FiniteDiff
 
+using CliqueTrees.Multifrontal: symbolic, chordal
+
 println("="^80)
 println("AUTODIFF BACKEND COMPARISON: HIGH-DIMENSIONAL HYPERPARAMETER SPACE")
 println("="^80)
@@ -37,7 +39,7 @@ println("    - $n mean parameters (one per time point)")
 println("    - 1 precision parameter (τ)")
 
 # Workflow: θ → GMRF → gaussian_approximation → logpdf
-function benchmark_workflow(θ::Vector{Float64}, y::Vector{Int}, x_eval::Vector{Float64})
+function benchmark_workflow(θ::Vector{Float64}, y::PoissonObservations, x_eval::Vector{Float64})
     # Extract hyperparameters
     μ = θ[1:n]      # Mean field (100 params)
     log_τ = θ[n + 1]  # Log precision
@@ -49,6 +51,31 @@ function benchmark_workflow(θ::Vector{Float64}, y::Vector{Int}, x_eval::Vector{
 
     # Prior GMRF with custom mean
     prior = GMRF(μ, Q, LinearSolve.LDLtFactorization())
+
+    # Poisson observation likelihood
+    obs_model = ExponentialFamily(Poisson)
+    obs_lik = obs_model(y)
+
+    # Gaussian approximation
+    posterior = gaussian_approximation(prior, obs_lik)
+
+    # Evaluate log-density
+    return logpdf(posterior, x_eval)
+end
+
+# ChordalGMRF workflow (only supports Zygote)
+function benchmark_workflow_chordal(θ::Vector{Float64}, y::PoissonObservations, x_eval::Vector{Float64})
+    # Extract hyperparameters
+    μ = θ[1:n]      # Mean field (100 params)
+    log_τ = θ[n + 1]  # Log precision
+    τ = exp(log_τ)
+
+    # Build precision matrix using RW1 latent model
+    rw1_model = RW1Model(n)
+    Q = sparse(precision_matrix(rw1_model; τ = τ))
+
+    # Prior ChordalGMRF with custom mean
+    prior = ChordalGMRF(μ, Q)
 
     # Poisson observation likelihood
     obs_model = ExponentialFamily(Poisson)
@@ -73,19 +100,24 @@ Random.seed!(123)
 # Simulate observations (Poisson counts from smooth latent field)
 x_true = μ_true .+ cumsum(randn(n)) .* sqrt(1 / τ_true) .* 0.5
 x_true .-= mean(x_true)  # Center
-y_obs = rand.(Poisson.(exp.(x_true .+ 0.5)))
+y_counts = rand.(Poisson.(exp.(x_true .+ 0.5)))
+y_obs = PoissonObservations(y_counts)
 x_eval = randn(n) .+ 0.3
 
 # Initial parameter values (perturbed from truth)
 θ_init = θ_true .+ randn(n_params) .* 0.1
 
-println("  ✓ Generated $(length(y_obs)) Poisson observations")
+println("  ✓ Generated $(length(y_counts)) Poisson observations")
 println("  ✓ Initial parameters: $(n_params)-dimensional vector")
 
-# Verify workflow works
-println("\nVerifying workflow...")
+# Verify workflows work
+println("\nVerifying workflows...")
 f_val = benchmark_workflow(θ_init, y_obs, x_eval)
-println("  ✓ Function value: $(@sprintf("%.4f", f_val))")
+println("  ✓ GMRF function value: $(@sprintf("%.4f", f_val))")
+
+f_val_chordal = benchmark_workflow_chordal(θ_init, y_obs, x_eval)
+println("  ✓ ChordalGMRF function value: $(@sprintf("%.4f", f_val_chordal))")
+println("  ✓ Difference: $(@sprintf("%.2e", abs(f_val - f_val_chordal)))")
 
 # Define backends
 backends = [
@@ -140,18 +172,61 @@ for (name, backend) in backends
     end
 end
 
+# ChordalGMRF benchmark (Zygote only)
+println("\n" * "="^80)
+println("BENCHMARKING ChordalGMRF (Zygote only)")
+println("="^80)
+
+println("\nChordalGMRF + Zygote:")
+println("-"^40)
+
+try
+    # Warmup
+    print("  Warming up... ")
+    grad_chordal = DifferentiationInterface.gradient(
+        θ -> benchmark_workflow_chordal(θ, y_obs, x_eval),
+        AutoZygote(),
+        θ_init
+    )
+    println("✓")
+
+    # Benchmark
+    print("  Benchmarking... ")
+    bench_chordal = @benchmark DifferentiationInterface.gradient(
+        θ -> benchmark_workflow_chordal(θ, y_obs, x_eval),
+        AutoZygote(),
+        $θ_init
+    ) samples = 10 seconds = 30
+
+    results["ChordalGMRF+Zygote"] = (
+        gradient = grad_chordal,
+        time = minimum(bench_chordal.times) / 1.0e6,
+        bench = bench_chordal,
+    )
+
+    println("✓")
+    println("  Time (min):     $(@sprintf("%.2f", results["ChordalGMRF+Zygote"].time)) ms")
+    println("  Time (median):  $(@sprintf("%.2f", median(bench_chordal.times) / 1.0e6)) ms")
+    println("  Allocations:    $(bench_chordal.allocs)")
+    println("  Memory:         $(@sprintf("%.2f", bench_chordal.memory / 1.0e6)) MB")
+
+catch e
+    println("  ✗ Failed: $e")
+    results["ChordalGMRF+Zygote"] = nothing
+end
+
 # Summary comparison
 println("\n" * "="^80)
 println("SUMMARY")
 println("="^80)
 
-if all(v !== nothing for v in values(results))
+if results["FiniteDiff"] !== nothing
     # Verify gradients match
     println("\nGradient verification (comparing to FiniteDiff):")
     fd_grad = results["FiniteDiff"].gradient
 
-    for name in ["Zygote", "Enzyme"]
-        if results[name] !== nothing
+    for name in ["Zygote", "Enzyme", "ChordalGMRF+Zygote"]
+        if get(results, name, nothing) !== nothing
             grad = results[name].gradient
             abs_error = abs.(grad - fd_grad)
             max_error = maximum(abs_error)
@@ -164,7 +239,7 @@ if all(v !== nothing for v in values(results))
     end
 
     # Performance comparison table
-    println("\nPerformance comparison:")
+    println("\nPerformance comparison (GMRF backends):")
     println("  " * "─"^76)
     println(@sprintf("  %-20s %12s %12s %12s %12s", "Backend", "Time (ms)", "Speedup", "Allocs", "Memory (MB)"))
     println("  " * "─"^76)
@@ -191,8 +266,36 @@ if all(v !== nothing for v in values(results))
         enzyme_vs_zygote = results["Zygote"].time / results["Enzyme"].time
         winner = enzyme_vs_zygote > 1 ? "Enzyme" : "Zygote"
         ratio = max(enzyme_vs_zygote, 1.0 / enzyme_vs_zygote)
-        println("\n  🏆 $winner is fastest: $(@sprintf("%.1f", ratio))× faster than the other")
+        println("\n  GMRF winner: $winner ($(@sprintf("%.1f", ratio))× faster)")
     end
+end
+
+# ChordalGMRF vs GMRF comparison (Zygote only)
+if get(results, "ChordalGMRF+Zygote", nothing) !== nothing && get(results, "Zygote", nothing) !== nothing
+    println("\n" * "="^80)
+    println("GMRF vs ChordalGMRF COMPARISON (Zygote)")
+    println("="^80)
+
+    r_gmrf = results["Zygote"]
+    r_chordal = results["ChordalGMRF+Zygote"]
+
+    println("\n  " * "─"^76)
+    println(@sprintf("  %-20s %12s %12s %12s %12s", "Implementation", "Time (ms)", "Speedup", "Allocs", "Memory (MB)"))
+    println("  " * "─"^76)
+
+    println(@sprintf("  %-20s %12.2f %12s %12d %12.2f",
+            "GMRF", r_gmrf.time, "1.0×", r_gmrf.bench.allocs, r_gmrf.bench.memory / 1.0e6))
+
+    chordal_speedup = r_gmrf.time / r_chordal.time
+    println(@sprintf("  %-20s %12.2f %12s %12d %12.2f",
+            "ChordalGMRF", r_chordal.time, @sprintf("%.1f×", chordal_speedup),
+            r_chordal.bench.allocs, r_chordal.bench.memory / 1.0e6))
+
+    println("  " * "─"^76)
+
+    winner = chordal_speedup > 1 ? "ChordalGMRF" : "GMRF"
+    ratio = max(chordal_speedup, 1.0 / chordal_speedup)
+    println("\n  Winner: $winner ($(@sprintf("%.1f", ratio))× faster)")
 end
 
 println("\n" * "="^80)

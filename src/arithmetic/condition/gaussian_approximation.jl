@@ -1,8 +1,13 @@
 using LinearAlgebra
 using SparseArrays
 using LinearMaps
+using CliqueTrees.Multifrontal: chordal, ChordalCholesky, triangular
+using CliqueTrees.Multifrontal.Differential: ldivsym
 
 export gaussian_approximation
+
+# Sparse-preserving subtraction for Hermitian matrices
+hermdiff(A::Hermitian, B) = Hermitian(parent(A) - B, Symbol(A.uplo))
 
 function neg_log_posterior(prior_gmrf::AbstractGMRF, obs_lik::ObservationLikelihood, x)
     return -logpdf(prior_gmrf, x) - loglik(x, obs_lik)
@@ -155,7 +160,7 @@ function gaussian_approximation(
         # Apply step with adaptive line search or full step
         if adaptive_stepsize
             obj_current = neg_log_posterior(base_gmrf, obs_lik, x_k)
-            step_accepted = false
+            accept = false
 
             for ls_iter in 1:max_linesearch_iter
                 candidate = x_k - α * step
@@ -165,7 +170,7 @@ function gaussian_approximation(
                     # Accept step, increase α toward 1
                     μ_new = candidate
                     α = sqrt(α)
-                    step_accepted = true
+                    accept = true
                     verbose && ls_iter > 1 && println("    Accepted at α=$(round(α^2, digits = 3)) after $ls_iter backtracks")
                     break
                 else
@@ -175,13 +180,13 @@ function gaussian_approximation(
 
                     if α * norm(step, Inf) < newton_dec_tol / 1000
                         μ_new = candidate
-                        step_accepted = true
+                        accept = true
                         break
                     end
                 end
             end
 
-            if !step_accepted
+            if !accept
                 μ_new = x_k - α * step
             end
         else
@@ -310,4 +315,92 @@ end
 function gaussian_approximation(prior_mgmrf::MetaGMRF, obs_lik::ObservationLikelihood; kwargs...)
     posterior_gmrf = gaussian_approximation(prior_mgmrf.gmrf, obs_lik; kwargs...)
     return MetaGMRF(posterior_gmrf, prior_mgmrf.metadata)
+end
+
+# ChordalGMRF dispatch - uses chordal factorization for efficient solves
+function gaussian_approximation(
+        prior_gmrf::ChordalGMRF{T},
+        obs_lik::ObservationLikelihood;
+        x0::Union{Nothing, AbstractVector} = nothing,
+        max_iter::Int = 50,
+        mean_change_tol::Real = 1.0e-4,
+        newton_dec_tol::Real = 1.0e-5,
+        adaptive_stepsize::Bool = true,
+        max_linesearch_iter::Int = 10,
+        verbose::Bool = false
+    ) where {T}
+    S = prior_gmrf.L.S
+    P = prior_gmrf.P
+    Q_prior = prior_gmrf.Q
+
+    x_k = isnothing(x0) ? copy(mean(prior_gmrf)) : copy(x0)
+
+    α = 1.0
+    Q_new = Q_prior
+    F_new = ChordalCholesky{:L, T}(P, S)
+
+    verbose && println("Starting Fisher scoring (ChordalGMRF)...")
+
+    for iter in 1:max_iter
+        H_k = loghessian(x_k, obs_lik)
+        Q_new = hermdiff(Q_prior, H_k)
+        copyto!(F_new, Q_new)
+        cholesky!(F_new)
+        neg_score_k = ∇ₓ_neg_log_posterior(prior_gmrf, obs_lik, x_k)
+        step = F_new \ neg_score_k
+
+        if adaptive_stepsize
+            obj_current = neg_log_posterior(prior_gmrf, obs_lik, x_k)
+            step_accepted = false
+
+            for ls_iter in 1:max_linesearch_iter
+                candidate = x_k - α * step
+                obj_candidate = neg_log_posterior(prior_gmrf, obs_lik, candidate)
+
+                if obj_candidate <= obj_current
+                    x_new = candidate
+                    α = sqrt(α)
+                    step_accepted = true
+                    verbose && ls_iter > 1 && println("    Accepted at α=$(round(α^2, digits = 3)) after $ls_iter backtracks")
+                    break
+                else
+                    α *= 0.1
+                    verbose && println("    Backtrack: α=$(round(α, digits = 4))")
+
+                    if α * norm(step, Inf) < newton_dec_tol / 1000
+                        x_new = candidate
+                        step_accepted = true
+                        break
+                    end
+                end
+            end
+
+            if !step_accepted
+                x_new = x_k - α * step
+            end
+        else
+            x_new = x_k - step
+        end
+
+        newton_decrement = dot(neg_score_k, step)
+        mean_change = norm(x_new - x_k)
+        mean_change_rel = mean_change / max(norm(x_k), 1e-10)
+
+        verbose && println("  Iter $iter: Newton dec = $(round(newton_decrement, sigdigits = 3)), α = $(round(α, digits = 3))")
+
+        if (newton_decrement < newton_dec_tol) || (mean_change < mean_change_tol) || (mean_change_rel < mean_change_tol)
+            verbose && println("  Converged after $iter iterations")
+            return ChordalGMRF(x_new, Q_new, F_new.L, P)
+        end
+
+        x_k = x_new
+    end
+
+    verbose && println("  Reached max_iter = $max_iter without convergence")
+
+    H_k = loghessian(x_k, obs_lik)
+    Q_new = Q_prior - H_k
+    copyto!(F_new, Hermitian(Q_new, :L))
+    cholesky!(F_new)
+    return ChordalGMRF(x_k, Q_new, F_new.L, P)
 end

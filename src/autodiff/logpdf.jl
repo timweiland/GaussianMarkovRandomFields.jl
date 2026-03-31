@@ -98,3 +98,5 @@ function ChainRulesCore.rrule(::typeof(logpdf), x::AbstractGMRF, z::AbstractVect
         )
     end
 end
+
+ChainRulesCore.@opt_out rrule(::typeof(logpdf), ::ChordalGMRF, ::AbstractVector)
