@@ -1,6 +1,7 @@
 using SparseArrays
 using LinearAlgebra
 using ChainRulesCore
+using SelectedInversion: SupernodalMatrix
 
 # TODO: Make PR for SymTridiagonal rrules into ChainRules, to avoid type piracy
 """
@@ -149,4 +150,15 @@ function compute_precision_gradient(Qinv::Symmetric{T, <:SparseMatrixCSC}, r::Ab
     # Build sparse gradient matrix and wrap in Symmetric
     grad_data = sparse(rows, cols, (0.5 * ȳ) .* (vals .- rr_vals), size(Qinv)...)
     return Symmetric(grad_data, Symbol(Qinv.uplo))
+end
+
+"""
+    compute_precision_gradient(Qinv::SupernodalMatrix, r::AbstractVector, ȳ::Real)
+
+Efficient gradient computation for `SupernodalMatrix` from SelectedInversion.jl.
+Converts to `SparseMatrixCSC` first to avoid dense materialization, then delegates
+to the sparse method.
+"""
+function compute_precision_gradient(Qinv::SupernodalMatrix, r::AbstractVector, ȳ::Real)
+    return compute_precision_gradient(sparse(Qinv), r, ȳ)
 end

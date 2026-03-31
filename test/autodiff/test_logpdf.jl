@@ -293,6 +293,34 @@ end
         @test grad[2, 3] ≈ grad[3, 2]
     end
 
+    @testset "SupernodalMatrix precision gradient" begin
+        # Test compute_precision_gradient with SupernodalMatrix from SelectedInversion.jl
+        using SparseArrays, LinearAlgebra, SelectedInversion
+
+        n = 200
+        A = sprandn(n, n, 0.05)
+        Q = A * A' + 5 * I
+        chol = cholesky(sparse(Q))
+        result = SelectedInversion.selinv(chol; depermute = true)
+        Qinv = result.Z
+
+        # Should be a SupernodalMatrix for large enough matrices
+        @test Qinv isa SupernodalMatrix
+
+        r = randn(n)
+        ȳ = 1.5
+
+        grad = compute_precision_gradient(Qinv, r, ȳ)
+
+        # Should return sparse matrix, not dense
+        @test grad isa SparseMatrixCSC
+
+        # Verify correctness against explicit sparse conversion
+        Qinv_sparse = sparse(Qinv)
+        grad_ref = compute_precision_gradient(Qinv_sparse, r, ȳ)
+        @test grad ≈ grad_ref
+    end
+
     @testset "Generic fallback with warning" begin
         # Test generic fallback path (should trigger warning)
         # Use a dense Matrix which will use the generic method
