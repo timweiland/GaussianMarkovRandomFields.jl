@@ -37,12 +37,12 @@ end
 # Handle Symmetric wrapper from MatrixDepot
 make_posdef(A::Symmetric) = make_posdef(sparse(A))
 
-# Test matrices from SSMC (larger for ~100ms target)
+# Test matrices from SSMC (larger for meaningful benchmarks)
 test_matrices = [
-    ("HB/bcsstk14", "Structural, n=1806"),
     ("HB/bcsstk15", "Structural, n=3948"),
     ("HB/bcsstk16", "Structural, n=4884"),
     ("HB/bcsstk17", "Structural, n=10974"),
+    ("HB/bcsstk18", "Structural, n=11948"),
 ]
 
 println("\nTest matrices:")
