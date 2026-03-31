@@ -18,7 +18,6 @@ using LinearAlgebra
 using LinearAlgebra: Hermitian, Symmetric, Adjoint, Transpose, AdjOrTrans, dot, rmul!, tril, triu
 using SparseArrays
 using SparseArrays: SparseMatrixCSC, nzrange, rowvals, getcolptr, nonzeros
-using Zygote
 
 #####
 ##### Type aliases
@@ -30,12 +29,6 @@ const HermOrSymSparse{T, I} = Union{HermSparse{T, I}, SymSparse{T, I}}
 
 const DenseMat{T} = Union{StridedMatrix{T}, AdjOrTrans{T, <:StridedVecOrMat{T}}}
 const DenseVecOrMat{T} = Union{DenseMat{T}, StridedVector{T}}
-
-#####
-##### Zygote: accum for HermOrSymSparse
-#####
-
-Zygote.accum(x::HermOrSymSparse, y::HermOrSymSparse) = x + y
 
 #####
 ##### ChainRulesCore: ProjectTo for HermOrSymSparse

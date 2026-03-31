@@ -1,8 +1,25 @@
 module GaussianMarkovRandomFieldsAutoDiff
 
 using GaussianMarkovRandomFields
-using ForwardDiff, Zygote, LinearAlgebra, LinearMaps
+using ForwardDiff, Zygote, LinearAlgebra, LinearMaps, SparseArrays
 import LinearMaps: _unsafe_mul!
+
+#                                  |    |    |
+#                                 )_)  )_)  )_)
+#                                )___))___))___)
+#                               )____)____)_____)
+#                             _____|____|____|____
+#                    ---------\                   /---------
+#                      ^^^^^ ^^^^^^^^^^^^^^^^^^^^^
+#                        ^^^^      ^^^^     ^^^    ^^
+#                               ^^^^      ^^^
+#
+# Zygote accum for sparse Hermitian/Symmetric (piracy until upstream PR is merged)
+const HermOrSymSparse{T, I} = Union{
+    Hermitian{T, SparseMatrixCSC{T, I}},
+    Symmetric{T, SparseMatrixCSC{T, I}}
+}
+Zygote.accum(x::HermOrSymSparse, y::HermOrSymSparse) = x + y
 
 function LinearMaps._unsafe_mul!(y, J::ADJacobianMap, x::AbstractVector)
     g(t) = J.f(J.x₀ + t * x)
