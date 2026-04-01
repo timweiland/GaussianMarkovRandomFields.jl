@@ -1,0 +1,8 @@
+include("test_gmrf_workspace.jl")
+include("test_workspace_gmrf.jl")
+include("test_workspace_gaussian_approximation.jl")
+include("test_workspace_constrained.jl")
+include("test_workspace_autodiff.jl")
+include("test_workspace_latent_models.jl")
+include("test_workspace_pool.jl")
+include("test_cliquetrees_backend.jl")

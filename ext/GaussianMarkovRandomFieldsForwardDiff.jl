@@ -486,4 +486,141 @@ function GMRFs.gaussian_approximation(
     return _forwarddiff_gaussian_approximation(prior_gmrf, obs_lik; kwargs...)
 end
 
+# === WorkspaceGMRF ForwardDiff support ===
+#
+# When Dual numbers flow into WorkspaceGMRF construction, create the workspace
+# from primal values (CHOLMOD can't handle Duals) while preserving Duals in
+# the mean and precision fields for tangent propagation.
+
+function _construct_forwarddiff_workspace_gmrf(
+        mean::AbstractVector, Q::SparseMatrixCSC
+    )
+    T = promote_type(eltype(mean), eltype(Q))
+    mean_T = eltype(mean) === T ? mean : convert(AbstractVector{T}, mean)
+    Q_T = eltype(Q) === T ? Q : SparseMatrixCSC(Q.m, Q.n, Q.colptr, Q.rowval, convert(Vector{T}, Q.nzval))
+
+    # Create workspace from primal values
+    Q_primal = SparseMatrixCSC(Q.m, Q.n, Q.colptr, Q.rowval, ForwardDiff.value.(Q.nzval))
+    ws = GMRFs.GMRFWorkspace(Q_primal)
+
+    version = GMRFs._next_version!(ws)
+    ws.loaded_version = version
+    return GMRFs.WorkspaceGMRF{T, typeof(ws.backend), typeof(ws), Nothing}(
+        Vector{T}(mean_T), copy(Q_T), ws, nothing, version
+    )
+end
+
+function GMRFs.WorkspaceGMRF(
+        mean::AbstractVector{<:ForwardDiff.Dual},
+        Q::SparseMatrixCSC
+    )
+    return _construct_forwarddiff_workspace_gmrf(mean, Q)
+end
+
+function GMRFs.WorkspaceGMRF(
+        mean::AbstractVector,
+        Q::SparseMatrixCSC{<:ForwardDiff.Dual}
+    )
+    return _construct_forwarddiff_workspace_gmrf(mean, Q)
+end
+
+function GMRFs.WorkspaceGMRF(
+        mean::AbstractVector{<:ForwardDiff.Dual},
+        Q::SparseMatrixCSC{<:ForwardDiff.Dual}
+    )
+    return _construct_forwarddiff_workspace_gmrf(mean, Q)
+end
+
+# === WorkspaceGMRF ForwardDiff gaussian_approximation ===
+
+function _primal_workspace_gmrf(prior::GMRFs.WorkspaceGMRF{<:ForwardDiff.Dual})
+    μ_primal = ForwardDiff.value.(GMRFs.mean(prior))
+    Q_primal = SparseMatrixCSC(
+        prior.precision.m, prior.precision.n,
+        prior.precision.colptr, prior.precision.rowval,
+        ForwardDiff.value.(prior.precision.nzval)
+    )
+    return GMRFs.WorkspaceGMRF(μ_primal, Q_primal)
+end
+
+function _forwarddiff_workspace_ga(
+        prior_gmrf::GMRFs.WorkspaceGMRF{D},
+        obs_lik;
+        kwargs...
+    ) where {D <: ForwardDiff.Dual}
+    # Step 1: Primal forward pass
+    primal_prior = _primal_workspace_gmrf(prior_gmrf)
+    primal_obs_lik = _primal_obs_lik(obs_lik)
+    posterior_primal = GMRFs.gaussian_approximation(primal_prior, primal_obs_lik; kwargs...)
+    x_star = GMRFs.mean(posterior_primal)
+
+    # Step 2: Evaluate gradient with Dual prior at primal x*
+    neg_grad_dual = GMRFs.∇ₓ_neg_log_posterior(prior_gmrf, obs_lik, x_star)
+
+    # Step 3: Solve IFT linear systems using the posterior workspace
+    Tag = ForwardDiff.tagtype(D)
+    V = ForwardDiff.valtype(D)
+    N = ForwardDiff.npartials(D)
+    n = length(x_star)
+
+    ws = posterior_primal.workspace
+    dx = Matrix{V}(undef, n, N)
+    for j in 1:N
+        rhs_j = [-ForwardDiff.partials(neg_grad_dual[i], j) for i in 1:n]
+        dx[:, j] .= GMRFs.workspace_solve(ws, rhs_j)
+    end
+
+    # Step 4: Construct Dual-valued x*
+    x_star_dual = map(1:n) do i
+        ForwardDiff.Dual{Tag, V, N}(x_star[i], ForwardDiff.Partials{N, V}(ntuple(j -> dx[i, j], N)))
+    end
+
+    # Step 5: Compute posterior precision with Duals
+    H_dual = GMRFs.loghessian(x_star_dual, obs_lik)
+    Q_prior_dual = GMRFs.precision_matrix(prior_gmrf)
+    Q_post_dual = Q_prior_dual - H_dual
+
+    # Step 6: Return WorkspaceGMRF with Dual values and primal workspace
+    Q_post_sparse = sparse(Q_post_dual)
+    return GMRFs.WorkspaceGMRF(x_star_dual, Q_post_sparse, ws)
+end
+
+function GMRFs.gaussian_approximation(
+        prior_gmrf::GMRFs.WorkspaceGMRF{D},
+        obs_lik::GMRFs.ObservationLikelihood;
+        kwargs...
+    ) where {D <: ForwardDiff.Dual}
+    return _forwarddiff_workspace_ga(prior_gmrf, obs_lik; kwargs...)
+end
+
+# Disambiguation: Dual WorkspaceGMRF + conjugate Normal
+function GMRFs.gaussian_approximation(
+        prior_gmrf::GMRFs.WorkspaceGMRF{D},
+        obs_lik::GMRFs.NormalLikelihood{GMRFs.IdentityLink};
+        kwargs...
+    ) where {D <: ForwardDiff.Dual}
+    return _forwarddiff_workspace_ga(prior_gmrf, obs_lik; kwargs...)
+end
+
+# Dual WorkspaceGMRFs hold Dual-valued precision but the workspace buffer is
+# Float64. Extract primal values for reloading so version coherence works.
+function GMRFs.ensure_loaded!(d::GMRFs.WorkspaceGMRF{<:ForwardDiff.Dual})
+    ws = d.workspace
+    if ws.loaded_version != d.version
+        copyto!(ws.Q.nzval, ForwardDiff.value.(d.precision.nzval))
+        GMRFs._invalidate!(ws)
+        ws.loaded_version = d.version
+    end
+    return nothing
+end
+
+# logdetcov for Dual-valued WorkspaceGMRF: same approach as GMRF{Dual}
+function logdetcov(x::GMRFs.WorkspaceGMRF{<:ForwardDiff.Dual})
+    Qinv = GMRFs.selinv(x.workspace)
+    primal = GMRFs.logdet_cov(x.workspace)
+    # dot(Qinv, Q_dual) naturally produces a Dual via ForwardDiff overloads
+    tangent = -dot(Qinv, x.precision)
+    return ForwardDiff.Dual{ForwardDiff.tagtype(tangent)}(primal, ForwardDiff.partials(tangent)...)
+end
+
 end
