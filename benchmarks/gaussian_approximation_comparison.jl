@@ -31,7 +31,7 @@ println("="^80)
 function make_posdef(A::SparseMatrixCSC)
     # Symmetrize and add diagonal dominance
     S = (A + A') / 2
-    d = vec(sum(abs, S; dims=2))
+    d = vec(sum(abs, S; dims = 2))
     return S + spdiagm(0 => d .+ 1.0)
 end
 
@@ -101,16 +101,16 @@ for (matrix_name, desc) in test_matrices
         Q_chordal = precision_matrix(posterior_chordal)
 
         mean_diff = norm(mean_gmrf - mean_chordal)
-        mean_rel_diff = mean_diff / (norm(mean_gmrf) + 1e-10)
+        mean_rel_diff = mean_diff / (norm(mean_gmrf) + 1.0e-10)
         Q_diff = norm(Q_gmrf - Q_chordal)
-        Q_rel_diff = Q_diff / (norm(Q_gmrf) + 1e-10)
+        Q_rel_diff = Q_diff / (norm(Q_gmrf) + 1.0e-10)
 
         println("    Mean abs diff:      $(@sprintf("%.2e", mean_diff))")
         println("    Mean rel diff:      $(@sprintf("%.2e", mean_rel_diff))")
         println("    Precision abs diff: $(@sprintf("%.2e", Q_diff))")
         println("    Precision rel diff: $(@sprintf("%.2e", Q_rel_diff))")
 
-        correct = mean_rel_diff < 1e-6 && Q_rel_diff < 1e-6
+        correct = mean_rel_diff < 1.0e-6 && Q_rel_diff < 1.0e-6
         println("    Match: $(correct ? "✓ YES" : "✗ NO")")
 
         # Performance benchmark
@@ -118,14 +118,14 @@ for (matrix_name, desc) in test_matrices
 
         # Benchmark GMRF
         print("    GMRF...        ")
-        bench_gmrf = @benchmark gaussian_approximation($gmrf_prior, $obs_lik) samples=10 seconds=10
-        time_gmrf = minimum(bench_gmrf.times) / 1e6
+        bench_gmrf = @benchmark gaussian_approximation($gmrf_prior, $obs_lik) samples = 10 seconds = 10
+        time_gmrf = minimum(bench_gmrf.times) / 1.0e6
         println("$(@sprintf("%.3f", time_gmrf)) ms")
 
         # Benchmark ChordalGMRF
         print("    ChordalGMRF... ")
-        bench_chordal = @benchmark gaussian_approximation($chordal_prior, $obs_lik) samples=10 seconds=10
-        time_chordal = minimum(bench_chordal.times) / 1e6
+        bench_chordal = @benchmark gaussian_approximation($chordal_prior, $obs_lik) samples = 10 seconds = 10
+        time_chordal = minimum(bench_chordal.times) / 1.0e6
         println("$(@sprintf("%.3f", time_chordal)) ms")
 
         speedup = time_gmrf / time_chordal
@@ -149,49 +149,55 @@ for (matrix_name, desc) in test_matrices
         grad_gmrf = Zygote.gradient(loss_gmrf, μ)[1]
         grad_chordal = Zygote.gradient(loss_chordal, μ)[1]
         grad_abs_diff = norm(grad_gmrf - grad_chordal)
-        grad_rel_diff = grad_abs_diff / (norm(grad_gmrf) + 1e-10)
+        grad_rel_diff = grad_abs_diff / (norm(grad_gmrf) + 1.0e-10)
 
         println("    Absolute diff: $(@sprintf("%.2e", grad_abs_diff))")
         println("    Relative diff: $(@sprintf("%.2e", grad_rel_diff))")
 
-        grad_correct = grad_rel_diff < 1e-6
+        grad_correct = grad_rel_diff < 1.0e-6
         println("    Match: $(grad_correct ? "✓ YES" : "✗ NO")")
 
         # Gradient performance benchmark
         println("\n  Gradient performance benchmark:")
 
         print("    GMRF...        ")
-        bench_grad_gmrf = @benchmark Zygote.gradient($loss_gmrf, $μ) samples=10 seconds=10
-        time_grad_gmrf = minimum(bench_grad_gmrf.times) / 1e6
+        bench_grad_gmrf = @benchmark Zygote.gradient($loss_gmrf, $μ) samples = 10 seconds = 10
+        time_grad_gmrf = minimum(bench_grad_gmrf.times) / 1.0e6
         println("$(@sprintf("%.3f", time_grad_gmrf)) ms")
 
         print("    ChordalGMRF... ")
-        bench_grad_chordal = @benchmark Zygote.gradient($loss_chordal, $μ) samples=10 seconds=10
-        time_grad_chordal = minimum(bench_grad_chordal.times) / 1e6
+        bench_grad_chordal = @benchmark Zygote.gradient($loss_chordal, $μ) samples = 10 seconds = 10
+        time_grad_chordal = minimum(bench_grad_chordal.times) / 1.0e6
         println("$(@sprintf("%.3f", time_grad_chordal)) ms")
 
         grad_speedup = time_grad_gmrf / time_grad_chordal
         println("    Speedup: $(@sprintf("%.2f", grad_speedup))×")
 
-        push!(results, (
-            name=matrix_name,
-            n=n,
-            nnz=nnz(Q),
-            correct=correct,
-            grad_correct=grad_correct,
-            time_gmrf=time_gmrf,
-            time_chordal=time_chordal,
-            speedup=speedup,
-            time_grad_gmrf=time_grad_gmrf,
-            time_grad_chordal=time_grad_chordal,
-            grad_speedup=grad_speedup,
-        ))
+        push!(
+            results, (
+                name = matrix_name,
+                n = n,
+                nnz = nnz(Q),
+                correct = correct,
+                grad_correct = grad_correct,
+                time_gmrf = time_gmrf,
+                time_chordal = time_chordal,
+                speedup = speedup,
+                time_grad_gmrf = time_grad_gmrf,
+                time_grad_chordal = time_grad_chordal,
+                grad_speedup = grad_speedup,
+            )
+        )
 
     catch e
-        println("  ✗ Failed: $(typeof(e).name.name): $(sprint(showerror, e; context=:limit=>true))")
-        push!(results, (name=matrix_name, n=0, nnz=0, correct=false, grad_correct=false,
-                        time_gmrf=NaN, time_chordal=NaN, speedup=NaN,
-                        time_grad_gmrf=NaN, time_grad_chordal=NaN, grad_speedup=NaN))
+        println("  ✗ Failed: $(typeof(e).name.name): $(sprint(showerror, e; context = :limit => true))")
+        push!(
+            results, (
+                name = matrix_name, n = 0, nnz = 0, correct = false, grad_correct = false,
+                time_gmrf = NaN, time_chordal = NaN, speedup = NaN,
+                time_grad_gmrf = NaN, time_grad_chordal = NaN, grad_speedup = NaN,
+            )
+        )
     end
 end
 
@@ -201,14 +207,18 @@ println("SUMMARY: FORWARD PASS")
 println("="^80)
 
 println("\n" * "-"^95)
-@printf("%-20s %8s %10s %8s %12s %12s %10s\n",
-        "Matrix", "n", "nnz", "Correct", "GMRF (ms)", "Chordal (ms)", "Speedup")
+@printf(
+    "%-20s %8s %10s %8s %12s %12s %10s\n",
+    "Matrix", "n", "nnz", "Correct", "GMRF (ms)", "Chordal (ms)", "Speedup"
+)
 println("-"^95)
 
 for r in results
     correct_str = r.correct ? "✓" : "✗"
-    @printf("%-20s %8d %10d %8s %12.3f %12.3f %10.2f×\n",
-            r.name, r.n, r.nnz, correct_str, r.time_gmrf, r.time_chordal, r.speedup)
+    @printf(
+        "%-20s %8d %10d %8s %12.3f %12.3f %10.2f×\n",
+        r.name, r.n, r.nnz, correct_str, r.time_gmrf, r.time_chordal, r.speedup
+    )
 end
 println("-"^95)
 
@@ -218,14 +228,18 @@ println("SUMMARY: GRADIENT (Zygote)")
 println("="^80)
 
 println("\n" * "-"^95)
-@printf("%-20s %8s %10s %8s %12s %12s %10s\n",
-        "Matrix", "n", "nnz", "Correct", "GMRF (ms)", "Chordal (ms)", "Speedup")
+@printf(
+    "%-20s %8s %10s %8s %12s %12s %10s\n",
+    "Matrix", "n", "nnz", "Correct", "GMRF (ms)", "Chordal (ms)", "Speedup"
+)
 println("-"^95)
 
 for r in results
     correct_str = r.grad_correct ? "✓" : "✗"
-    @printf("%-20s %8d %10d %8s %12.3f %12.3f %10.2f×\n",
-            r.name, r.n, r.nnz, correct_str, r.time_grad_gmrf, r.time_grad_chordal, r.grad_speedup)
+    @printf(
+        "%-20s %8d %10d %8s %12.3f %12.3f %10.2f×\n",
+        r.name, r.n, r.nnz, correct_str, r.time_grad_gmrf, r.time_grad_chordal, r.grad_speedup
+    )
 end
 println("-"^95)
 

@@ -283,13 +283,21 @@ if get(results, "ChordalGMRF+Zygote", nothing) !== nothing && get(results, "Zygo
     println(@sprintf("  %-20s %12s %12s %12s %12s", "Implementation", "Time (ms)", "Speedup", "Allocs", "Memory (MB)"))
     println("  " * "─"^76)
 
-    println(@sprintf("  %-20s %12.2f %12s %12d %12.2f",
-            "GMRF", r_gmrf.time, "1.0×", r_gmrf.bench.allocs, r_gmrf.bench.memory / 1.0e6))
+    println(
+        @sprintf(
+            "  %-20s %12.2f %12s %12d %12.2f",
+            "GMRF", r_gmrf.time, "1.0×", r_gmrf.bench.allocs, r_gmrf.bench.memory / 1.0e6
+        )
+    )
 
     chordal_speedup = r_gmrf.time / r_chordal.time
-    println(@sprintf("  %-20s %12.2f %12s %12d %12.2f",
+    println(
+        @sprintf(
+            "  %-20s %12.2f %12s %12d %12.2f",
             "ChordalGMRF", r_chordal.time, @sprintf("%.1f×", chordal_speedup),
-            r_chordal.bench.allocs, r_chordal.bench.memory / 1.0e6))
+            r_chordal.bench.allocs, r_chordal.bench.memory / 1.0e6
+        )
+    )
 
     println("  " * "─"^76)
 

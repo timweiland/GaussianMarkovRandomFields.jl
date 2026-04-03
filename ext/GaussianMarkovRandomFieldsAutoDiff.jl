@@ -17,7 +17,7 @@ import LinearMaps: _unsafe_mul!
 # Zygote accum for sparse Hermitian/Symmetric (piracy until upstream PR is merged)
 const HermOrSymSparse{T, I} = Union{
     Hermitian{T, SparseMatrixCSC{T, I}},
-    Symmetric{T, SparseMatrixCSC{T, I}}
+    Symmetric{T, SparseMatrixCSC{T, I}},
 }
 Zygote.accum(x::HermOrSymSparse, y::HermOrSymSparse) = x + y
 

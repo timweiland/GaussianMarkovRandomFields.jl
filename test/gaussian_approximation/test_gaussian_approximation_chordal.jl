@@ -29,14 +29,14 @@ using Distributions
         Q_analytical = Q_prior + Q_obs
         μ_analytical = Q_analytical \ (Q_prior * μ_prior + Q_obs * y)
 
-        @test precision_matrix(result) ≈ Q_analytical atol = 1e-8
-        @test mean(result) ≈ μ_analytical atol = 1e-8
+        @test precision_matrix(result) ≈ Q_analytical atol = 1.0e-8
+        @test mean(result) ≈ μ_analytical atol = 1.0e-8
     end
 
     @testset "Bernoulli Likelihood - Mathematical Properties" begin
         # Test with Bernoulli observation model (non-linear)
         n = 8
-        Q_prior = spdiagm(0 => ones(n), 1 => fill(-0.3, n-1), -1 => fill(-0.3, n-1))
+        Q_prior = spdiagm(0 => ones(n), 1 => fill(-0.3, n - 1), -1 => fill(-0.3, n - 1))
         μ_prior = zeros(n)
         prior_gmrf = ChordalGMRF(μ_prior, Q_prior)
 
@@ -85,7 +85,7 @@ using Distributions
     @testset "Consistency with GMRF" begin
         # Results should match between GMRF and ChordalGMRF
         n = 5
-        Q_prior = spdiagm(0 => 2.0 * ones(n), 1 => fill(-0.5, n-1), -1 => fill(-0.5, n-1))
+        Q_prior = spdiagm(0 => 2.0 * ones(n), 1 => fill(-0.5, n - 1), -1 => fill(-0.5, n - 1))
         μ_prior = zeros(n)
 
         gmrf_prior = GMRF(μ_prior, Q_prior)
@@ -98,14 +98,14 @@ using Distributions
         result_gmrf = gaussian_approximation(gmrf_prior, obs_lik)
         result_chordal = gaussian_approximation(chordal_prior, obs_lik)
 
-        @test mean(result_gmrf) ≈ mean(result_chordal) atol = 1e-6
-        @test precision_matrix(result_gmrf) ≈ precision_matrix(result_chordal) atol = 1e-6
+        @test mean(result_gmrf) ≈ mean(result_chordal) atol = 1.0e-6
+        @test precision_matrix(result_gmrf) ≈ precision_matrix(result_chordal) atol = 1.0e-6
     end
 
     @testset "Sparse precision - tridiagonal" begin
         # Test with tridiagonal precision (common in GMRFs)
         n = 10
-        Q_prior = spdiagm(0 => 2.0 * ones(n), 1 => -ones(n-1), -1 => -ones(n-1))
+        Q_prior = spdiagm(0 => 2.0 * ones(n), 1 => -ones(n - 1), -1 => -ones(n - 1))
         μ_prior = zeros(n)
         prior_gmrf = ChordalGMRF(μ_prior, Q_prior)
 
@@ -135,7 +135,7 @@ using Distributions
 
         # Warm-start from converged mode
         result_warm = gaussian_approximation(prior_gmrf, obs_lik; x0 = x_star)
-        @test mean(result_warm) ≈ x_star atol = 1e-4
+        @test mean(result_warm) ≈ x_star atol = 1.0e-4
     end
 
     @testset "Adaptive stepsize - extreme Poisson" begin

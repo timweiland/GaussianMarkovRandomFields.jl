@@ -249,7 +249,7 @@ backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
             diag_main = fill(4.0 + α, n)
 
             # Horizontal neighbors (±1 diagonals), but skip row boundaries
-            horiz = [-1.0 * (mod(i, grid_size) != 0) for i in 1:(n-1)]
+            horiz = [-1.0 * (mod(i, grid_size) != 0) for i in 1:(n - 1)]
 
             # Vertical neighbors (±grid_size diagonals)
             vert = fill(-1.0, n - grid_size)
@@ -304,7 +304,7 @@ backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
         function grid_precision(α, grid_size)
             n = grid_size^2
             diag_main = fill(4.0 + α, n)
-            horiz = [-1.0 * (mod(i, grid_size) != 0) for i in 1:(n-1)]
+            horiz = [-1.0 * (mod(i, grid_size) != 0) for i in 1:(n - 1)]
             vert = fill(-1.0, n - grid_size)
             return spdiagm(-grid_size => vert, -1 => horiz, 0 => diag_main, 1 => horiz, grid_size => vert)
         end
