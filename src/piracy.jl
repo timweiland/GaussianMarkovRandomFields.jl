@@ -63,17 +63,17 @@ const SymSparseProjectTo{T, I} = ProjectTo{
     },
 }
 
-function ChainRulesCore.ProjectTo(x::HermSparse{T}) where {T<:Number}
+function ChainRulesCore.ProjectTo(x::HermSparse{T}) where {T <: Number}
     return ProjectTo{Hermitian}(;
-        uplo=Symbol(x.uplo),
-        parent=ProjectTo(parent(x)),
+        uplo = Symbol(x.uplo),
+        parent = ProjectTo(parent(x)),
     )
 end
 
-function ChainRulesCore.ProjectTo(x::SymSparse{T}) where {T<:Number}
+function ChainRulesCore.ProjectTo(x::SymSparse{T}) where {T <: Number}
     return ProjectTo{Symmetric}(;
-        uplo=Symbol(x.uplo),
-        parent=ProjectTo(parent(x)),
+        uplo = Symbol(x.uplo),
+        parent = ProjectTo(parent(x)),
     )
 end
 
@@ -232,7 +232,7 @@ function unwrap(A)
         if B isa Transpose
             return (parent(B), Val(:N), Val(:C))
         else
-            return (B,         Val(:T), Val(:C))
+            return (B, Val(:T), Val(:C))
         end
     elseif A isa Transpose
         B = parent(A)
@@ -240,7 +240,7 @@ function unwrap(A)
         if B isa Adjoint
             return (parent(B), Val(:N), Val(:C))
         else
-            return (B,         Val(:T), Val(:N))
+            return (B, Val(:T), Val(:N))
         end
     else
         return (A, Val(:N), Val(:N))
@@ -253,7 +253,7 @@ end
 #
 # The update is only applied to the structural nonzeros of C.
 function selupd!(C::HermSparse, A::AbstractVecOrMat, B::AbstractVecOrMat, α, β)
-    selupd!(parent(C), C.uplo, A, adjoint(B),      α,  β)
+    selupd!(parent(C), C.uplo, A, adjoint(B), α, β)
     selupd!(parent(C), C.uplo, B, adjoint(A), conj(α), 1)
     return C
 end
@@ -264,7 +264,7 @@ end
 #
 # The update is only applied to the structural nonzeros of C.
 function selupd!(C::SymSparse, A::AbstractVecOrMat, B::AbstractVecOrMat, α, β)
-    selupd!(parent(C), C.uplo, A,                     adjoint(B),   α, β)
+    selupd!(parent(C), C.uplo, A, adjoint(B), α, β)
     selupd!(parent(C), C.uplo, adjoint(transpose(B)), transpose(A), α, 1)
     return C
 end
@@ -493,4 +493,15 @@ for T in (HermSparse, SymSparse)
     @eval function ChainRulesCore.rrule(::typeof(dot), x::StridedVector, A::$T, y::StridedVector)
         return dot_rrule(x, A, y)
     end
+end
+
+# The rrules above cause method invalidation that exposes an upstream bug in
+# ChainRulesCore's ProjectTo{SymTridiagonal}: it extracts only one triangle of
+# the off-diagonal, losing the factor of 2 from symmetry.
+function ChainRulesCore.rrule(::typeof(sum), Q::SymTridiagonal)
+    function sum_symtridiag_pullback(ȳ)
+        s = unthunk(ȳ)
+        return NoTangent(), Tangent{SymTridiagonal}(dv = fill(s, length(Q.dv)), ev = fill(2s, length(Q.ev)))
+    end
+    return sum(Q), sum_symtridiag_pullback
 end
