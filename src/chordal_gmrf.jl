@@ -12,6 +12,10 @@ struct ChordalGMRF{T <: Real, Herm <: HermSparse{T}, Tri <: ChordalTriangular{:N
     P::Prm
 end
 
+function ChordalGMRF(μ::AbstractVector, Q::SparseMatrixCSC, L, P)
+    return ChordalGMRF(μ, Hermitian(Q, :L), L, P)
+end
+
 function ChordalGMRF(μ::AbstractVector, Q::SparseMatrixCSC; kw...)
     H = Hermitian(Q, :L)
     P, S = symbolic(H; kw...)
@@ -67,10 +71,10 @@ function Base.show(io::IO, ::MIME"text/plain", d::ChordalGMRF{T}) where {T}
 
     μ = d.μ
 
-    if length(μ) <= 6
+    return if length(μ) <= 6
         print(io, "  Mean: $μ")
     else
-        print(io, "  Mean: [$(μ[1]), $(μ[2]), $(μ[3]), ..., $(μ[end-2]), $(μ[end-1]), $(μ[end])]")
+        print(io, "  Mean: [$(μ[1]), $(μ[2]), $(μ[3]), ..., $(μ[end - 2]), $(μ[end - 1]), $(μ[end])]")
     end
 end
 
@@ -78,9 +82,8 @@ end
 # ChordalGMRF is defined by (μ, Q). L and P are derived - gradients never flow through them.
 using ChainRulesCore: ChainRulesCore, NoTangent
 
-function ChainRulesCore.rrule(::typeof(ChordalGMRF), μ::AbstractVector, Q::SparseMatrixCSC; kw...)
+function ChainRulesCore.rrule(::Type{ChordalGMRF}, μ::AbstractVector, Q::SparseMatrixCSC; kw...)
     result = ChordalGMRF(μ, Q; kw...)
     ChordalGMRF_pullback(ȳ) = (NoTangent(), ȳ.μ, ȳ.Q)
     return result, ChordalGMRF_pullback
 end
-
