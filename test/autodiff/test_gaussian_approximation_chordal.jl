@@ -5,12 +5,10 @@ using SparseArrays
 using LinearAlgebra
 using Random
 
-using CliqueTrees.Multifrontal: symbolic, chordal, HermTri, Permutation
-
 using DifferentiationInterface
-using FiniteDiff, ForwardDiff, Zygote
+using FiniteDiff, Mooncake
 
-backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
+backends = Any[("Mooncake", AutoMooncake())]
 
 @testset "$backend_name ChordalGMRF autodiff tests" for (backend_name, backend) in backends
     # Set seed for reproducibility
@@ -23,7 +21,7 @@ backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
     end
 
     # Test pipeline: hyperparameters → ChordalGMRF → gaussian_approximation → logpdf
-    function test_gauss_approx_pipeline(θ::Vector, y::Vector, x::Vector, P, S, k::Int)
+    function test_gauss_approx_pipeline(θ::Vector, y::Vector, x::Vector, k::Int)
         # Extract hyperparameters
         ρ = θ[1]        # AR parameter
         μ_const = θ[2]  # constant mean
@@ -34,12 +32,8 @@ backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
         # Create constant mean vector
         μ = μ_const * ones(k)
 
-        # Use chordal (now differentiable!)
-        J = chordal(Hermitian(Q, :L), P, S)
-        L = cholesky(J)
-
-        # Create prior ChordalGMRF (pass original Q, not chordal J)
-        prior_gmrf = ChordalGMRF(μ, Q, L, P)
+        # Create prior ChordalGMRF
+        prior_gmrf = ChordalGMRF(μ, Q)
 
         # Create Poisson observation likelihood
         obs_model = ExponentialFamily(Poisson)
@@ -59,18 +53,14 @@ backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
         y = [2, 1, 3, 2, 1, 4, 2, 1]  # Poisson count data
         x = randn(k) .+ 0.5  # Evaluation point
 
-        # Pre-compute sparsity structure
-        Q_ref = ar_precision(0.5, k)
-        P, S = symbolic(Q_ref)
-
         grad_test = DifferentiationInterface.gradient(
-            θ -> test_gauss_approx_pipeline(θ, y, x, P, S, k),
+            θ -> test_gauss_approx_pipeline(θ, y, x, k),
             backend,
             θ
         )
 
         grad_fd = DifferentiationInterface.gradient(
-            θ -> test_gauss_approx_pipeline(θ, y, x, P, S, k),
+            θ -> test_gauss_approx_pipeline(θ, y, x, k),
             fd_backend,
             θ
         )
@@ -87,23 +77,19 @@ backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
         y = [1, 2, 1, 3, 1, 2]
         x = randn(k) .+ 0.3
 
-        # Pre-compute sparsity structure
-        Q_ref = ar_precision(0.5, k)
-        P, S = symbolic(Q_ref)
-
         # Test different ρ and μ values
         for ρ in [0.2, 0.5]
             for μ_const in [0.3, 0.8]
                 θ = [ρ, μ_const]
 
                 grad_test = DifferentiationInterface.gradient(
-                    θ -> test_gauss_approx_pipeline(θ, y, x, P, S, k),
+                    θ -> test_gauss_approx_pipeline(θ, y, x, k),
                     backend,
                     θ
                 )
 
                 grad_fd = DifferentiationInterface.gradient(
-                    θ -> test_gauss_approx_pipeline(θ, y, x, P, S, k),
+                    θ -> test_gauss_approx_pipeline(θ, y, x, k),
                     fd_backend,
                     θ
                 )
@@ -124,18 +110,12 @@ backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
         y = randn(k) .* 0.3 .+ 0.2
         x = randn(k)
 
-        # Pre-compute sparsity structure
-        Q_ref = ar_precision(0.5, k)
-        P, S = symbolic(Q_ref)
-
-        function gaussian_lik_pipeline(θ, y, x, P, S, k)
+        function gaussian_lik_pipeline(θ, y, x, k)
             ρ, μ_const = θ
             Q = ar_precision(ρ, k)
             μ = μ_const * ones(k)
 
-            J = chordal(Hermitian(Q, :L), P, S)
-            L = cholesky(J)
-            prior_gmrf = ChordalGMRF(μ, Q, L, P)
+            prior_gmrf = ChordalGMRF(μ, Q)
 
             obs_model = ExponentialFamily(Normal)
             obs_lik = obs_model(y; σ = 0.5)
@@ -144,13 +124,13 @@ backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
         end
 
         grad_test = DifferentiationInterface.gradient(
-            θ -> gaussian_lik_pipeline(θ, y, x, P, S, k),
+            θ -> gaussian_lik_pipeline(θ, y, x, k),
             backend,
             θ
         )
 
         grad_fd = DifferentiationInterface.gradient(
-            θ -> gaussian_lik_pipeline(θ, y, x, P, S, k),
+            θ -> gaussian_lik_pipeline(θ, y, x, k),
             fd_backend,
             θ
         )
@@ -169,18 +149,14 @@ backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
         y = [1, 2, 1, 1]
         x = randn(k) .+ 0.4
 
-        # Pre-compute sparsity structure
-        Q_ref = ar_precision(0.5, k)
-        P, S = symbolic(Q_ref)
-
         grad_test = DifferentiationInterface.gradient(
-            θ -> test_gauss_approx_pipeline(θ, y, x, P, S, k),
+            θ -> test_gauss_approx_pipeline(θ, y, x, k),
             backend,
             θ
         )
 
         grad_fd = DifferentiationInterface.gradient(
-            θ -> test_gauss_approx_pipeline(θ, y, x, P, S, k),
+            θ -> test_gauss_approx_pipeline(θ, y, x, k),
             fd_backend,
             θ
         )
@@ -192,27 +168,18 @@ backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
         @test maximum(rel_error) < 5.0e-2
     end
 
-    @testset "Basic logpdf autodiff with chordal" begin
+    @testset "Basic logpdf autodiff" begin
         k = 10
         z = randn(k)
 
-        # Pre-compute sparsity structure (not differentiable)
-        Q_ref = ar_precision(0.5, k)
-        P, S = symbolic(Q_ref)
-
-        # Test pipeline: use chordal which IS now differentiable
-        function test_chordal_pipeline(θ::AbstractVector, z::AbstractVector, P, S, k)
+        function test_logpdf_pipeline(θ::AbstractVector, z::AbstractVector, k)
             ρ = θ[1]
             μ_const = θ[2]
 
             Q = ar_precision(ρ, k)
             μ = μ_const * ones(k)
 
-            # Use chordal directly (now differentiable!)
-            J = chordal(Hermitian(Q, :L), P, S)
-            L = cholesky(J)
-
-            gmrf = ChordalGMRF(μ, Q, L, P)
+            gmrf = ChordalGMRF(μ, Q)
             return logpdf(gmrf, z)
         end
 
@@ -220,14 +187,14 @@ backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
 
         # Compute gradients using AD backend
         grad_test = DifferentiationInterface.gradient(
-            θ -> test_chordal_pipeline(θ, z, P, S, k),
+            θ -> test_logpdf_pipeline(θ, z, k),
             backend,
             θ
         )
 
         # Compute gradients using finite differences
         grad_fd = DifferentiationInterface.gradient(
-            θ -> test_chordal_pipeline(θ, z, P, S, k),
+            θ -> test_logpdf_pipeline(θ, z, k),
             fd_backend,
             θ
         )
@@ -240,7 +207,7 @@ backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
         @test maximum(rel_error) < 1.0e-2
     end
 
-    @testset "2D grid precision with chordal" begin
+    @testset "2D grid precision" begin
         # Build 2D grid precision matrix using spdiagm (Zygote-compatible)
         function grid_precision(α, grid_size)
             n = grid_size^2
@@ -261,10 +228,7 @@ backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
         n = grid_size^2
         z = randn(n)
 
-        Q_ref = grid_precision(0.5, grid_size)
-        P, S = symbolic(Q_ref)
-
-        function test_grid_pipeline(θ::AbstractVector, z::AbstractVector, P, S, grid_size)
+        function test_grid_pipeline(θ::AbstractVector, z::AbstractVector, grid_size)
             α = θ[1]
             μ_const = θ[2]
 
@@ -272,23 +236,20 @@ backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
             n = grid_size^2
             μ = μ_const * ones(n)
 
-            J = chordal(Hermitian(Q, :L), P, S)
-            L = cholesky(J)
-
-            gmrf = ChordalGMRF(μ, Q, L, P)
+            gmrf = ChordalGMRF(μ, Q)
             return logpdf(gmrf, z)
         end
 
         θ = [0.5, 0.1]
 
         grad_test = DifferentiationInterface.gradient(
-            θ -> test_grid_pipeline(θ, z, P, S, grid_size),
+            θ -> test_grid_pipeline(θ, z, grid_size),
             backend,
             θ
         )
 
         grad_fd = DifferentiationInterface.gradient(
-            θ -> test_grid_pipeline(θ, z, P, S, grid_size),
+            θ -> test_grid_pipeline(θ, z, grid_size),
             fd_backend,
             θ
         )
@@ -314,18 +275,13 @@ backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
         y = [2, 1, 3, 2, 1, 4, 2, 1, 2]  # Poisson count data
         x = randn(n) .+ 0.5
 
-        Q_ref = grid_precision(0.5, grid_size)
-        P, S = symbolic(Q_ref)
-
-        function test_grid_gauss_approx(θ, y, x, P, S, grid_size)
+        function test_grid_gauss_approx(θ, y, x, grid_size)
             α, μ_const = θ
             Q = grid_precision(α, grid_size)
             n = grid_size^2
             μ = μ_const * ones(n)
 
-            J = chordal(Hermitian(Q, :L), P, S)
-            L = cholesky(J)
-            prior_gmrf = ChordalGMRF(μ, Q, L, P)
+            prior_gmrf = ChordalGMRF(μ, Q)
 
             obs_model = ExponentialFamily(Poisson)
             obs_lik = obs_model(PoissonObservations(y))
@@ -336,13 +292,13 @@ backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
         θ = [0.5, 0.3]
 
         grad_test = DifferentiationInterface.gradient(
-            θ -> test_grid_gauss_approx(θ, y, x, P, S, grid_size),
+            θ -> test_grid_gauss_approx(θ, y, x, grid_size),
             backend,
             θ
         )
 
         grad_fd = DifferentiationInterface.gradient(
-            θ -> test_grid_gauss_approx(θ, y, x, P, S, grid_size),
+            θ -> test_grid_gauss_approx(θ, y, x, grid_size),
             fd_backend,
             θ
         )

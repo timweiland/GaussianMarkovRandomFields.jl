@@ -1,6 +1,6 @@
 module GaussianMarkovRandomFields
 
-include("piracy.jl")
+include("../deps/MooncakeSparse/MooncakeSparse.jl")
 include("typedefs.jl")
 include("utils/utils.jl")
 include("linear_maps/linear_maps.jl")

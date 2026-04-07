@@ -20,7 +20,7 @@ using LinearSolve
 using Printf
 using Random
 
-using Zygote, Enzyme, FiniteDiff
+using Zygote, Enzyme, FiniteDiff, Mooncake
 
 using CliqueTrees.Multifrontal: symbolic, chordal
 
@@ -63,7 +63,7 @@ function benchmark_workflow(θ::Vector{Float64}, y::PoissonObservations, x_eval:
     return logpdf(posterior, x_eval)
 end
 
-# ChordalGMRF workflow (only supports Zygote)
+# ChordalGMRF workflow (only supports Mooncake)
 function benchmark_workflow_chordal(θ::Vector{Float64}, y::PoissonObservations, x_eval::Vector{Float64})
     # Extract hyperparameters
     μ = θ[1:n]      # Mean field (100 params)
@@ -127,7 +127,7 @@ backends = [
 ]
 
 println("\n" * "="^80)
-println("BENCHMARKING GRADIENT COMPUTATION")
+println("BENCHMARKING GRADIENT COMPUTATION (via DifferentiationInterface, prepared)")
 println("="^80)
 
 results = Dict()
@@ -137,22 +137,22 @@ for (name, backend) in backends
     println("-"^40)
 
     try
-        # Warmup
-        print("  Warming up... ")
-        grad = DifferentiationInterface.gradient(
-            θ -> benchmark_workflow(θ, y_obs, x_eval),
-            backend,
-            θ_init
-        )
+        # Define loss function
+        loss = θ -> benchmark_workflow(θ, y_obs, x_eval)
+
+        # Prepare gradient (includes warmup/compilation)
+        print("  Preparing... ")
+        prep = DifferentiationInterface.prepare_gradient(loss, backend, θ_init)
         println("✓")
 
-        # Benchmark
+        # Compute gradient once
+        print("  Computing gradient... ")
+        grad = DifferentiationInterface.gradient(loss, prep, backend, θ_init)
+        println("✓")
+
+        # Benchmark with prepared gradient
         print("  Benchmarking... ")
-        bench = @benchmark DifferentiationInterface.gradient(
-            θ -> benchmark_workflow(θ, y_obs, x_eval),
-            $backend,
-            $θ_init
-        ) samples = 10 seconds = 30
+        bench = @benchmark DifferentiationInterface.gradient($loss, $prep, $backend, $θ_init) samples = 10 seconds = 30
 
         results[name] = (
             gradient = grad,
@@ -167,52 +167,58 @@ for (name, backend) in backends
         println("  Memory:         $(@sprintf("%.2f", bench.memory / 1.0e6)) MB")
 
     catch e
-        println("  ✗ Failed: $e")
+        println("  ✗ Failed: $(typeof(e).name.name)")
+        if e isa ErrorException
+            println("    $(first(split(e.msg, '\n')))")
+        end
         results[name] = nothing
     end
 end
 
-# ChordalGMRF benchmark (Zygote only)
+# ChordalGMRF benchmark (Mooncake only)
 println("\n" * "="^80)
-println("BENCHMARKING ChordalGMRF (Zygote only)")
+println("BENCHMARKING ChordalGMRF (Mooncake only)")
 println("="^80)
 
-println("\nChordalGMRF + Zygote:")
+println("\nChordalGMRF + Mooncake:")
 println("-"^40)
 
 try
-    # Warmup
-    print("  Warming up... ")
-    grad_chordal = DifferentiationInterface.gradient(
-        θ -> benchmark_workflow_chordal(θ, y_obs, x_eval),
-        AutoZygote(),
-        θ_init
-    )
+    # Define loss function
+    loss_chordal = θ -> benchmark_workflow_chordal(θ, y_obs, x_eval)
+
+    # Prepare gradient (includes warmup/compilation)
+    print("  Preparing... ")
+    prep_chordal = DifferentiationInterface.prepare_gradient(loss_chordal, AutoMooncake(; config=nothing), θ_init)
     println("✓")
 
-    # Benchmark
-    print("  Benchmarking... ")
-    bench_chordal = @benchmark DifferentiationInterface.gradient(
-        θ -> benchmark_workflow_chordal(θ, y_obs, x_eval),
-        AutoZygote(),
-        $θ_init
-    ) samples = 10 seconds = 30
+    # Compute gradient once
+    print("  Computing gradient... ")
+    grad_chordal = DifferentiationInterface.gradient(loss_chordal, prep_chordal, AutoMooncake(; config=nothing), θ_init)
+    println("✓")
 
-    results["ChordalGMRF+Zygote"] = (
+    # Benchmark with prepared gradient
+    print("  Benchmarking... ")
+    bench_chordal = @benchmark DifferentiationInterface.gradient($loss_chordal, $prep_chordal, AutoMooncake(; config=nothing), $θ_init) samples = 10 seconds = 30
+
+    results["ChordalGMRF+Mooncake"] = (
         gradient = grad_chordal,
         time = minimum(bench_chordal.times) / 1.0e6,
         bench = bench_chordal,
     )
 
     println("✓")
-    println("  Time (min):     $(@sprintf("%.2f", results["ChordalGMRF+Zygote"].time)) ms")
+    println("  Time (min):     $(@sprintf("%.2f", results["ChordalGMRF+Mooncake"].time)) ms")
     println("  Time (median):  $(@sprintf("%.2f", median(bench_chordal.times) / 1.0e6)) ms")
     println("  Allocations:    $(bench_chordal.allocs)")
     println("  Memory:         $(@sprintf("%.2f", bench_chordal.memory / 1.0e6)) MB")
 
 catch e
-    println("  ✗ Failed: $e")
-    results["ChordalGMRF+Zygote"] = nothing
+    println("  ✗ Failed: $(typeof(e).name.name)")
+    if e isa ErrorException
+        println("    $(first(split(e.msg, '\n')))")
+    end
+    results["ChordalGMRF+Mooncake"] = nothing
 end
 
 # Summary comparison
@@ -225,7 +231,7 @@ if results["FiniteDiff"] !== nothing
     println("\nGradient verification (comparing to FiniteDiff):")
     fd_grad = results["FiniteDiff"].gradient
 
-    for name in ["Zygote", "Enzyme", "ChordalGMRF+Zygote"]
+    for name in ["Zygote", "Enzyme", "ChordalGMRF+Mooncake"]
         if get(results, name, nothing) !== nothing
             grad = results[name].gradient
             abs_error = abs.(grad - fd_grad)
@@ -271,13 +277,13 @@ if results["FiniteDiff"] !== nothing
 end
 
 # ChordalGMRF vs GMRF comparison (Zygote only)
-if get(results, "ChordalGMRF+Zygote", nothing) !== nothing && get(results, "Zygote", nothing) !== nothing
+if get(results, "ChordalGMRF+Mooncake", nothing) !== nothing && get(results, "Zygote", nothing) !== nothing
     println("\n" * "="^80)
-    println("GMRF vs ChordalGMRF COMPARISON (Zygote)")
+    println("GMRF vs ChordalGMRF COMPARISON (Zygote vs Mooncake)")
     println("="^80)
 
     r_gmrf = results["Zygote"]
-    r_chordal = results["ChordalGMRF+Zygote"]
+    r_chordal = results["ChordalGMRF+Mooncake"]
 
     println("\n  " * "─"^76)
     println(@sprintf("  %-20s %12s %12s %12s %12s", "Implementation", "Time (ms)", "Speedup", "Allocs", "Memory (MB)"))

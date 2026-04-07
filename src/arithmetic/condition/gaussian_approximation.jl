@@ -2,7 +2,6 @@ using LinearAlgebra
 using SparseArrays
 using LinearMaps
 using CliqueTrees.Multifrontal: chordal, ChordalCholesky, triangular
-using CliqueTrees.Multifrontal.Differential: ldivsym
 
 export gaussian_approximation
 
@@ -79,7 +78,7 @@ end
 # Solver abstraction for gaussian_approximation Newton iteration.
 # Allows shared iteration logic for both LinearSolve-backed GMRF and ChordalCholesky-backed ChordalGMRF.
 _ga_init_solver(gmrf::GMRF) = deepcopy(linsolve_cache(gmrf))
-_ga_init_solver(gmrf::ChordalGMRF{T}) where {T} = ChordalCholesky{:L, T}(gmrf.P, gmrf.L.S)
+_ga_init_solver(gmrf::ChordalGMRF) = copy(gmrf.F)
 
 function _ga_update_and_solve!(solver, Q_base, H_k, b, ::GMRF)
     Q_new = prepare_for_linsolve(Q_base - H_k, solver.alg)
@@ -101,7 +100,7 @@ function _ga_make_posterior(x, Q, solver, prior::Union{GMRF, ConstrainedGMRF}, c
 end
 
 function _ga_make_posterior(x, Q, solver, prior::ChordalGMRF, ::Nothing)
-    return ChordalGMRF(x, Q, solver.L, prior.P)
+    return ChordalGMRF(x, Q, solver)
 end
 
 """

@@ -1,6 +1,5 @@
 using ChainRulesCore
 using LinearAlgebra
-using CliqueTrees.Multifrontal.Differential: ldivsym
 
 """
     _is_zero_tangent(x) -> Bool
@@ -244,7 +243,7 @@ function _ift_solve(posterior::Union{GMRF, ConstrainedGMRF}, x̄_total, prior_gm
 end
 
 function _ift_solve(posterior::ChordalGMRF, x̄_total, ::ChordalGMRF)
-    return ldivsym(precision_matrix(posterior), posterior.L, posterior.P, x̄_total)
+    return posterior.F \ x̄_total
 end
 
 """
@@ -353,7 +352,6 @@ function _add_precision_tangent(prior_tangent, prior::ChordalGMRF, Q̄)
     return Tangent{typeof(prior)}(;
         μ = prior_μ̄,
         Q = combined_Q̄,
-        L = NoTangent(),
-        P = NoTangent(),
+        F = NoTangent(),
     )
 end

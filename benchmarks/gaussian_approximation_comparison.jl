@@ -19,9 +19,8 @@ using LinearSolve
 using Printf
 using Random
 using MatrixDepot
-using Zygote
-
-using CliqueTrees.Multifrontal: symbolic, chordal
+using Zygote, Mooncake
+using DifferentiationInterface: DifferentiationInterface, AutoZygote, AutoMooncake
 
 println("="^80)
 println("GAUSSIAN APPROXIMATION COMPARISON: GMRF vs ChordalGMRF")
@@ -146,8 +145,11 @@ for (matrix_name, desc) in test_matrices
             return sum(mean(post))
         end
 
-        grad_gmrf = Zygote.gradient(loss_gmrf, μ)[1]
-        grad_chordal = Zygote.gradient(loss_chordal, μ)[1]
+        # Use prepared gradients for both backends
+        prep_gmrf = DifferentiationInterface.prepare_gradient(loss_gmrf, AutoZygote(), μ)
+        grad_gmrf = DifferentiationInterface.gradient(loss_gmrf, prep_gmrf, AutoZygote(), μ)
+        prep_chordal = DifferentiationInterface.prepare_gradient(loss_chordal, AutoMooncake(; config=nothing), μ)
+        grad_chordal = DifferentiationInterface.gradient(loss_chordal, prep_chordal, AutoMooncake(; config=nothing), μ)
         grad_abs_diff = norm(grad_gmrf - grad_chordal)
         grad_rel_diff = grad_abs_diff / (norm(grad_gmrf) + 1.0e-10)
 
@@ -158,15 +160,15 @@ for (matrix_name, desc) in test_matrices
         println("    Match: $(grad_correct ? "✓ YES" : "✗ NO")")
 
         # Gradient performance benchmark
-        println("\n  Gradient performance benchmark:")
+        println("\n  Gradient performance benchmark (via DifferentiationInterface, prepared):")
 
-        print("    GMRF...        ")
-        bench_grad_gmrf = @benchmark Zygote.gradient($loss_gmrf, $μ) samples = 10 seconds = 10
+        print("    GMRF (Zygote)...        ")
+        bench_grad_gmrf = @benchmark DifferentiationInterface.gradient($loss_gmrf, $prep_gmrf, AutoZygote(), $μ) samples = 10 seconds = 10
         time_grad_gmrf = minimum(bench_grad_gmrf.times) / 1.0e6
         println("$(@sprintf("%.3f", time_grad_gmrf)) ms")
 
-        print("    ChordalGMRF... ")
-        bench_grad_chordal = @benchmark Zygote.gradient($loss_chordal, $μ) samples = 10 seconds = 10
+        print("    ChordalGMRF (Mooncake)... ")
+        bench_grad_chordal = @benchmark DifferentiationInterface.gradient($loss_chordal, $prep_chordal, AutoMooncake(; config=nothing), $μ) samples = 10 seconds = 10
         time_grad_chordal = minimum(bench_grad_chordal.times) / 1.0e6
         println("$(@sprintf("%.3f", time_grad_chordal)) ms")
 
@@ -224,7 +226,7 @@ println("-"^95)
 
 # Gradient summary table
 println("\n" * "="^80)
-println("SUMMARY: GRADIENT (Zygote)")
+println("SUMMARY: GRADIENT (via DifferentiationInterface, prepared)")
 println("="^80)
 
 println("\n" * "-"^95)
