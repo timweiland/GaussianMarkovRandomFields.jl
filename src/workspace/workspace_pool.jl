@@ -5,11 +5,20 @@ export WorkspacePool, checkout, checkin, with_workspace
 """
     WorkspacePool{T, B}
 
-A thread-safe pool of `GMRFWorkspace` instances for parallel computation.
+A task-safe pool of `GMRFWorkspace` instances for use across multiple Julia
+tasks. Uses a `Channel`-based checkout/checkin pattern (not `threadid()`-indexed,
+since Julia tasks can migrate between threads).
 
-Uses a `Channel`-based checkout/checkin pattern (not `threadid()`-indexed,
-since Julia tasks can migrate between threads). Each workspace in the pool
-has its own CHOLMOD `Factor`, so concurrent factorizations don't interfere.
+Each workspace in the pool owns its own backend factorization, so
+checkout/checkin is the right primitive for sharing across concurrent tasks.
+
+!!! note "Concurrent factorization"
+    Whether tasks can actually factorize in parallel depends on the backend.
+    `CHOLMODBackend` (the default) goes through CHOLMOD, which holds a global
+    lock — concurrent factorizations serialize gracefully but do not run in
+    parallel. `CliqueTreesBackend` is pure-Julia and thread-safe, so a pool of
+    `CliqueTreesBackend` workspaces *does* parallelize numeric factorization.
+    Build the pool with the desired backend if parallel factorization matters.
 
 # Usage
 ```julia

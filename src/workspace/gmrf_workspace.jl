@@ -217,8 +217,14 @@ logdet_cov(ws::GMRFWorkspace) = -logdet(ws)
 """
     selinv(ws::GMRFWorkspace)
 
-Return the selected inverse of Q. The return type depends on the backend.
-Cached internally by the backend after first computation.
+Return the selected inverse of Q — the values of `Q⁻¹` at the nonzero
+positions of the Cholesky factor's sparsity pattern (which is a superset of
+Q's pattern). This is *not* the full dense inverse; entries outside the
+factor pattern are not computed.
+
+Cached internally by the backend after first computation. Both built-in
+backends (`CHOLMODBackend`, `CliqueTreesBackend`) return a `SparseMatrixCSC`;
+the abstract interface allows backends to return other representations.
 """
 function selinv(ws::GMRFWorkspace)
     ensure_selinv!(ws)

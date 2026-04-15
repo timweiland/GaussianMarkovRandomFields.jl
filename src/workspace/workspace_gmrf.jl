@@ -158,6 +158,13 @@ Ensure the workspace currently holds this GMRF's precision data. If the
 workspace has been used by a different `WorkspaceGMRF` (or by a direct
 `update_precision!` call) since this GMRF was last active, reload and
 invalidate the factorization.
+
+!!! warning "Single-task only"
+    The version check, `nzval` copy, and `_invalidate!` here are not atomic.
+    Sharing one `GMRFWorkspace` between `WorkspaceGMRF`s on multiple concurrent
+    tasks is unsafe — a context switch between the version check and the
+    refactorization can leave the workspace in an inconsistent state. For
+    parallel use, give each task its own workspace (e.g. via `WorkspacePool`).
 """
 function ensure_loaded!(d::WorkspaceGMRF)
     ws = d.workspace
