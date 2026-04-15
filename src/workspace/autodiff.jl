@@ -19,6 +19,23 @@ function ChainRulesCore.rrule(::typeof(logpdf), x::WorkspaceGMRF, z::AbstractVec
         μ̄ = ȳ * Qr
         Q̄ = compute_precision_gradient(Qinv, r, ȳ)
 
+        # Constraint correction contributions (Rue & Held 2005, §2.3.3).
+        # Math mirrors the ConstrainedGMRF rrule in src/autodiff/constructors.jl.
+        if has_constraints(x)
+            ci = x.constraints
+            A = ci.matrix
+            resid_e = ci.vector - A * x.mean
+
+            # μ̄ contribution: -ȳ * A' * (L_c \ resid_e)
+            μ̄ = collect(μ̄) .- ȳ .* (A' * (ci.L_c \ resid_e))
+
+            # Q̄ contribution: -0.5 * ȳ * A_tilde_T * (S⁻¹ - w*w') * A_tilde_T'
+            S_inv = inv(ci.L_c)
+            w = S_inv * resid_e
+            Q̄_corr = (-0.5 * ȳ) .* (ci.A_tilde_T * (S_inv - w * w') * ci.A_tilde_T')
+            Q̄ = Q̄ + Q̄_corr
+        end
+
         x̄ = Tangent{typeof(x)}(;
             mean = μ̄,
             precision = Q̄,
@@ -59,6 +76,25 @@ function ChainRulesCore.rrule(
     end
 
     return x, WorkspaceGMRF_ws_pullback
+end
+
+# Constrained constructor rrule. The ConstraintInfo (constrained_mean, L_c, etc.)
+# is treated as derived from (μ, Q) via the symbolic factorization — gradients
+# through it are handled by the logpdf rrule below, which differentiates through
+# log_constraint_correction directly. Suitable for pipelines that consume the
+# constrained WorkspaceGMRF via logpdf or rand; do NOT rely on this rrule if
+# you also differentiate through `mean(d)` (which returns the constrained mean).
+function ChainRulesCore.rrule(
+        ::Type{WorkspaceGMRF}, μ::AbstractVector, Q::SparseMatrixCSC,
+        ws::GMRFWorkspace, A::AbstractMatrix, e::AbstractVector
+    )
+    x = WorkspaceGMRF(μ, Q, ws, A, e)
+
+    function WorkspaceGMRF_constrained_pullback(x̄)
+        return NoTangent(), x̄.mean, x̄.precision, NoTangent(), NoTangent(), NoTangent()
+    end
+
+    return x, WorkspaceGMRF_constrained_pullback
 end
 
 # --- gaussian_approximation rrule for WorkspaceGMRF ---

@@ -5,6 +5,9 @@ using LinearAlgebra
 using SparseArrays
 using Random
 
+using DifferentiationInterface
+using FiniteDiff, Zygote
+
 @testset "Constrained WorkspaceGMRF" begin
 
     @testset "Basic constrained GMRF - matches ConstrainedGMRF" begin
@@ -127,5 +130,90 @@ using Random
         @test has_constraints(ws_result)
         @test mean(ws_result) ≈ mean(ref_result) rtol = 1.0e-6
         @test sum(mean(ws_result)) ≈ 0.0 atol = 1.0e-6
+    end
+
+    @testset "Constrained logpdf autodiff" begin
+        # Tests the gradient path through log_constraint_correction in the
+        # WorkspaceGMRF logpdf rrule (src/workspace/autodiff.jl). Cross-checks
+        # against AutoFiniteDiff and against the proven ConstrainedGMRF rrule.
+        #
+        # Note: Zygote only — the ForwardDiff extension does not yet override
+        # the constrained WorkspaceGMRF constructor for Dual inputs.
+
+        function ar_precision_sparse(ρ, k)
+            return spdiagm(
+                -1 => -ρ * ones(k - 1),
+                0 => ones(k) .+ ρ^2,
+                1 => -ρ * ones(k - 1),
+            )
+        end
+
+        # Pipeline through WorkspaceGMRF — workspace is captured as a closure
+        # so we don't pull cholesky! into Zygote's view (the constructor rrule
+        # treats `ws` as NoTangent).
+        function ws_constrained_pipeline(θ, z, k, A, e, ws)
+            ρ, μ_const = θ[1], θ[2]
+            Q = ar_precision_sparse(ρ, k)
+            μ = μ_const * ones(k)
+            return logpdf(WorkspaceGMRF(μ, Q, ws, A, e), z)
+        end
+
+        # Reference pipeline through ConstrainedGMRF
+        function ref_constrained_pipeline(θ, z, k, A, e)
+            ρ, μ_const = θ[1], θ[2]
+            Q = ar_precision_sparse(ρ, k)
+            μ = μ_const * ones(k)
+            return logpdf(ConstrainedGMRF(GMRF(μ, Q), A, e), z)
+        end
+
+        Random.seed!(42)
+
+        @testset "Single sum-to-zero constraint" begin
+            k = 8
+            A = ones(1, k)
+            e = [0.0]
+            θ = [0.5, 0.1]
+            # z that satisfies the constraint
+            z = randn(k); z .-= sum(z) / k
+            # Build workspace once with an arbitrary Q matching the sparsity pattern
+            ws = GMRFWorkspace(ar_precision_sparse(0.5, k))
+
+            grad_ws_zyg = DifferentiationInterface.gradient(
+                θ -> ws_constrained_pipeline(θ, z, k, A, e, ws), AutoZygote(), θ
+            )
+            grad_fd = DifferentiationInterface.gradient(
+                θ -> ws_constrained_pipeline(θ, z, k, A, e, ws), AutoFiniteDiff(), θ
+            )
+            grad_ref = DifferentiationInterface.gradient(
+                θ -> ref_constrained_pipeline(θ, z, k, A, e), AutoZygote(), θ
+            )
+
+            @test maximum(abs.(grad_ws_zyg - grad_fd)) < 1.0e-4
+            @test grad_ws_zyg ≈ grad_ref rtol = 1.0e-6
+        end
+
+        @testset "Multiple constraints with non-zero e" begin
+            k = 6
+            A = [1.0 1.0 1.0 1.0 1.0 1.0; 1.0 -1.0 0.0 0.0 0.0 0.0]
+            e = [0.5, -0.2]
+            θ = [0.4, 0.3]
+            # z that satisfies the constraints
+            z_unc = randn(k)
+            z = z_unc + A' * ((A * A') \ (e - A * z_unc))
+            ws = GMRFWorkspace(ar_precision_sparse(0.4, k))
+
+            grad_ws_zyg = DifferentiationInterface.gradient(
+                θ -> ws_constrained_pipeline(θ, z, k, A, e, ws), AutoZygote(), θ
+            )
+            grad_fd = DifferentiationInterface.gradient(
+                θ -> ws_constrained_pipeline(θ, z, k, A, e, ws), AutoFiniteDiff(), θ
+            )
+            grad_ref = DifferentiationInterface.gradient(
+                θ -> ref_constrained_pipeline(θ, z, k, A, e), AutoZygote(), θ
+            )
+
+            @test maximum(abs.(grad_ws_zyg - grad_fd)) < 1.0e-4
+            @test grad_ws_zyg ≈ grad_ref rtol = 1.0e-6
+        end
     end
 end
