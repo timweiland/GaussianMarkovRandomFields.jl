@@ -150,16 +150,6 @@ function ChainRulesCore.rrule(
     return posterior, workspace_ga_pullback
 end
 
-# Also handle case without RuleConfig
-function ChainRulesCore.rrule(
-        ::typeof(gaussian_approximation),
-        prior_gmrf::WorkspaceGMRF,
-        obs_lik::ObservationLikelihood;
-        kwargs...
-    )
-    return rrule(NoRuleConfig(), gaussian_approximation, prior_gmrf, obs_lik; kwargs...)
-end
-
 # --- Helper: add Q̄ to prior tangent for WorkspaceGMRF ---
 
 function _workspace_add_precision_tangent(prior_tangent, prior::WorkspaceGMRF, Q̄)

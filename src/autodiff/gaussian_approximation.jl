@@ -311,14 +311,3 @@ function ChainRulesCore.rrule(
 
     return posterior, gaussian_approximation_pullback
 end
-
-# Also handle case without RuleConfig for simpler usage
-function ChainRulesCore.rrule(
-        ::typeof(gaussian_approximation),
-        prior_gmrf::Union{GMRF, ConstrainedGMRF},
-        obs_lik::ObservationLikelihood;
-        kwargs...
-    )
-    # Delegate to the RuleConfig version with default config
-    return rrule(NoRuleConfig(), gaussian_approximation, prior_gmrf, obs_lik; kwargs...)
-end
