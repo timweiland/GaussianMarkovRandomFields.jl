@@ -136,9 +136,6 @@ using FiniteDiff, Zygote
         # Tests the gradient path through log_constraint_correction in the
         # WorkspaceGMRF logpdf rrule (src/workspace/autodiff.jl). Cross-checks
         # against AutoFiniteDiff and against the proven ConstrainedGMRF rrule.
-        #
-        # Note: Zygote only — the ForwardDiff extension does not yet override
-        # the constrained WorkspaceGMRF constructor for Dual inputs.
 
         function ar_precision_sparse(ρ, k)
             return spdiagm(
@@ -215,5 +212,119 @@ using FiniteDiff, Zygote
             @test maximum(abs.(grad_ws_zyg - grad_fd)) < 1.0e-4
             @test grad_ws_zyg ≈ grad_ref rtol = 1.0e-6
         end
+    end
+
+    @testset "Constrained logpdf ForwardDiff" begin
+        # Exercises the constrained 5-arg WorkspaceGMRF constructor with Dual
+        # inputs. The implementation uses implicit differentiation to build a
+        # Dual-valued A_tilde_T (so log_constraint_correction captures Q's
+        # partials correctly) and dense Dual Cholesky for L_c.
+        #
+        # Success criterion: ForwardDiff gradient must agree with both the
+        # Zygote rrule path (proven analytically) and with FiniteDiff.
+
+        using ForwardDiff: ForwardDiff
+
+        function ar_precision_sparse_fd(ρ, k)
+            return spdiagm(
+                -1 => -ρ * ones(k - 1),
+                0 => ones(k) .+ ρ^2,
+                1 => -ρ * ones(k - 1),
+            )
+        end
+
+        function ws_constrained_pipeline_fd(θ, z, k, A, e, ws)
+            ρ, μ_const = θ[1], θ[2]
+            Q = ar_precision_sparse_fd(ρ, k)
+            μ = μ_const * ones(k)
+            return logpdf(WorkspaceGMRF(μ, Q, ws, A, e), z)
+        end
+
+        Random.seed!(42)
+
+        @testset "Single sum-to-zero constraint" begin
+            k = 8
+            A = ones(1, k)
+            e = [0.0]
+            θ = [0.5, 0.1]
+            z = randn(k); z .-= sum(z) / k
+            ws = GMRFWorkspace(ar_precision_sparse_fd(0.5, k))
+
+            grad_fwd = DifferentiationInterface.gradient(
+                θ -> ws_constrained_pipeline_fd(θ, z, k, A, e, ws), AutoForwardDiff(), θ
+            )
+            grad_zyg = DifferentiationInterface.gradient(
+                θ -> ws_constrained_pipeline_fd(θ, z, k, A, e, ws), AutoZygote(), θ
+            )
+            grad_fd = DifferentiationInterface.gradient(
+                θ -> ws_constrained_pipeline_fd(θ, z, k, A, e, ws), AutoFiniteDiff(), θ
+            )
+
+            @test grad_fwd ≈ grad_zyg rtol = 1.0e-6
+            @test maximum(abs.(grad_fwd - grad_fd)) < 1.0e-4
+        end
+
+        @testset "Multiple constraints with non-zero e" begin
+            k = 6
+            A = [1.0 1.0 1.0 1.0 1.0 1.0; 1.0 -1.0 0.0 0.0 0.0 0.0]
+            e = [0.5, -0.2]
+            θ = [0.4, 0.3]
+            z_unc = randn(k)
+            z = z_unc + A' * ((A * A') \ (e - A * z_unc))
+            ws = GMRFWorkspace(ar_precision_sparse_fd(0.4, k))
+
+            grad_fwd = DifferentiationInterface.gradient(
+                θ -> ws_constrained_pipeline_fd(θ, z, k, A, e, ws), AutoForwardDiff(), θ
+            )
+            grad_zyg = DifferentiationInterface.gradient(
+                θ -> ws_constrained_pipeline_fd(θ, z, k, A, e, ws), AutoZygote(), θ
+            )
+            grad_fd = DifferentiationInterface.gradient(
+                θ -> ws_constrained_pipeline_fd(θ, z, k, A, e, ws), AutoFiniteDiff(), θ
+            )
+
+            @test grad_fwd ≈ grad_zyg rtol = 1.0e-6
+            @test maximum(abs.(grad_fwd - grad_fd)) < 1.0e-4
+        end
+    end
+
+    @testset "Constrained gaussian_approximation ForwardDiff" begin
+        # Constrained workspace GA with Dual prior: exercises IFT tangent
+        # solves with constraint projection.
+
+        function ar_precision_sparse_ga(ρ, k)
+            return spdiagm(
+                -1 => -ρ * ones(k - 1),
+                0 => ones(k) .+ ρ^2,
+                1 => -ρ * ones(k - 1),
+            )
+        end
+
+        k = 6
+        A = ones(1, k)  # sum-to-zero
+        e = [0.0]
+        y = [1, 2, 0, 3, 1, 2]
+        x = zeros(k)
+        ws = GMRFWorkspace(ar_precision_sparse_ga(0.5, k))
+
+        function pipeline(θ)
+            ρ, μ_const = θ[1], θ[2]
+            Q = ar_precision_sparse_ga(ρ, k)
+            μ = μ_const * ones(k)
+            prior = WorkspaceGMRF(μ, Q, ws, A, e)
+            obs_model = ExponentialFamily(Poisson)
+            obs_lik = obs_model(PoissonObservations(y))
+            posterior = gaussian_approximation(prior, obs_lik)
+            return logpdf(posterior, x)
+        end
+
+        θ = [0.5, 0.0]
+        grad_fwd = DifferentiationInterface.gradient(pipeline, AutoForwardDiff(), θ)
+        grad_fd = DifferentiationInterface.gradient(pipeline, AutoFiniteDiff(), θ)
+
+        abs_error = abs.(grad_fwd - grad_fd)
+        rel_error = abs_error ./ (abs.(grad_fd) .+ 1.0e-10)
+        @test maximum(abs_error) < 2.0e-2
+        @test maximum(rel_error) < 5.0e-2
     end
 end

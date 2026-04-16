@@ -492,6 +492,18 @@ end
 # from primal values (CHOLMOD can't handle Duals) while preserving Duals in
 # the mean and precision fields for tangent propagation.
 
+# update_precision! with a Dual-valued Q: strip to primal values before forwarding.
+# This unblocks the LatentModel(ws; θ::Dual...) reuse path, which calls
+# update_precision! with a Dual Q produced from Dual hyperparameters.
+function GMRFs.update_precision!(
+        ws::GMRFs.GMRFWorkspace, Q::SparseMatrixCSC{<:ForwardDiff.Dual}
+    )
+    Q_primal = SparseMatrixCSC(
+        Q.m, Q.n, Q.colptr, Q.rowval, ForwardDiff.value.(Q.nzval)
+    )
+    return GMRFs.update_precision!(ws, Q_primal)
+end
+
 function _construct_forwarddiff_workspace_gmrf(
         mean::AbstractVector, Q::SparseMatrixCSC
     )
@@ -529,6 +541,50 @@ function GMRFs.WorkspaceGMRF(
         Q::SparseMatrixCSC{<:ForwardDiff.Dual}
     )
     return _construct_forwarddiff_workspace_gmrf(mean, Q)
+end
+
+# 3-arg constructor with an existing workspace. The workspace stays primal;
+# the WorkspaceGMRF holds Dual mean/precision for tangent propagation.
+# Loading into the workspace happens lazily via the Dual `ensure_loaded!`
+# override below (which strips to primal).
+function _construct_forwarddiff_workspace_gmrf_with_ws(
+        mean::AbstractVector, Q::SparseMatrixCSC, ws::GMRFs.GMRFWorkspace
+    )
+    T = promote_type(eltype(mean), eltype(Q))
+    mean_T = eltype(mean) === T ? mean : convert(AbstractVector{T}, mean)
+    Q_T = if eltype(Q) === T
+        Q
+    else
+        SparseMatrixCSC(Q.m, Q.n, Q.colptr, Q.rowval, convert(Vector{T}, Q.nzval))
+    end
+    version = GMRFs._next_version!(ws)
+    return GMRFs.WorkspaceGMRF{T, typeof(ws.backend), typeof(ws), Nothing}(
+        Vector{T}(mean_T), copy(Q_T), ws, nothing, version
+    )
+end
+
+function GMRFs.WorkspaceGMRF(
+        mean::AbstractVector{<:ForwardDiff.Dual},
+        Q::SparseMatrixCSC,
+        ws::GMRFs.GMRFWorkspace
+    )
+    return _construct_forwarddiff_workspace_gmrf_with_ws(mean, Q, ws)
+end
+
+function GMRFs.WorkspaceGMRF(
+        mean::AbstractVector,
+        Q::SparseMatrixCSC{<:ForwardDiff.Dual},
+        ws::GMRFs.GMRFWorkspace
+    )
+    return _construct_forwarddiff_workspace_gmrf_with_ws(mean, Q, ws)
+end
+
+function GMRFs.WorkspaceGMRF(
+        mean::AbstractVector{<:ForwardDiff.Dual},
+        Q::SparseMatrixCSC{<:ForwardDiff.Dual},
+        ws::GMRFs.GMRFWorkspace
+    )
+    return _construct_forwarddiff_workspace_gmrf_with_ws(mean, Q, ws)
 end
 
 # === WorkspaceGMRF ForwardDiff gaussian_approximation ===
@@ -590,7 +646,11 @@ function GMRFs.gaussian_approximation(
         obs_lik::GMRFs.ObservationLikelihood;
         kwargs...
     ) where {D <: ForwardDiff.Dual}
-    return _forwarddiff_workspace_ga(prior_gmrf, obs_lik; kwargs...)
+    if prior_gmrf.constraints === nothing
+        return _forwarddiff_workspace_ga(prior_gmrf, obs_lik; kwargs...)
+    else
+        return _forwarddiff_workspace_ga_constrained(prior_gmrf, obs_lik; kwargs...)
+    end
 end
 
 # Disambiguation: Dual WorkspaceGMRF + conjugate Normal
@@ -599,8 +659,86 @@ function GMRFs.gaussian_approximation(
         obs_lik::GMRFs.NormalLikelihood{GMRFs.IdentityLink};
         kwargs...
     ) where {D <: ForwardDiff.Dual}
-    return _forwarddiff_workspace_ga(prior_gmrf, obs_lik; kwargs...)
+    if prior_gmrf.constraints === nothing
+        return _forwarddiff_workspace_ga(prior_gmrf, obs_lik; kwargs...)
+    else
+        return _forwarddiff_workspace_ga_constrained(prior_gmrf, obs_lik; kwargs...)
+    end
 end
+
+# Constrained Dual WorkspaceGMRF: workspace-reuse IFT gaussian_approximation
+# with constraint projection. Mirrors _forwarddiff_gaussian_approximation_constrained
+# but preserves the workspace across the Newton pass.
+function _primal_constrained_workspace_gmrf(
+        prior::GMRFs.WorkspaceGMRF{D}
+    ) where {D <: ForwardDiff.Dual}
+    μ_primal = ForwardDiff.value.(prior.mean)
+    Q_primal = SparseMatrixCSC(
+        prior.precision.m, prior.precision.n,
+        prior.precision.colptr, prior.precision.rowval,
+        ForwardDiff.value.(prior.precision.nzval)
+    )
+    ci = prior.constraints
+    return GMRFs.WorkspaceGMRF(μ_primal, Q_primal, prior.workspace, ci.matrix, ci.vector)
+end
+
+function _forwarddiff_workspace_ga_constrained(
+        prior_gmrf::GMRFs.WorkspaceGMRF{D},
+        obs_lik;
+        kwargs...
+    ) where {D <: ForwardDiff.Dual}
+    # Step 1: Primal forward pass with constraints.
+    primal_prior = _primal_constrained_workspace_gmrf(prior_gmrf)
+    primal_obs_lik = _primal_obs_lik(obs_lik)
+    posterior_primal = GMRFs.gaussian_approximation(primal_prior, primal_obs_lik; kwargs...)
+    # Newton iterate (unconstrained mean field, satisfies constraints by projection).
+    x_star = posterior_primal.mean
+
+    # Step 2: Evaluate ∇ neg_log_posterior with the Dual prior at primal x*.
+    # Inline computation avoids bumping ws.loaded_version (which would cause
+    # ensure_loaded! to replace Q_post in ws with Q_prior, breaking IFT solves).
+    # ∇ₓ neg_log_posterior(x) = Q_prior (x - μ_prior) - loggrad(x, obs_lik)
+    # (unconstrained base gradient; constraint projection applied to IFT step below)
+    neg_grad_dual = prior_gmrf.precision * (x_star .- prior_gmrf.mean) .-
+        GMRFs.loggrad(x_star, obs_lik)
+
+    # Step 3: IFT tangent solves with KKT constraint projection.
+    Tag = ForwardDiff.tagtype(D)
+    V = ForwardDiff.valtype(D)
+    N = ForwardDiff.npartials(D)
+    n = length(x_star)
+
+    ws = posterior_primal.workspace
+    ci_primal = posterior_primal.constraints
+    A = ci_primal.matrix
+
+    dx = Matrix{V}(undef, n, N)
+    for j in 1:N
+        rhs_j = V[-ForwardDiff.partials(neg_grad_dual[i], j) for i in 1:n]
+        step = GMRFs.workspace_solve(ws, rhs_j)
+        # Project onto constraint tangent space: step - Ã^T (L_c \ (A step))
+        step_proj = step - ci_primal.A_tilde_T * (ci_primal.L_c \ (A * step))
+        dx[:, j] .= step_proj
+    end
+
+    # Step 4: Construct Dual x*.
+    x_star_dual = map(1:n) do i
+        ForwardDiff.Dual{Tag, V, N}(x_star[i], ForwardDiff.Partials{N, V}(ntuple(j -> dx[i, j], N)))
+    end
+
+    # Step 5: Posterior precision with Duals.
+    H_dual = GMRFs.loghessian(x_star_dual, obs_lik)
+    Q_prior_dual = GMRFs.precision_matrix(prior_gmrf)
+    Q_post_dual = Q_prior_dual - H_dual
+    Q_post_sparse = sparse(Q_post_dual)
+
+    # Step 6: Build Dual constrained WorkspaceGMRF with the prior's constraints.
+    ci_prior = prior_gmrf.constraints
+    return GMRFs.WorkspaceGMRF(
+        x_star_dual, Q_post_sparse, ws, ci_prior.matrix, ci_prior.vector
+    )
+end
+
 
 # Dual WorkspaceGMRFs hold Dual-valued precision but the workspace buffer is
 # Float64. Extract primal values for reloading so version coherence works.
@@ -621,6 +759,155 @@ function logdetcov(x::GMRFs.WorkspaceGMRF{<:ForwardDiff.Dual})
     # dot(Qinv, Q_dual) naturally produces a Dual via ForwardDiff overloads
     tangent = -dot(Qinv, x.precision)
     return ForwardDiff.Dual{ForwardDiff.tagtype(tangent)}(primal, ForwardDiff.partials(tangent)...)
+end
+
+# === Constrained WorkspaceGMRF with Duals ===
+#
+# The 5-arg constructor WorkspaceGMRF(μ, Q, ws, A, e) builds a ConstraintInfo
+# which stores Ã^T = Q⁻¹A' and L_c = chol(A Ã^T) as Float64. For the
+# unconstrained Dual flow, A_tilde_T_primal is enough because logpdf uses the
+# unconstrained mean and Q. For the constrained flow, log_constraint_correction
+# depends on Q through L_c and Ã^T — if we stored only primal values, the
+# Q-path derivatives would be silently dropped.
+#
+# We resolve this by computing A_tilde_T and L_c with full Dual propagation
+# (via implicit differentiation of Q Ã^T = A') and using those Dual values
+# to form constrained_mean and log_constraint_correction. The struct-stored
+# A_tilde_T / L_c stay primal — they're only used for sampling and var, which
+# users don't typically differentiate through.
+
+function _compute_constrained_duals(
+        mean_T, Q::SparseMatrixCSC{<:ForwardDiff.Dual}, ws::GMRFs.GMRFWorkspace,
+        A_dense::Matrix{Float64}, e_vec::Vector{Float64},
+        A_tilde_T_v::Matrix{Float64}, log_AA_det::Float64
+    )
+    D = eltype(Q)
+    Tag = ForwardDiff.tagtype(D)
+    V = ForwardDiff.valtype(D)
+    N = ForwardDiff.npartials(D)
+    n = size(Q, 1)
+    m = size(A_dense, 1)
+
+    # Build Ã^T with Dual values via implicit diff.
+    # Q Ã^T = A' (with A primal) gives, per partial direction k:
+    #   Q_v Ã^T_p = -Q_p Ã^T_v
+    A_tilde_T_partials = zeros(V, n, m, N)
+    for k in 1:N
+        Q_p_k_nzval = V[ForwardDiff.partials(Q.nzval[idx], k) for idx in eachindex(Q.nzval)]
+        Q_p_k = SparseMatrixCSC(Q.m, Q.n, Q.colptr, Q.rowval, Q_p_k_nzval)
+        for i in 1:m
+            rhs = -(Q_p_k * @view(A_tilde_T_v[:, i]))
+            A_tilde_T_partials[:, i, k] .= GMRFs.workspace_solve(ws, rhs)
+        end
+    end
+
+    A_tilde_T_dual = Matrix{D}(undef, n, m)
+    @inbounds for j in 1:n, i in 1:m
+        A_tilde_T_dual[j, i] = ForwardDiff.Dual{Tag, V, N}(
+            A_tilde_T_v[j, i],
+            ForwardDiff.Partials{N, V}(ntuple(k -> A_tilde_T_partials[j, i, k], N)),
+        )
+    end
+
+    # Dual L_c via dense Cholesky (m×m, small).
+    AAtt_dual = A_dense * A_tilde_T_dual
+    L_c_dual = cholesky(Symmetric(AAtt_dual))
+
+    residual = A_dense * mean_T - e_vec
+    resid_e = e_vec - A_dense * mean_T
+    constrained_mean = mean_T - A_tilde_T_dual * (L_c_dual \ residual)
+    log_constraint_correction =
+        0.5 * (m * log(2π) + logdet(L_c_dual) + dot(resid_e, L_c_dual \ resid_e)) -
+        0.5 * log_AA_det
+
+    return constrained_mean, log_constraint_correction
+end
+
+function _construct_forwarddiff_constrained_workspace_gmrf(
+        mean::AbstractVector, Q::SparseMatrixCSC, ws::GMRFs.GMRFWorkspace,
+        A::AbstractMatrix, e::AbstractVector
+    )
+    T = promote_type(eltype(mean), eltype(Q))
+    mean_T = convert(Vector{T}, mean)
+    Q_T = if eltype(Q) === T
+        Q
+    else
+        SparseMatrixCSC(Q.m, Q.n, Q.colptr, Q.rowval, convert(Vector{T}, Q.nzval))
+    end
+
+    # Load primal Q into ws so the primal factorization is current.
+    Q_v_nzval = eltype(Q) <: ForwardDiff.Dual ?
+        ForwardDiff.value.(Q.nzval) : Vector{Float64}(Q.nzval)
+    Q_primal = SparseMatrixCSC(Q.m, Q.n, Q.colptr, Q.rowval, Q_v_nzval)
+    GMRFs.update_precision!(ws, Q_primal)
+    version = GMRFs._next_version!(ws)
+    ws.loaded_version = version
+
+    n = size(Q, 1)
+    m = size(A, 1)
+    A_dense = Matrix{Float64}(A)
+    e_vec = Vector{Float64}(e)
+
+    # Primal Ã^T = Q_v⁻¹ A' via m solves against the primal factorization.
+    A_tilde_T_v = Matrix{Float64}(undef, n, m)
+    for i in 1:m
+        A_tilde_T_v[:, i] .= GMRFs.workspace_solve(ws, A_dense[i, :])
+    end
+    L_c_primal = cholesky(Symmetric(A_dense * A_tilde_T_v))
+    log_AA_det = logdet(cholesky(Symmetric(A_dense * A_dense')))
+
+    if eltype(Q) <: ForwardDiff.Dual
+        constrained_mean, log_constraint_correction = _compute_constrained_duals(
+            mean_T, Q, ws, A_dense, e_vec, A_tilde_T_v, log_AA_det
+        )
+    else
+        # Dual-μ-only case: primal Ã^T / L_c are exact; μ-path Dual arithmetic
+        # through the trailing `residual` terms is sufficient.
+        residual = A_dense * mean_T - e_vec
+        resid_e = e_vec - A_dense * mean_T
+        constrained_mean = mean_T - A_tilde_T_v * (L_c_primal \ residual)
+        log_constraint_correction =
+            0.5 * (m * log(2π) + logdet(L_c_primal) + dot(resid_e, L_c_primal \ resid_e)) -
+            0.5 * log_AA_det
+    end
+
+    ci = GMRFs.ConstraintInfo{T}(
+        A_dense, e_vec, A_tilde_T_v, L_c_primal, constrained_mean, log_constraint_correction
+    )
+    B = typeof(ws.backend)
+    return GMRFs.WorkspaceGMRF{T, B, typeof(ws), GMRFs.ConstraintInfo{T}}(
+        mean_T, copy(Q_T), ws, ci, version
+    )
+end
+
+function GMRFs.WorkspaceGMRF(
+        mean::AbstractVector{<:ForwardDiff.Dual},
+        Q::SparseMatrixCSC,
+        ws::GMRFs.GMRFWorkspace,
+        A::AbstractMatrix,
+        e::AbstractVector
+    )
+    return _construct_forwarddiff_constrained_workspace_gmrf(mean, Q, ws, A, e)
+end
+
+function GMRFs.WorkspaceGMRF(
+        mean::AbstractVector,
+        Q::SparseMatrixCSC{<:ForwardDiff.Dual},
+        ws::GMRFs.GMRFWorkspace,
+        A::AbstractMatrix,
+        e::AbstractVector
+    )
+    return _construct_forwarddiff_constrained_workspace_gmrf(mean, Q, ws, A, e)
+end
+
+function GMRFs.WorkspaceGMRF(
+        mean::AbstractVector{<:ForwardDiff.Dual},
+        Q::SparseMatrixCSC{<:ForwardDiff.Dual},
+        ws::GMRFs.GMRFWorkspace,
+        A::AbstractMatrix,
+        e::AbstractVector
+    )
+    return _construct_forwarddiff_constrained_workspace_gmrf(mean, Q, ws, A, e)
 end
 
 end

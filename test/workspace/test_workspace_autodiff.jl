@@ -137,4 +137,63 @@ backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
 
         @test grad_ws ≈ grad_gmrf rtol = 1.0e-4
     end
+
+end
+
+@testset "ForwardDiff WorkspaceGMRF reuse path" begin
+    # Exercises the `make_workspace(m) -> model(ws; θ...) -> logpdf` pattern
+    # that downstream hyperparameter-inference consumers use. Workspace is
+    # built once outside the differentiated function so its factorization
+    # survives across calls.
+    #
+    # Note: ForwardDiff-only for now. Zygote on the LatentModel-callable
+    # reuse path requires an rrule on the callable itself (separate gap;
+    # tracked as future work).
+    Random.seed!(42)
+    fd_backend = AutoFiniteDiff()
+
+    @testset "Unconstrained logpdf gradient" begin
+        k = 10
+        θ = [0.5, 0.1]
+        z = randn(k)
+        model = AR1Model(k)
+        ws = make_workspace(model; τ = 1.0, ρ = 0.3)
+
+        pipeline = θ -> logpdf(model(ws; τ = exp(θ[1]), ρ = tanh(θ[2])), z)
+
+        grad_test = DifferentiationInterface.gradient(pipeline, AutoForwardDiff(), θ)
+        grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
+
+        abs_error = abs.(grad_test - grad_fd)
+        rel_error = abs_error ./ (abs.(grad_fd) .+ 1.0e-10)
+        @test maximum(abs_error) < 1.0e-4
+        @test maximum(rel_error) < 1.0e-2
+    end
+
+    @testset "Unconstrained gaussian_approximation gradient" begin
+        # Same reuse pattern but with a non-Gaussian observation likelihood
+        # going through gaussian_approximation.
+        k = 8
+        θ = [0.5, 0.0]
+        y = [2, 1, 3, 0, 4, 1, 2, 3]
+        x = zeros(k)
+        model = AR1Model(k)
+        ws = make_workspace(model; τ = 1.0, ρ = 0.3)
+
+        function pipeline(θ)
+            prior = model(ws; τ = exp(θ[1]), ρ = tanh(θ[2]))
+            obs_model = ExponentialFamily(Poisson)
+            obs_lik = obs_model(PoissonObservations(y))
+            posterior = gaussian_approximation(prior, obs_lik)
+            return logpdf(posterior, x)
+        end
+
+        grad_test = DifferentiationInterface.gradient(pipeline, AutoForwardDiff(), θ)
+        grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
+
+        abs_error = abs.(grad_test - grad_fd)
+        rel_error = abs_error ./ (abs.(grad_fd) .+ 1.0e-10)
+        @test maximum(abs_error) < 2.0e-2
+        @test maximum(rel_error) < 5.0e-2
+    end
 end
