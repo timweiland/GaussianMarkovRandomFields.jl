@@ -39,7 +39,7 @@ finally
 end
 ```
 """
-struct WorkspacePool{T, B}
+struct WorkspacePool{T, B} <: AbstractLatentWorkspacePool
     available::Channel{GMRFWorkspace{T, B}}
     size::Int
 end
@@ -86,10 +86,15 @@ Return a workspace to the pool.
 checkin(pool::WorkspacePool, ws::GMRFWorkspace) = put!(pool.available, ws)
 
 """
-    with_workspace(f, pool::WorkspacePool)
+    with_workspace(f, pool::AbstractLatentWorkspacePool)
 
 Execute `f(ws)` with a workspace checked out from the pool. The workspace is
 guaranteed to be returned to the pool when `f` completes, even if it throws.
+
+This is the protocol-level default: any `AbstractLatentWorkspacePool` subtype
+that implements [`checkout`](@ref) and [`checkin`](@ref) inherits this
+behavior automatically. Subtypes may override to add logging, metrics, or
+alternate resource semantics.
 
 # Example
 ```julia
@@ -99,7 +104,7 @@ result = with_workspace(pool) do ws
 end
 ```
 """
-function with_workspace(f, pool::WorkspacePool)
+function with_workspace(f, pool::AbstractLatentWorkspacePool)
     ws = checkout(pool)
     try
         return f(ws)

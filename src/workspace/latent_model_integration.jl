@@ -1,5 +1,51 @@
 using SparseArrays
 
+export make_workspace, make_workspace_pool
+
+"""
+    make_workspace(m::LatentModel; θ_ref...) -> AbstractLatentWorkspace
+
+Construct a workspace for evaluating `m` repeatedly across hyperparameter
+values. The returned workspace is suitable for use as the second argument
+to `m(ws; θ...)`.
+
+Default implementation: returns `GMRFWorkspace(m; θ_ref...)`. Downstream
+`LatentModel` subtypes may override `make_workspace` to return a peer
+workspace type when their factorization structure doesn't fit
+`GMRFWorkspace`'s "one sparse precision, one factorization" shape.
+
+!!! warning "Experimental API (pre v0.5)"
+    Surface may shift until validated against at least two downstream
+    implementations.
+
+# Example
+```julia
+model = AR1Model(100)
+ws = make_workspace(model; τ = 1.0, ρ = 0.5)
+# loop:
+for θ in θ_grid
+    gmrf = model(ws; θ...)
+    logpdf(gmrf, z)
+end
+```
+"""
+make_workspace(m::LatentModel; kwargs...) = GMRFWorkspace(m; kwargs...)
+
+"""
+    make_workspace_pool(m::LatentModel; size=Threads.nthreads(), θ_ref...) -> AbstractLatentWorkspacePool
+
+Construct a task-safe pool of workspaces for parallel evaluation of `m`.
+
+Default implementation: returns `WorkspacePool(m; size=size, θ_ref...)`.
+Downstream `LatentModel` subtypes may override to return a peer pool type.
+
+!!! warning "Experimental API (pre v0.5)"
+    Surface may shift until validated against at least two downstream
+    implementations.
+"""
+make_workspace_pool(m::LatentModel; size::Int = Threads.nthreads(), kwargs...) =
+    WorkspacePool(m; size = size, kwargs...)
+
 """
     GMRFWorkspace(model::LatentModel; kwargs...)
 

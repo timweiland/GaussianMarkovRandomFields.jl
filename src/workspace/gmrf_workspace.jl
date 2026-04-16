@@ -28,7 +28,7 @@ holds stale data, it transparently reloads and refactorizes.
 - `loaded_version`: Version of the `WorkspaceGMRF` whose data is currently factorized
     (0 means data was loaded directly via `update_precision!`, not by a `WorkspaceGMRF`)
 """
-mutable struct GMRFWorkspace{T <: Real, B <: WorkspaceBackend}
+mutable struct GMRFWorkspace{T <: Real, B <: WorkspaceBackend} <: AbstractLatentWorkspace
     Q::SparseMatrixCSC{T, Int}
     backend::B
 
