@@ -144,12 +144,14 @@ update_precision!
 update_precision_values!
 ensure_numeric!
 ensure_selinv!
-workspace_solve
-selinv
-selinv_diag
-backward_solve
 dimension
 ```
+
+The low-level linear-algebra operations `workspace_solve`,
+`backward_solve`, `selinv`, and `selinv_diag` are also defined on
+`GMRFWorkspace`. See [Solvers](@ref) for documentation of the first three
+(used via any GMRF) and the source for `selinv_diag` (a convenience that
+returns only the diagonal of `selinv(ws)`).
 
 ### WorkspaceGMRF
 
@@ -179,7 +181,7 @@ CliqueTreesBackend
 
 - [Latent Models](@ref) — the `LatentModel` interface that factory hooks
   dispatch on.
-- [Automatic Differentiation](@ref) — `WorkspaceGMRF` supports Zygote
+- [Automatic Differentiation Reference](@ref) — `WorkspaceGMRF` supports Zygote
   rrules for `logpdf` and `gaussian_approximation`, and ForwardDiff
   through the unconstrained constructor.
 - Tutorial: [Reusing factorizations across hyperparameters](@ref).
