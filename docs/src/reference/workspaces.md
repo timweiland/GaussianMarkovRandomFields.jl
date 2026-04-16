@@ -36,7 +36,9 @@ for θ in θ_grid
 end
 ```
 
-See also the workspace-reuse tutorial for a concrete timing comparison.
+See also the tutorial
+[Reusing factorizations across hyperparameters](@ref) for a concrete
+timing comparison.
 
 ## Core types
 
@@ -180,3 +182,4 @@ CliqueTreesBackend
 - [Automatic Differentiation](@ref) — `WorkspaceGMRF` supports Zygote
   rrules for `logpdf` and `gaussian_approximation`, and ForwardDiff
   through the unconstrained constructor.
+- Tutorial: [Reusing factorizations across hyperparameters](@ref).

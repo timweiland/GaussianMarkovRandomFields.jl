@@ -20,6 +20,7 @@ makedocs(
             "tutorials/kl_approximation.md",
             "tutorials/automatic_differentiation.md",
             "tutorials/graphical_lasso.md",
+            "tutorials/workspace_factorization_reuse.md",
         ],
         "API Reference" => [
             "Overview" => "reference/index.md",
