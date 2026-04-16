@@ -114,6 +114,13 @@ and `rowval`). Only the numeric values (`nzval`) are copied.
 
 Invalidates all cached results (factorization, selinv, logdet) and marks the
 workspace as not owned by any `WorkspaceGMRF`.
+
+!!! tip "Hot-loop performance"
+    Each call runs an O(nnz) pattern-match check. In inner loops where
+    pattern equality is guaranteed (e.g. pulling values from a fixed-pattern
+    buffer), prefer [`update_precision_values!`](@ref), which takes the
+    `nzval` vector directly and skips both the check and any intermediate
+    `SparseMatrixCSC` construction.
 """
 function update_precision!(ws::GMRFWorkspace, Q_new::SparseMatrixCSC)
     _same_pattern(ws.Q, Q_new) ||
