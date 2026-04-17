@@ -158,4 +158,33 @@ using Random
         @test logpdf(wg_a, z) ≈ logpdf(GMRF(μ_a, Q), z) rtol = 1.0e-10
         @test logpdf(wg_b, z) ≈ logpdf(GMRF(μ_b, Q), z) rtol = 1.0e-10
     end
+
+    @testset "logpdf(prior) consistent across gaussian_approximation" begin
+        # Regression: gaussian_approximation mutates the prior's workspace
+        # to hold Q_post = Q_prior - H(x_star) by the time it returns.
+        # A subsequent `logpdf(prior, x)` call must still reflect the
+        # prior's own snapshot — i.e. the quadratic form against Q_prior
+        # AND the log-determinant of Q_prior, not Q_post. Before the fix
+        # in `_update_hessian!`, `ensure_loaded!` would short-circuit on
+        # version match even though `ws.Q` actually held a transient
+        # Newton iterate, and the logdet term would be wrong.
+        using Distributions: Poisson
+        Q_prior = spdiagm(-1 => fill(-0.3, 4), 0 => fill(2.0, 5), 1 => fill(-0.3, 4))
+        y_obs = [2, 1, 3, 0, 4]
+        z_eval = randn(5); z_eval .-= sum(z_eval) / 5
+        ws = GMRFWorkspace(copy(Q_prior))
+        prior = WorkspaceGMRF(zeros(5), copy(Q_prior), ws)
+
+        lp_ref = logpdf(GMRF(zeros(5), copy(Q_prior)), z_eval)
+        lp_before = logpdf(prior, z_eval)
+        @test lp_before ≈ lp_ref rtol = 1.0e-10
+
+        obs_lik = ExponentialFamily(Poisson)(PoissonObservations(y_obs))
+        _ = gaussian_approximation(prior, obs_lik)
+
+        # GA leaves ws in a state where ws.Q = Q_post. A correct logpdf
+        # on `prior` must still evaluate at Q_prior, not Q_post.
+        lp_after = logpdf(prior, z_eval)
+        @test lp_after ≈ lp_ref rtol = 1.0e-10
+    end
 end

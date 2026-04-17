@@ -99,6 +99,14 @@ function _update_hessian!(ws, H_k, prior_nzval, diag_idx, sparse_hess_map)
         _subtract_sparse_hessian!(ws, H_sparse, sparse_hess_map)
     end
     _invalidate!(ws)
+    # ws.Q no longer matches any WorkspaceGMRF's snapshot — it's a transient
+    # Newton iterate (Q_prior - H_k). Reset the ownership tag so a subsequent
+    # `logpdf` / `var` / ... on any WorkspaceGMRF sharing this workspace
+    # triggers `ensure_loaded!` to reload the owner's snapshot. Without this,
+    # the quadratic-form term uses the correct precision (from
+    # `d.precision`) but the log-determinant comes from the workspace's
+    # transient Q, silently mis-pairing them.
+    ws.loaded_version = 0
     return sparse_hess_map
 end
 
@@ -246,6 +254,15 @@ function gaussian_approximation(
                 (mean_change < mean_change_tol) ||
                 (mean_change_rel < mean_change_tol)
             verbose && println("  Converged after $iter iterations")
+            # Refresh ws.Q to Q_post(x_new) so `_build_result` snapshots the
+            # correct posterior precision. Without this, the line search's
+            # reload of Q_prior (via `ensure_loaded!` when the constrained
+            # branch uses a fresh `base_prior`, or whenever
+            # `_update_hessian!` tags the workspace as unowned) would leave
+            # ws.Q mismatched with x_new.
+            H_final = loghessian(x_new, obs_lik)
+            sparse_hess_map = _update_hessian!(ws, H_final, prior_nzval, diag_idx, sparse_hess_map)
+            ensure_numeric!(ws)
             return _build_result(ws, x_new, constraints)
         end
 
