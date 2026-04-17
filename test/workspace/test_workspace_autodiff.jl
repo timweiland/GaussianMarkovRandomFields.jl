@@ -135,12 +135,7 @@ backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
             backend, θ
         )
 
-        # Workspace GA refreshes ws.Q = Q_post(x_new) in its convergence
-        # branch (via a final _update_hessian!), whereas the plain GMRF GA
-        # still holds Q(x_prev). That one-step mismatch is below Newton's
-        # own convergence tolerance but above 1e-4 in the derived gradient;
-        # hence the relaxed tolerance here.
-        @test grad_ws ≈ grad_gmrf rtol = 1.0e-3
+        @test grad_ws ≈ grad_gmrf rtol = 1.0e-4
     end
 
 end

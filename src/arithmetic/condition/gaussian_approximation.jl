@@ -198,7 +198,16 @@ function gaussian_approximation(
         verbose && println("  Iter $iter: Newton dec = $(round(newton_decrement, sigdigits = 3)), α = $(round(α, digits = 3))")
         if (newton_decrement < newton_dec_tol) || (mean_change < mean_change_tol) || (mean_change_rel < mean_change_tol)
             verbose && println("  Converged after $iter iterations")
-            new_gmrf = GMRF(x_new, Q_new; linsolve_cache = cache)
+            # Refresh Q at x_new so the posterior mean and precision are
+            # consistent (Q_new above was computed at x_k, not x_new). At
+            # convergence x_new ≈ x_k, but the mismatch shows up as a small
+            # ~1e-4 error in AD gradients and matters for downstream INLA
+            # hyperparameter optimization. The max_iter branch already does
+            # this refresh (it recomputes H_k at the final iterate).
+            H_final = loghessian(x_new, obs_lik)
+            Q_final = prepare_for_linsolve(Q_base - H_final, cache.alg)
+            _update_linsolve_cache!(cache, Q_final)
+            new_gmrf = GMRF(x_new, Q_final; linsolve_cache = cache)
             return _apply_constraints(new_gmrf, constraints)
         end
 
