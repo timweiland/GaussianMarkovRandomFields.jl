@@ -1,8 +1,12 @@
 using LinearAlgebra
 using SparseArrays
 using LinearMaps
+using CliqueTrees.Multifrontal: chordal, ChordalCholesky, triangular
 
 export gaussian_approximation
+
+# Sparse-preserving subtraction for Hermitian matrices
+hermdiff(A::Hermitian, B) = Hermitian(parent(A) - B, Symbol(A.uplo))
 
 function neg_log_posterior(prior_gmrf::AbstractGMRF, obs_lik::ObservationLikelihood, x)
     return -logpdf(prior_gmrf, x) - loglik(x, obs_lik)
@@ -19,6 +23,7 @@ end
 # Private dispatch: extract constraints if present
 _extract_constraints(::GMRF) = nothing
 _extract_constraints(constrained::ConstrainedGMRF) = (A = constrained.constraint_matrix, e = constrained.constraint_vector)
+_extract_constraints(::ChordalGMRF) = nothing
 
 # Private dispatch: apply constraints to result
 _apply_constraints(gmrf::GMRF, ::Nothing) = gmrf
@@ -27,6 +32,7 @@ _apply_constraints(gmrf::GMRF, constraints::NamedTuple) = ConstrainedGMRF(gmrf, 
 # Private dispatch: extract base GMRF for optimization
 _base_gmrf(gmrf::GMRF) = gmrf
 _base_gmrf(constrained::ConstrainedGMRF) = constrained.base_gmrf
+_base_gmrf(gmrf::ChordalGMRF) = gmrf
 
 # Compute the constrained Newton step via the KKT Schur complement.
 # Solves H⁻¹Aᵀ using the existing linsolve cache (m sparse solves, m = #constraints),
@@ -69,6 +75,34 @@ function _update_linsolve_cache_inner!(cache, Q, alg::LinearSolve.LDLtFactorizat
     return cache.A = copy(Q)
 end
 
+# Solver abstraction for gaussian_approximation Newton iteration.
+# Allows shared iteration logic for both LinearSolve-backed GMRF and ChordalCholesky-backed ChordalGMRF.
+_ga_init_solver(gmrf::GMRF) = deepcopy(linsolve_cache(gmrf))
+_ga_init_solver(gmrf::ChordalGMRF) = copy(gmrf.F)
+
+function _ga_update_and_solve!(solver, Q_base, H_k, b, ::GMRF)
+    Q_new = prepare_for_linsolve(Q_base - H_k, solver.alg)
+    _update_linsolve_cache!(solver, Q_new)
+    solver.b = b
+    return Q_new, copy(solve!(solver).u)
+end
+
+function _ga_update_and_solve!(solver, Q_base, H_k, b, ::ChordalGMRF)
+    Q_new = hermdiff(Q_base, H_k)
+    copyto!(solver, Q_new)
+    cholesky!(solver)
+    return Q_new, solver \ b
+end
+
+function _ga_make_posterior(x, Q, solver, prior::Union{GMRF, ConstrainedGMRF}, constraints)
+    new_gmrf = GMRF(x, Q; linsolve_cache = solver)
+    return _apply_constraints(new_gmrf, constraints)
+end
+
+function _ga_make_posterior(x, Q, solver, prior::ChordalGMRF, ::Nothing)
+    return ChordalGMRF(x, Q, solver)
+end
+
 """
     gaussian_approximation(prior_gmrf, obs_lik; kwargs...) -> AbstractGMRF
 
@@ -77,11 +111,11 @@ Find Gaussian approximation to the posterior using Fisher scoring.
 This function finds the mode of the posterior distribution and constructs a Gaussian
 approximation around it using Fisher scoring (Newton-Raphson with Fisher information matrix).
 
-Works for both regular `GMRF` and `ConstrainedGMRF` priors, automatically handling
+Works for `GMRF`, `ConstrainedGMRF`, and `ChordalGMRF` priors, automatically handling
 constraint projection when needed.
 
 # Arguments
-- `prior_gmrf`: Prior GMRF distribution for the latent field (GMRF or ConstrainedGMRF)
+- `prior_gmrf`: Prior GMRF distribution for the latent field (GMRF, ConstrainedGMRF, or ChordalGMRF)
 - `obs_lik`: Materialized observation likelihood (contains data and hyperparameters)
 
 # Keyword Arguments
@@ -110,7 +144,7 @@ posterior_gmrf = gaussian_approximation(prior_gmrf, obs_lik; adaptive_stepsize=f
 ```
 """
 function gaussian_approximation(
-        prior_gmrf::Union{GMRF, ConstrainedGMRF},
+        prior_gmrf::Union{GMRF, ConstrainedGMRF, ChordalGMRF},
         obs_lik::ObservationLikelihood;
         x0::Union{Nothing, AbstractVector} = nothing,
         max_iter::Int = 50,
@@ -120,14 +154,14 @@ function gaussian_approximation(
         max_linesearch_iter::Int = 10,
         verbose::Bool = false
     )
-    # Extract base GMRF and constraints (nothing for regular GMRF)
+    # Extract base GMRF and constraints (nothing for GMRF/ChordalGMRF)
     base_gmrf = _base_gmrf(prior_gmrf)
     constraints = _extract_constraints(prior_gmrf)
 
     # Initialize with provided starting point or prior mean
-    x_k = x0 === nothing ? mean(prior_gmrf) : copy(x0)
+    x_k = x0 === nothing ? copy(mean(prior_gmrf)) : copy(x0)
 
-    cache = deepcopy(linsolve_cache(base_gmrf))
+    solver = _ga_init_solver(base_gmrf)
     Q_base = precision_matrix(base_gmrf)
 
     # Adaptive stepsize state (persists across outer iterations)
@@ -136,84 +170,68 @@ function gaussian_approximation(
     verbose && println("Starting Fisher scoring...")
 
     for iter in 1:max_iter
-        # Compute observation likelihood derivatives at current point
-        H_k = loghessian(x_k, obs_lik)  # Hessian: ∇²ₓ log p(y|x)
-
-        # Update precision: Q_new = Q_base - H_k (note: H_k contains negative of Hessian)
-        Q_new = prepare_for_linsolve(Q_base - H_k, cache.alg)
-
-        _update_linsolve_cache!(cache, Q_new)
+        H_k = loghessian(x_k, obs_lik)
         neg_score_k = ∇ₓ_neg_log_posterior(base_gmrf, obs_lik, x_k)
-        cache.b = neg_score_k
-        step = copy(solve!(cache).u)
+        Q_new, step = _ga_update_and_solve!(solver, Q_base, H_k, neg_score_k, base_gmrf)
 
         # For constrained problems, project step onto constraint tangent space
-        # via the KKT Schur complement (m sparse solves, m = #constraints).
-        # This ensures A*step = 0, so x_k - α*step stays on the manifold.
-        step = _constrain_step(step, cache, constraints)
+        # via the KKT Schur complement. No-op when constraints are nothing.
+        step = _constrain_step(step, solver, constraints)
 
         # Apply step with adaptive line search or full step
         if adaptive_stepsize
             obj_current = neg_log_posterior(base_gmrf, obs_lik, x_k)
-            step_accepted = false
+            accept = false
 
             for ls_iter in 1:max_linesearch_iter
                 candidate = x_k - α * step
                 obj_candidate = neg_log_posterior(base_gmrf, obs_lik, candidate)
 
                 if obj_candidate <= obj_current
-                    # Accept step, increase α toward 1
-                    μ_new = candidate
+                    x_new = candidate
                     α = sqrt(α)
-                    step_accepted = true
+                    accept = true
                     verbose && ls_iter > 1 && println("    Accepted at α=$(round(α^2, digits = 3)) after $ls_iter backtracks")
                     break
                 else
-                    # Reject, reduce stepsize
                     α *= 0.1
                     verbose && println("    Backtrack: α=$(round(α, digits = 4))")
 
                     if α * norm(step, Inf) < newton_dec_tol / 1000
-                        μ_new = candidate
-                        step_accepted = true
+                        x_new = candidate
+                        accept = true
                         break
                     end
                 end
             end
 
-            if !step_accepted
-                μ_new = x_k - α * step
+            if !accept
+                x_new = x_k - α * step
             end
         else
-            μ_new = x_k - step
+            x_new = x_k - step
         end
 
-        # Newton decrement: dot(g, constrained_step) = -g'Δx_nt = Δx_nt'HΔx_nt ≥ 0
         newton_decrement = dot(neg_score_k, step)
-
-        x_new = μ_new
         mean_change = norm(x_new - x_k)
-        mean_change_rel = mean_change / norm(x_k)
+        mean_change_rel = mean_change / max(norm(x_k), 1.0e-10)
 
         verbose && println("  Iter $iter: Newton dec = $(round(newton_decrement, sigdigits = 3)), α = $(round(α, digits = 3))")
         if (newton_decrement < newton_dec_tol) || (mean_change < mean_change_tol) || (mean_change_rel < mean_change_tol)
             verbose && println("  Converged after $iter iterations")
-            new_gmrf = GMRF(x_new, Q_new; linsolve_cache = cache)
-            return _apply_constraints(new_gmrf, constraints)
+            return _ga_make_posterior(x_new, Q_new, solver, prior_gmrf, constraints)
         end
 
-        # Update for next iteration
         x_k = x_new
     end
 
     verbose && println("  Reached max_iter = $max_iter without convergence")
 
-    # Return current best approximation
+    # Return current best approximation at final x_k
     H_k = loghessian(x_k, obs_lik)
-    Q_final = prepare_for_linsolve(Q_base - H_k, cache.alg)
-    cache.A = Q_final
-    final_gmrf = GMRF(x_k, Q_final; linsolve_cache = cache)
-    return _apply_constraints(final_gmrf, constraints)
+    neg_score_k = ∇ₓ_neg_log_posterior(base_gmrf, obs_lik, x_k)
+    Q_final, _ = _ga_update_and_solve!(solver, Q_base, H_k, neg_score_k, base_gmrf)
+    return _ga_make_posterior(x_k, Q_final, solver, prior_gmrf, constraints)
 end
 
 # Specialized dispatch for Normal observation likelihoods with identity link (conjugate prior case)

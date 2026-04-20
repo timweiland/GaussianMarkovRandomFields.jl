@@ -2,6 +2,7 @@ using ChainRulesCore
 using SparseArrays
 using LinearAlgebra
 using LinearMaps
+using CliqueTrees.Multifrontal: ChordalCholesky
 
 """
     ChainRulesCore.rrule(::Type{GMRF}, μ::AbstractVector, Q::Union{AbstractMatrix, LinearMaps.LinearMap}, algorithm)
@@ -121,4 +122,37 @@ function ChainRulesCore.rrule(
     end
 
     return result, ConstrainedGMRF_pullback
+end
+
+"""
+    ChainRulesCore.rrule(::Type{ChordalGMRF}, μ::AbstractVector, Q::SparseMatrixCSC)
+
+Automatic differentiation rule for ChordalGMRF constructor.
+
+This rrule enables differentiation through ChordalGMRF construction, allowing gradients
+to flow back to the mean vector and precision matrix. The factorization F is treated
+as non-differentiable.
+"""
+function ChainRulesCore.rrule(::Type{ChordalGMRF}, μ::AbstractVector, Q::SparseMatrixCSC)
+    x = ChordalGMRF(μ, Q)
+
+    function ChordalGMRF_pullback(x̄)
+        μ̄ = x̄.μ
+        Q̄ = x̄.Q
+        return NoTangent(), μ̄, Q̄
+    end
+
+    return x, ChordalGMRF_pullback
+end
+
+function ChainRulesCore.rrule(::Type{ChordalGMRF}, μ::AbstractVector, Q::SparseMatrixCSC, F::ChordalCholesky)
+    x = ChordalGMRF(μ, Q, F)
+
+    function ChordalGMRF_pullback(x̄)
+        μ̄ = x̄.μ
+        Q̄ = x̄.Q
+        return NoTangent(), μ̄, Q̄, NoTangent()
+    end
+
+    return x, ChordalGMRF_pullback
 end

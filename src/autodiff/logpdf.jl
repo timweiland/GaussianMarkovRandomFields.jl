@@ -98,3 +98,4 @@ function ChainRulesCore.rrule(::typeof(logpdf), x::AbstractGMRF, z::AbstractVect
         )
     end
 end
+
