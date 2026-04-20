@@ -34,7 +34,7 @@ As such, it is suitable for both research and teaching in spatial statistics and
 # Statement of Need
 
 GMRFs have become a cornerstone of modern spatial statistics, yet practical barriers limit their accessibility.
-Implementing GMRF-based models requires navigating sparse linear algebra libraries, finite element discretizations, and problem-specific solver selection—all of which create a steep barrier to entry for domain scientists.
+Implementing GMRF-based models requires navigating sparse linear algebra libraries, finite element discretizations, and problem-specific solver selection, all of which create a steep barrier to entry for domain scientists.
 
 `GaussianMarkovRandomFields.jl` eliminates these barriers by providing a feature-rich toolkit for creation and manipulation of GMRFs.
 The package offers utilities to create well-known latent models, ranging from simple autoregressive and Besag [@besagConditionalIntrinsicAutoregressions1995] models to more involved spatial and spatiotemporal finite element-based models [@lindgrenExplicitLinkGaussian2011; @clarottoSPDEApproachSpatiotemporal2024].
@@ -49,16 +49,52 @@ Automatic differentiation support via ForwardDiff.jl [@revels2016forward] and En
 
 ![Spatial binary classification of tree species in the Lansing Woods dataset using a Matérn latent field with Bernoulli observations. Points show observed trees: \textcolor{red}{hickory} and \textcolor{blue}{other species}. The heatmap shows predicted probabilities, demonstrating the package's support for non-Gaussian likelihoods through efficient Gaussian approximation.\label{fig:bernoulli}](bernoulli_classification.pdf){ width=80% }
 
-Existing GMRF software faces trade-offs between ease of use and flexibility.
-R-INLA [@rueApproximateBayesianInference2009] provides comprehensive functionality for latent Gaussian models but is limited to pre-defined model structures and lacks flexibility for custom applications.
-The inlabru package [@bachl2019inlabru] extends R-INLA with support for non-linear predictors and a more flexible interface, but remains tied to INLA's underlying computational framework.
-The rSPDE package [@bolin2025rspde] enables fractional SPDE models with non-integer smoothness parameters.
-General-purpose probabilistic programming frameworks like PyMC [@abril2023pymc] provide some GMRF functionality, but lack the specialized treatment of dedicated GMRF packages.
-`GaussianMarkovRandomFields.jl` bridges this gap by combining ease of use with full extensibility, allowing users to leverage pre-built components while maintaining the flexibility to implement custom models and solvers.
+# State of the Field
 
-The package is designed for researchers and practitioners working in spatial statistics, epidemiology, environmental science, and related fields requiring efficient Bayesian inference for spatially or temporally correlated data.
-It serves both as a research tool for developing novel GMRF-based methods and as a teaching resource for courses in spatial statistics and Bayesian modeling.
-The package has been used in methodological research on probabilistic PDE solvers [@weiland2025gmrfpde].
+Implementations of GMRF-based inference have historically centered on R.
+R-INLA [@rueApproximateBayesianInference2009] provides comprehensive support for latent Gaussian models through integrated nested Laplace approximations, but its model library is curated and custom extensions require low-level C implementation.
+The inlabru package [@bachl2019inlabru] adds a flexible modeling interface for non-linear predictors while remaining tied to R-INLA's computational backend.
+The rSPDE package [@bolin2025rspde] supports fractional SPDE models with non-integer smoothness.
+Template Model Builder (TMB) [@kristensen2016tmb] supports Laplace approximation and gradient-based inference over latent Gaussian models via C++ templates, but requires users to write C++ for their models.
+In Python, general-purpose probabilistic programming frameworks such as PyMC [@abril2023pymc] expose some GMRF primitives but lack specialized machinery.
+
+Across these packages, GMRFs appear as implementation details of a specific inference algorithm, buried in C or C++ code and not exposed as first-class objects that users can extend.
+`GaussianMarkovRandomFields.jl` instead treats GMRFs as the primary abstraction and exposes a high-level interface that is straightforward for practitioners to use, extend, and compose with existing tools.
+It combines the computational efficiency that sparse-precision Gaussian inference demands with the flexibility required for methodological research.
+The design leverages Julia's multiple dispatch to integrate directly with LinearSolve.jl, Ferrite.jl, ForwardDiff.jl [@revels2016forward], Enzyme.jl [@moses2020enzyme], and the broader SciML stack, a combination that no existing GMRF package offers.
+
+# Software Design
+
+The package is organized around an abstract type hierarchy centered on `AbstractGMRF`.
+Concrete subtypes, including the default `GMRF`, the hard-constrained `ConstrainedGMRF`, and the model-wrapping `MetaGMRF`, expose a uniform interface for mean, precision, `logpdf`, sampling, and marginal variance, so downstream code is written once and works across variants.
+
+A separate `LatentModel` abstraction decouples model specification (hyperparameters mapped to sparse precision) from construction of GMRF instances.
+Provided models include autoregressive processes AR(p), random walks, IID, fixed effects, Besag, BYM2, Matérn SPDE, and compositions thereof; users add their own by implementing a small protocol.
+A formula interface built on StatsModels.jl offers the familiar R-style syntax for combined models.
+
+Linear solves are delegated to LinearSolve.jl, so users can swap CHOLMOD, Pardiso, LDLt factorizations, or preconditioned conjugate gradient without touching model code.
+Automatic differentiation is provided through package extensions for ForwardDiff.jl, Zygote.jl/ChainRulesCore.jl, and Enzyme.jl, with chain rules written at the GMRF-construction level so gradients flow through composed models.
+This split (abstract core, composable solver backends, AD via extensions) keeps the package's load-time cost small while preserving extensibility.
+
+# Research Impact Statement
+
+The package has supported methodological research on probabilistic PDE solvers [@weiland2025gmrfpde].
+Near-term impact is rooted in the package's scope: `GaussianMarkovRandomFields.jl` supplies the foundational infrastructure needed to bring well-established latent-Gaussian inference methodologies to the Julia ecosystem.
+
+Integrated Nested Laplace Approximation (INLA) [@rueApproximateBayesianInference2009] and Template Model Builder (TMB) [@kristensen2016tmb], with HMC extensions such as tmbstan [@monnahan2018tmbstan], are widely used in ecology, epidemiology, and environmental statistics, but have been available only in R or as C++ templates.
+The sparse-linear-algebra, automatic-differentiation, and latent-model abstractions provided here are the prerequisite machinery for Julia implementations of these methods.
+Integration with Turing.jl [@ge2018turing] additionally enables full MCMC over GMRF hyperparameters, combining GMRF sub-models with arbitrary non-Gaussian components in a probabilistic program.
+
+The package targets researchers and practitioners working in spatial statistics, epidemiology, environmental science, and related fields, and can serve both as a turnkey toolkit and as a substrate for methodological development in Julia's AD- and SciML-aware ecosystem.
+
+# AI Usage Disclosure
+
+Claude Code (Anthropic's CLI coding assistant) was used as a development aid during the late stages of implementation, testing, and documentation, and when drafting portions of this paper.
+All design decisions, mathematical specifications, and package scope are the author's own.
+AI assistance was used to accelerate mechanical tasks (code translation, docstring drafting, routine refactors, prose tightening) under the author's direction.
+Every AI-produced suggestion was reviewed, edited, and integrated by the author before commit or inclusion.
+Correctness was verified through the package's test suite, which cross-checks implementations against dense-matrix baselines, finite-difference gradients, and analytical solutions where available, and by running the accompanying documentation examples.
+No other generative-AI tools were used.
 
 # Acknowledgements
 
