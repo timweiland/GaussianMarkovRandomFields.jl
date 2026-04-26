@@ -108,10 +108,12 @@ end
     WorkspaceGMRF(mean, Q::SparseMatrixCSC, ws::GMRFWorkspace)
 
 Create an unconstrained `WorkspaceGMRF` reusing an existing workspace.
+The sparsity pattern of `Q` must match `ws.Q`'s pattern.
 """
 function WorkspaceGMRF(
         mean::AbstractVector{T}, Q::SparseMatrixCSC{T}, ws::GMRFWorkspace
     ) where {T}
+    _check_workspace_pattern(Q, ws)
     version = _next_version!(ws)
     B = typeof(ws.backend)
     return WorkspaceGMRF{T, B, typeof(ws), Nothing}(
@@ -123,11 +125,13 @@ end
     WorkspaceGMRF(mean, Q::SparseMatrixCSC, ws::GMRFWorkspace, A, e)
 
 Create a constrained `WorkspaceGMRF` with constraints Ax = e.
+The sparsity pattern of `Q` must match `ws.Q`'s pattern.
 """
 function WorkspaceGMRF(
         mean::AbstractVector{T}, Q::SparseMatrixCSC{T}, ws::GMRFWorkspace,
         A::AbstractMatrix, e::AbstractVector
     ) where {T}
+    _check_workspace_pattern(Q, ws)
     version = _next_version!(ws)
     # ensure_loaded! so ConstraintInfo solves use the right Q
     copyto!(ws.Q.nzval, Q.nzval)
@@ -137,6 +141,25 @@ function WorkspaceGMRF(
     B = typeof(ws.backend)
     return WorkspaceGMRF{T, B, typeof(ws), ConstraintInfo{T}}(
         Vector{T}(mean), copy(Q), ws, ci, version
+    )
+end
+
+"""
+    _check_workspace_pattern(Q::SparseMatrixCSC, ws::GMRFWorkspace)
+
+Validate that `Q`'s sparsity pattern matches the workspace's. Throws
+`ArgumentError` on mismatch. Centralizes the contract that a
+`WorkspaceGMRF` snapshot must be storage-compatible with the workspace's
+internal `Q` so that lazy `ensure_loaded!` reloads via positional `nzval`
+copy are safe.
+"""
+function _check_workspace_pattern(Q::SparseMatrixCSC, ws::GMRFWorkspace)
+    return _same_pattern(Q, ws.Q) ||
+        throw(
+        ArgumentError(
+            "Sparsity pattern of Q does not match workspace pattern. " *
+                "WorkspaceGMRF snapshots must share the workspace's colptr/rowval."
+        )
     )
 end
 
