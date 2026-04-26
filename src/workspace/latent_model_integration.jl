@@ -115,13 +115,19 @@ function (model::LatentModel)(ws::GMRFWorkspace; kwargs...)
     Q_sparse = _ensure_sparse(Q)
     constraint_info = constraints(model; kwargs...)
 
-    update_precision!(ws, Q_sparse)
+    # Pad Q's values into the workspace's sparsity pattern with zeros at
+    # observation-Hessian-only positions. Allows the joint-pattern workspace
+    # built by `GMRFWorkspace(model, obs_lik)` to accept prior-pattern Q's
+    # from the model. A no-op if patterns already match.
+    Q_for_ws = _pad_to_workspace_pattern(Q_sparse, ws)
+
+    update_precision!(ws, Q_for_ws)
 
     if constraint_info === nothing
-        return WorkspaceGMRF(μ, Q_sparse, ws)
+        return WorkspaceGMRF(μ, Q_for_ws, ws)
     else
         A, e = constraint_info
-        return WorkspaceGMRF(μ, Q_sparse, ws, A, e)
+        return WorkspaceGMRF(μ, Q_for_ws, ws, A, e)
     end
 end
 
@@ -137,6 +143,51 @@ _ensure_sparse_hessian(H::AbstractMatrix, ::Int) = sparse(H)
 """Create a sparse matrix with absolute values of nonzeros (for pattern union)."""
 function _abs_pattern(H::SparseMatrixCSC{T}) where {T}
     return SparseMatrixCSC(H.m, H.n, H.colptr, H.rowval, abs.(H.nzval))
+end
+
+"""
+    _pad_to_workspace_pattern(Q::SparseMatrixCSC, ws::GMRFWorkspace) -> SparseMatrixCSC
+
+Return `Q` padded into `ws.Q`'s sparsity pattern, with zeros at positions
+present in `ws.Q` but absent from `Q`. Returns `Q` itself if patterns
+already match. Throws `ArgumentError` if `Q` has nonzeros outside `ws.Q`'s
+pattern (which would silently lose data).
+
+Used by the `(::LatentModel)(ws; θ...)` fast path so that workspaces
+built with the joint prior + observation-Hessian pattern can still accept
+prior-pattern precision matrices from the model.
+"""
+function _pad_to_workspace_pattern(Q::SparseMatrixCSC, ws::GMRFWorkspace)
+    _same_pattern(Q, ws.Q) && return Q
+
+    T = eltype(Q)
+    Q_padded = SparseMatrixCSC(
+        ws.Q.m, ws.Q.n,
+        copy(ws.Q.colptr), copy(ws.Q.rowval),
+        zeros(T, length(ws.Q.nzval))
+    )
+
+    Q_rows = rowvals(Q)
+    pad_rows = rowvals(Q_padded)
+    @inbounds for col in 1:size(Q, 2)
+        pad_ptr = first(nzrange(Q_padded, col))
+        pad_end = last(nzrange(Q_padded, col))
+        for src_idx in nzrange(Q, col)
+            src_row = Q_rows[src_idx]
+            while pad_ptr <= pad_end && pad_rows[pad_ptr] < src_row
+                pad_ptr += 1
+            end
+            if pad_ptr > pad_end || pad_rows[pad_ptr] != src_row
+                throw(
+                    ArgumentError(
+                        "Q has nonzero at ($src_row, $col) outside the workspace pattern."
+                    )
+                )
+            end
+            Q_padded.nzval[pad_ptr] = Q.nzval[src_idx]
+        end
+    end
+    return Q_padded
 end
 
 """Copy values from `src` into `dst` at matching sparsity positions.

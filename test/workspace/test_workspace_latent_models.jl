@@ -3,6 +3,7 @@ using GaussianMarkovRandomFields: has_constraints
 using Distributions
 using LinearAlgebra
 using SparseArrays
+using Random
 
 @testset "Workspace LatentModel Integration" begin
 
@@ -124,6 +125,42 @@ using SparseArrays
         @test dimension(ws) == n
 
         prior = model(ws; τ = 2.0, ρ = 0.3)
+        posterior = gaussian_approximation(prior, obs_lik)
+        @test isfinite(logpdf(posterior, mean(posterior)))
+    end
+
+    @testset "Joint pattern workspace with non-diagonal Hessian" begin
+        # Regression for the SHOULD-FIX flagged by Codex: when the obs Hessian
+        # has off-diagonal nonzeros (e.g. via a design matrix), the workspace
+        # pattern is strictly larger than the prior pattern. The LatentModel
+        # callable must pad the prior precision into the workspace pattern,
+        # otherwise update_precision!'s pattern check rejects it.
+        n = 8
+        m_obs = 10
+        Random.seed!(123)
+        A = sprand(m_obs, n, 0.6)  # non-square design matrix
+        model = AR1Model(n)
+        base = ExponentialFamily(Distributions.Normal)
+        ltom = LinearlyTransformedObservationModel(base, A)
+        y_obs = randn(m_obs)
+        obs_lik = ltom(y_obs; σ = 0.5)
+
+        ws = GMRFWorkspace(model, obs_lik; τ = 1.0, ρ = 0.5)
+
+        # Workspace pattern is strictly a superset of the prior pattern.
+        Q_prior_only = sparse(precision_matrix(model; τ = 1.0, ρ = 0.5))
+        @test nnz(ws.Q) > nnz(Q_prior_only)
+
+        # The LatentModel callable must accept this configuration without
+        # tripping the pattern-equality check inside update_precision!.
+        prior = model(ws; τ = 2.0, ρ = 0.3)
+        @test prior isa WorkspaceGMRF
+
+        # Numerical correctness against a fresh-construction baseline.
+        ref_prior = model(; τ = 2.0, ρ = 0.3)
+        z = randn(n)
+        @test logpdf(prior, z) ≈ logpdf(ref_prior, z) rtol = 1.0e-8
+
         posterior = gaussian_approximation(prior, obs_lik)
         @test isfinite(logpdf(posterior, mean(posterior)))
     end
