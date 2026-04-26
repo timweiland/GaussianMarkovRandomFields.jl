@@ -587,13 +587,20 @@ function _forwarddiff_workspace_ga_obs_dual(
     Q_post_dual = prior_gmrf.precision - H_dual
     Q_post_sparse = sparse(Q_post_dual)
 
-    # Step 6: Build result, preserving constraints if present.
+    # Step 6: Build result, preserving constraints if present. For the
+    # constrained branch, lift the primal Ã^T / L_c from posterior_primal's
+    # ConstraintInfo (already computed at Q_post during the primal pass) to
+    # avoid a second factorization + m constraint solves.
     if prior_gmrf.constraints === nothing
         return GMRFs.WorkspaceGMRF(x_star_dual, Q_post_sparse, ws)
     else
-        ci_prior = prior_gmrf.constraints
-        return GMRFs.WorkspaceGMRF(
-            x_star_dual, Q_post_sparse, ws, ci_prior.matrix, ci_prior.vector
+        ci_post = posterior_primal.constraints
+        A_dense = ci_post.matrix
+        log_AA_det = logdet(cholesky(Symmetric(A_dense * A_dense')))
+        return _build_constrained_dual_workspace_gmrf(
+            x_star_dual, Q_post_sparse, ws,
+            A_dense, ci_post.vector, ci_post.A_tilde_T, ci_post.L_c,
+            log_AA_det, posterior_primal.version
         )
     end
 end
@@ -989,11 +996,18 @@ function _compute_constrained_duals(
     return constrained_mean, log_constraint_correction
 end
 
-function _construct_forwarddiff_constrained_workspace_gmrf(
+# Kernel: build a constrained Dual WorkspaceGMRF assuming `ws` is already
+# loaded (factorized) at Q's primal values, `ws.loaded_version == version`,
+# and primal `A_tilde_T_v`, `L_c_primal`, `log_AA_det` are computed against
+# that same factorization. Used by both the from-scratch constructor (which
+# does the load + solves itself) and the obs-dual workspace path (which
+# lifts these from `posterior_primal.constraints`).
+function _build_constrained_dual_workspace_gmrf(
         mean::AbstractVector, Q::SparseMatrixCSC, ws::GMRFs.GMRFWorkspace,
-        A::AbstractMatrix, e::AbstractVector
+        A_dense::Matrix{Float64}, e_vec::Vector{Float64},
+        A_tilde_T_v::Matrix{Float64}, L_c_primal,
+        log_AA_det::Float64, version::Int
     )
-    GMRFs._check_workspace_pattern(Q, ws)
     T = promote_type(eltype(mean), eltype(Q))
     mean_T = convert(Vector{T}, mean)
     Q_T = if eltype(Q) === T
@@ -1001,27 +1015,7 @@ function _construct_forwarddiff_constrained_workspace_gmrf(
     else
         SparseMatrixCSC(Q.m, Q.n, Q.colptr, Q.rowval, convert(Vector{T}, Q.nzval))
     end
-
-    # Load primal Q into ws so the primal factorization is current.
-    Q_v_nzval = eltype(Q) <: ForwardDiff.Dual ?
-        ForwardDiff.value.(Q.nzval) : Vector{Float64}(Q.nzval)
-    Q_primal = SparseMatrixCSC(Q.m, Q.n, Q.colptr, Q.rowval, Q_v_nzval)
-    GMRFs.update_precision!(ws, Q_primal)
-    version = GMRFs._next_version!(ws)
-    ws.loaded_version = version
-
-    n = size(Q, 1)
-    m = size(A, 1)
-    A_dense = Matrix{Float64}(A)
-    e_vec = Vector{Float64}(e)
-
-    # Primal Ã^T = Q_v⁻¹ A' via m solves against the primal factorization.
-    A_tilde_T_v = Matrix{Float64}(undef, n, m)
-    for i in 1:m
-        A_tilde_T_v[:, i] .= GMRFs.workspace_solve(ws, A_dense[i, :])
-    end
-    L_c_primal = cholesky(Symmetric(A_dense * A_tilde_T_v))
-    log_AA_det = logdet(cholesky(Symmetric(A_dense * A_dense')))
+    m = size(A_dense, 1)
 
     if eltype(Q) <: ForwardDiff.Dual
         constrained_mean, log_constraint_correction = _compute_constrained_duals(
@@ -1044,6 +1038,38 @@ function _construct_forwarddiff_constrained_workspace_gmrf(
     B = typeof(ws.backend)
     return GMRFs.WorkspaceGMRF{T, B, typeof(ws), GMRFs.ConstraintInfo{T}}(
         mean_T, copy(Q_T), ws, ci, version
+    )
+end
+
+function _construct_forwarddiff_constrained_workspace_gmrf(
+        mean::AbstractVector, Q::SparseMatrixCSC, ws::GMRFs.GMRFWorkspace,
+        A::AbstractMatrix, e::AbstractVector
+    )
+    GMRFs._check_workspace_pattern(Q, ws)
+
+    # Load primal Q into ws so the primal factorization is current.
+    Q_v_nzval = eltype(Q) <: ForwardDiff.Dual ?
+        ForwardDiff.value.(Q.nzval) : Vector{Float64}(Q.nzval)
+    Q_primal = SparseMatrixCSC(Q.m, Q.n, Q.colptr, Q.rowval, Q_v_nzval)
+    GMRFs.update_precision!(ws, Q_primal)
+    version = GMRFs._next_version!(ws)
+    ws.loaded_version = version
+
+    n = size(Q, 1)
+    m = size(A, 1)
+    A_dense = Matrix{Float64}(A)
+    e_vec = Vector{Float64}(e)
+
+    # Primal Ã^T = Q_v⁻¹ A' via m solves against the primal factorization.
+    A_tilde_T_v = Matrix{Float64}(undef, n, m)
+    for i in 1:m
+        A_tilde_T_v[:, i] .= GMRFs.workspace_solve(ws, A_dense[i, :])
+    end
+    L_c_primal = cholesky(Symmetric(A_dense * A_tilde_T_v))
+    log_AA_det = logdet(cholesky(Symmetric(A_dense * A_dense')))
+
+    return _build_constrained_dual_workspace_gmrf(
+        mean, Q, ws, A_dense, e_vec, A_tilde_T_v, L_c_primal, log_AA_det, version
     )
 end
 
