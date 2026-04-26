@@ -21,5 +21,6 @@ include("forwarddiff/constrained_gmrf.jl")
 include("forwarddiff/workspace_constructors.jl")
 include("forwarddiff/constrained_workspace.jl")
 include("forwarddiff/workspace_gaussian_approximation.jl")
+include("forwarddiff/logdetcov.jl")
 
 end

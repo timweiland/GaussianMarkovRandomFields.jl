@@ -111,13 +111,3 @@ function GMRFs.ensure_loaded!(d::GMRFs.WorkspaceGMRF{<:ForwardDiff.Dual})
     end
     return nothing
 end
-
-# logdetcov for Dual-valued WorkspaceGMRF: same approach as GMRF{Dual}
-function logdetcov(x::GMRFs.WorkspaceGMRF{<:ForwardDiff.Dual})
-    GMRFs.ensure_loaded!(x)
-    Qinv = GMRFs.selinv(x.workspace)
-    primal = GMRFs.logdet_cov(x.workspace)
-    # dot(Qinv, Q_dual) naturally produces a Dual via ForwardDiff overloads
-    tangent = -dot(Qinv, x.precision)
-    return ForwardDiff.Dual{ForwardDiff.tagtype(tangent)}(primal, ForwardDiff.partials(tangent)...)
-end

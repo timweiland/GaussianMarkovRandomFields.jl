@@ -1,4 +1,4 @@
-# Dual-safe GMRF constructors and Dual-valued logdetcov.
+# Dual-safe GMRF constructors.
 
 # Build the LinearSolve cache with primal data because caches cannot handle Dual numbers.
 function _forwarddiff_cache(mean::AbstractVector, precision::PrecisionLike, alg)
@@ -104,11 +104,4 @@ function GMRFs.GMRF(
         linsolve_cache = nothing,
     )
     return _construct_forwarddiff_gmrf(mean, precision, alg, Q_sqrt, rbmc_strategy, linsolve_cache)
-end
-
-function logdetcov(x::GMRF{<:ForwardDiff.Dual})
-    Qinv = GMRFs.selinv(x.linsolve_cache)
-    primal = GMRFs.logdet_cov(x.linsolve_cache)
-    tangent = -dot(Qinv, x.precision)
-    return ForwardDiff.Dual{ForwardDiff.tagtype(tangent)}(primal, ForwardDiff.partials(tangent)...)
 end
