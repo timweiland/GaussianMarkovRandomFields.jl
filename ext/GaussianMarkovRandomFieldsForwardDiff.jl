@@ -522,6 +522,97 @@ function GMRFs.gaussian_approximation(
     return _forwarddiff_gaussian_approximation_obs_dual(prior_gmrf, obs_lik; kwargs...)
 end
 
+# ============================================================================
+# Forward-mode IFT for Float64 WorkspaceGMRF + Dual obs_lik
+# ============================================================================
+#
+# The primal Newton iteration runs via the primal `gaussian_approximation`
+# dispatch (Float64 prior, Float64 obs_lik). After convergence, we evaluate
+# ∇ₓ neg_log_posterior with the Dual obs_lik to extract obs-hyperparameter
+# tangents, IFT-solve them against the posterior workspace factorization,
+# and reconstruct a Dual-valued WorkspaceGMRF posterior.
+
+function _forwarddiff_workspace_ga_obs_dual(
+        prior_gmrf::GMRFs.WorkspaceGMRF{Float64},
+        obs_lik;
+        kwargs...
+    )
+    D = _dual_type_from_obs_lik(obs_lik)
+
+    # Step 1: Primal forward pass with Float64 obs_lik via the primal path.
+    primal_obs_lik = _primal_obs_lik(obs_lik)
+    posterior_primal = GMRFs.gaussian_approximation(prior_gmrf, primal_obs_lik; kwargs...)
+    # `mean(::WorkspaceGMRF)` returns the constrained mean when constraints are
+    # present (the unconstrained `posterior_primal.mean` field is NOT the
+    # constrained KKT optimum for the conjugate Normal path, where it's set to
+    # the unprojected linear-condition mean).
+    x_star = GMRFs.mean(posterior_primal)
+
+    # Step 2: ∇ₓ neg_log_posterior(x*) with Dual obs_lik. The prior is
+    # Float64 so the first term contributes no Duals; the loggrad term
+    # carries the obs-hyperparameter partials.
+    neg_grad_dual = prior_gmrf.precision * (x_star .- prior_gmrf.mean) .-
+        GMRFs.loggrad(x_star, obs_lik)
+
+    # Step 3: IFT tangent solves against the posterior workspace
+    # (factorized at Q_post by the primal forward pass).
+    Tag = ForwardDiff.tagtype(D)
+    V = ForwardDiff.valtype(D)
+    N = ForwardDiff.npartials(D)
+    n = length(x_star)
+
+    ws = posterior_primal.workspace
+    constrained = posterior_primal.constraints !== nothing
+    ci = constrained ? posterior_primal.constraints : nothing
+
+    dx = Matrix{V}(undef, n, N)
+    for j in 1:N
+        rhs_j = V[-ForwardDiff.partials(neg_grad_dual[i], j) for i in 1:n]
+        step = GMRFs.workspace_solve(ws, rhs_j)
+        if constrained
+            A = ci.matrix
+            step = step - ci.A_tilde_T * (ci.L_c \ (A * step))
+        end
+        dx[:, j] .= step
+    end
+
+    # Step 4: Construct Dual x*.
+    x_star_dual = map(1:n) do i
+        ForwardDiff.Dual{Tag, V, N}(x_star[i], ForwardDiff.Partials{N, V}(ntuple(j -> dx[i, j], N)))
+    end
+
+    # Step 5: Posterior precision with Duals (Q_prior is Float64; H_dual
+    # carries both x*-tangent and obs-hyperparameter partials).
+    H_dual = GMRFs.loghessian(x_star_dual, obs_lik)
+    Q_post_dual = prior_gmrf.precision - H_dual
+    Q_post_sparse = sparse(Q_post_dual)
+
+    # Step 6: Build result, preserving constraints if present.
+    if prior_gmrf.constraints === nothing
+        return GMRFs.WorkspaceGMRF(x_star_dual, Q_post_sparse, ws)
+    else
+        ci_prior = prior_gmrf.constraints
+        return GMRFs.WorkspaceGMRF(
+            x_star_dual, Q_post_sparse, ws, ci_prior.matrix, ci_prior.vector
+        )
+    end
+end
+
+function GMRFs.gaussian_approximation(
+        prior_gmrf::GMRFs.WorkspaceGMRF{Float64}, obs_lik::_DualObsLik; kwargs...
+    )
+    return _forwarddiff_workspace_ga_obs_dual(prior_gmrf, obs_lik; kwargs...)
+end
+
+# Disambiguation: Float64 workspace prior + conjugate Normal with Dual σ.
+function GMRFs.gaussian_approximation(
+        prior_gmrf::GMRFs.WorkspaceGMRF{Float64},
+        obs_lik::GMRFs.NormalLikelihood{GMRFs.IdentityLink, <:Any, <:ForwardDiff.Dual};
+        kwargs...
+    )
+    return _forwarddiff_workspace_ga_obs_dual(prior_gmrf, obs_lik; kwargs...)
+end
+
 # Main dispatch: GMRF{Dual} with any ObservationLikelihood
 function GMRFs.gaussian_approximation(
         prior_gmrf::GMRF{D},

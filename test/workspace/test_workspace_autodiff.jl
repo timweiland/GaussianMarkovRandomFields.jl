@@ -1,5 +1,5 @@
 using GaussianMarkovRandomFields
-using Distributions: logpdf
+using Distributions: logpdf, Normal, Poisson
 using SparseArrays
 using LinearAlgebra
 using Random
@@ -194,6 +194,63 @@ end
         abs_error = abs.(grad_test - grad_fd)
         rel_error = abs_error ./ (abs.(grad_fd) .+ 1.0e-10)
         @test maximum(abs_error) < 2.0e-2
+        @test maximum(rel_error) < 5.0e-2
+    end
+
+    @testset "Float64 WorkspaceGMRF + Dual obs_lik gaussian_approximation" begin
+        # Regression for SHOULD-FIX #7: when the prior is a Float64
+        # WorkspaceGMRF and only the observation likelihood carries Duals
+        # (e.g. differentiating through σ in a Normal likelihood),
+        # `gaussian_approximation` must take the obs-dual workspace path,
+        # which runs the primal Newton solve once and propagates Dual
+        # tangents via the IFT.
+        k = 8
+        y = randn(k) .* 0.3 .+ 0.2
+        x = randn(k)
+        model = AR1Model(k)
+        ws = make_workspace(model; τ = 1.0, ρ = 0.3)
+        prior = model(ws; τ = 1.0, ρ = 0.3)  # WorkspaceGMRF{Float64}
+
+        function pipeline(θ)
+            obs_lik = ExponentialFamily(Normal)(y; σ = exp(θ[1]))
+            posterior = gaussian_approximation(prior, obs_lik)
+            return logpdf(posterior, x)
+        end
+
+        θ = [log(0.5)]
+        grad_fwd = DifferentiationInterface.gradient(pipeline, AutoForwardDiff(), θ)
+        grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
+
+        abs_error = abs.(grad_fwd - grad_fd)
+        rel_error = abs_error ./ (abs.(grad_fd) .+ 1.0e-10)
+        @test maximum(abs_error) < 1.0e-3
+        @test maximum(rel_error) < 5.0e-2
+    end
+
+    @testset "Constrained Float64 WorkspaceGMRF + Dual obs_lik" begin
+        # Same regression for the constrained branch of the obs-dual
+        # workspace path: RW1 prior (sum-to-zero) with Float64 hyperparameters
+        # and a Normal obs_lik whose σ depends on θ.
+        k = 8
+        y = randn(k) .* 0.3
+        x_eval = randn(k); x_eval .-= sum(x_eval) / k
+        model = RW1Model(k)
+        ws = make_workspace(model; τ = 1.0)
+        prior = model(ws; τ = 1.0)  # constrained WorkspaceGMRF{Float64}
+
+        function pipeline(θ)
+            obs_lik = ExponentialFamily(Normal)(y; σ = exp(θ[1]))
+            posterior = gaussian_approximation(prior, obs_lik)
+            return logpdf(posterior, x_eval)
+        end
+
+        θ = [log(0.5)]
+        grad_fwd = DifferentiationInterface.gradient(pipeline, AutoForwardDiff(), θ)
+        grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
+
+        abs_error = abs.(grad_fwd - grad_fd)
+        rel_error = abs_error ./ (abs.(grad_fd) .+ 1.0e-10)
+        @test maximum(abs_error) < 1.0e-3
         @test maximum(rel_error) < 5.0e-2
     end
 end
