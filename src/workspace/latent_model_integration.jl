@@ -158,6 +158,12 @@ built with the joint prior + observation-Hessian pattern can still accept
 prior-pattern precision matrices from the model.
 """
 function _pad_to_workspace_pattern(Q::SparseMatrixCSC, ws::GMRFWorkspace)
+    size(Q) == size(ws.Q) ||
+        throw(
+        DimensionMismatch(
+            "Q has size $(size(Q)) but workspace expects $(size(ws.Q))."
+        )
+    )
     _same_pattern(Q, ws.Q) && return Q
 
     T = eltype(Q)
