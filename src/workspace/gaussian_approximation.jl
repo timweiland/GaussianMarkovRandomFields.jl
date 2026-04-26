@@ -183,6 +183,11 @@ function gaussian_approximation(
     ws = prior.workspace
     constraints = prior.constraints
 
+    # Make sure ws.Q reflects this prior's snapshot before reading values
+    # out of it. Without this, a workspace recently used by a different
+    # WorkspaceGMRF would seed `prior_nzval` with the wrong precision.
+    ensure_loaded!(prior)
+
     # For the Newton loop, we need the unconstrained base WorkspaceGMRF
     # (precision_map, gradlogpdf use the unconstrained precision and mean)
     base_prior = has_constraints(prior) ?

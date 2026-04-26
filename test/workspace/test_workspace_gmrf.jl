@@ -187,4 +187,30 @@ using Random
         lp_after = logpdf(prior, z_eval)
         @test lp_after ≈ lp_ref rtol = 1.0e-10
     end
+
+    @testset "gaussian_approximation reseeds prior_nzval from owner" begin
+        # Regression: when a workspace is shared between two priors and the
+        # other prior is loaded last, gaussian_approximation must still seed
+        # its Newton loop from this prior's snapshot. Without ensure_loaded!
+        # at the entry of GA, the captured `prior_nzval` was inherited from
+        # whoever last touched ws.Q.
+        using Distributions: Poisson
+        Q_a = spdiagm(0 => fill(2.0, 5), 1 => fill(-0.3, 4), -1 => fill(-0.3, 4))
+        Q_b = spdiagm(0 => fill(5.0, 5), 1 => fill(-0.7, 4), -1 => fill(-0.7, 4))
+        y = [2, 1, 3, 0, 4]
+        x = zeros(5)
+        ws = GMRFWorkspace(copy(Q_a))
+        wg_a = WorkspaceGMRF(zeros(5), copy(Q_a), ws)
+        wg_b = WorkspaceGMRF(zeros(5), copy(Q_b), ws)
+
+        # Touch wg_b last so ws holds Q_b's data.
+        _ = logpdf(wg_b, randn(5))
+        obs_lik = ExponentialFamily(Poisson)(PoissonObservations(y))
+
+        post_ws = gaussian_approximation(wg_a, obs_lik)
+        post_ref = gaussian_approximation(GMRF(zeros(5), copy(Q_a)), obs_lik)
+
+        @test mean(post_ws) ≈ mean(post_ref) rtol = 1.0e-8
+        @test logpdf(post_ws, x) ≈ logpdf(post_ref, x) rtol = 1.0e-8
+    end
 end
