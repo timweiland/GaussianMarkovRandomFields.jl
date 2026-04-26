@@ -613,6 +613,7 @@ end
 function _construct_forwarddiff_workspace_gmrf_with_ws(
         mean::AbstractVector, Q::SparseMatrixCSC, ws::GMRFs.GMRFWorkspace
     )
+    GMRFs._check_workspace_pattern(Q, ws)
     T = promote_type(eltype(mean), eltype(Q))
     mean_T = eltype(mean) === T ? mean : convert(AbstractVector{T}, mean)
     Q_T = if eltype(Q) === T
@@ -653,13 +654,17 @@ end
 # === WorkspaceGMRF ForwardDiff gaussian_approximation ===
 
 function _primal_workspace_gmrf(prior::GMRFs.WorkspaceGMRF{<:ForwardDiff.Dual})
-    μ_primal = ForwardDiff.value.(GMRFs.mean(prior))
+    μ_primal = ForwardDiff.value.(prior.mean)
     Q_primal = SparseMatrixCSC(
         prior.precision.m, prior.precision.n,
         prior.precision.colptr, prior.precision.rowval,
         ForwardDiff.value.(prior.precision.nzval)
     )
-    return GMRFs.WorkspaceGMRF(μ_primal, Q_primal)
+    # Reuse the prior's existing workspace rather than allocating and
+    # symbolically factorizing a fresh one. This matches the constrained
+    # variant (`_primal_constrained_workspace_gmrf`) and is the whole
+    # point of the workspace abstraction.
+    return GMRFs.WorkspaceGMRF(μ_primal, Q_primal, prior.workspace)
 end
 
 function _forwarddiff_workspace_ga(
@@ -704,6 +709,12 @@ function _forwarddiff_workspace_ga(
     return GMRFs.WorkspaceGMRF(x_star_dual, Q_post_sparse, ws)
 end
 
+# Tried splitting via `WorkspaceGMRF{D, B, W, Nothing}` and
+# `WorkspaceGMRF{D, B, W, C} where {C<:ConstraintInfo}` dispatches, but the
+# constrained variant didn't fire reliably alongside the primal package's
+# `gaussian_approximation(::WorkspaceGMRF, ...)` method (Julia method
+# resolution preferred the primal definition for the constrained Dual
+# case). Falling back to a runtime check keeps things unambiguous.
 function GMRFs.gaussian_approximation(
         prior_gmrf::GMRFs.WorkspaceGMRF{D},
         obs_lik::GMRFs.ObservationLikelihood;
@@ -817,6 +828,7 @@ end
 
 # logdetcov for Dual-valued WorkspaceGMRF: same approach as GMRF{Dual}
 function logdetcov(x::GMRFs.WorkspaceGMRF{<:ForwardDiff.Dual})
+    GMRFs.ensure_loaded!(x)
     Qinv = GMRFs.selinv(x.workspace)
     primal = GMRFs.logdet_cov(x.workspace)
     # dot(Qinv, Q_dual) naturally produces a Dual via ForwardDiff overloads
@@ -890,6 +902,7 @@ function _construct_forwarddiff_constrained_workspace_gmrf(
         mean::AbstractVector, Q::SparseMatrixCSC, ws::GMRFs.GMRFWorkspace,
         A::AbstractMatrix, e::AbstractVector
     )
+    GMRFs._check_workspace_pattern(Q, ws)
     T = promote_type(eltype(mean), eltype(Q))
     mean_T = convert(Vector{T}, mean)
     Q_T = if eltype(Q) === T
