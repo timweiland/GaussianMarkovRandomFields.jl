@@ -1,6 +1,5 @@
 using Distributions
 using Ferrite
-using GeometryBasics
 using LinearSolve
 
 export MaternModel

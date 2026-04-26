@@ -42,8 +42,8 @@ function auto_size_params(points; α::Real = 0.8, β::Real = 3.0, γ::Real = 3.0
 end
 
 function _ring_points(poly)
-    # poly.exterior is a ring; ensure we don't double-close it
-    ring = [Tuple(p[1]) for p in poly.exterior]
+    # poly.exterior is a ring of Points; ensure we don't double-close it
+    ring = [Tuple(p) for p in poly.exterior]
     if length(ring) >= 2 && ring[1] == ring[end]
         pop!(ring)  # drop duplicate last point if closed
     end
@@ -162,7 +162,8 @@ function generate_mesh(
     l_int = gmsh.model.geo.addLine(p_int_1, p_int_2)
     l_ext = gmsh.model.geo.addLine(p_ext_1, p_ext_2)
 
-    ch_points_inds = indexin([min_x, max_x], mp)
+    coord_vec = [p[1] for p in mp.points]
+    ch_points_inds = indexin([min_x, max_x], coord_vec)
     mp_inner = mp.points[1:end .∉ Ref(ch_points_inds)]
     ps_inner = [gmsh.model.geo.addPoint(p..., 0, interior_mesh_size) for p in mp_inner]
 
@@ -231,14 +232,10 @@ function generate_mesh(
     s_int = gmsh.model.geo.addPlaneSurface([c_int])
     s_ext = gmsh.model.geo.addPlaneSurface([c_ext, c_int])
 
-    ch_points = [l[1] for l in ch_gb.exterior]
-    ch_points_inds = indexin(ch_points, mp)
-
     hull_boundary = LibGEOS.boundary(ch_gb)
 
     filter_fn = p -> LibGEOS.distance(hull_boundary, p) > 1.0e-8
     mp_inner = filter(filter_fn, mp.points)
-    #mp_inner = mp.points[1:end .∉ Ref(ch_points_inds)]
     ps_inner = [gmsh.model.geo.addPoint(p..., 0, interior_mesh_size) for p in mp_inner]
 
     gmsh.model.geo.synchronize()
