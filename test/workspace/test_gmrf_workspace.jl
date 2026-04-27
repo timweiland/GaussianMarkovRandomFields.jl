@@ -59,18 +59,8 @@ end
         ws = GMRFWorkspace(Q)
         z = randn(n)
         x = backward_solve(ws, z)
-        # backward_solve computes L^T \ z where Q = P L L^T P^T (CHOLMOD uses permutation)
-        # Verify round-trip: Q * x should equal something predictable
-        # The simplest check: sampling. If z ~ N(0,I), then backward_solve(ws, z) + μ ~ GMRF
-        # But for a direct test: verify that the Cholesky-based sample has correct covariance
-        # Use the fact that if x = L^{-T} z, then Q x = L z, so x = Q^{-1} L z
-        # Easiest: just check that x has the right norm properties
-        # Actually: for CHOLMOD with permutation, backward_solve gives P^T L^{-T} z
-        # The key property: Q^{-1} = P^T L^{-T} L^{-1} P, so
-        # backward_solve(ws, L^{-1} P z) = P^T L^{-T} L^{-1} P z = Q^{-1} z (incorrect reasoning)
-        # Simplest test: x = backward_solve(ws, z), then x' Q x = z' L^{-1} Q Q^{-1} L^{-T} z = z'z
-        # Actually: x = (PLL'P')^{-1/T} z in some sense... let's just verify numerically
-        # Test: rand via backward solve should produce correct variance
+        # backward_solve(ws, z) maps a standard-normal z to a sample from N(0, Q^{-1}),
+        # so the empirical sample variance should converge to diag(Q^{-1}).
         rng = Random.MersenneTwister(123)
         n_samples = 50000
         samples = zeros(n, n_samples)
