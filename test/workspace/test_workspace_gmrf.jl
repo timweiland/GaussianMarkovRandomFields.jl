@@ -160,14 +160,8 @@ using Random
     end
 
     @testset "logpdf(prior) consistent across gaussian_approximation" begin
-        # Regression: gaussian_approximation mutates the prior's workspace
-        # to hold Q_post = Q_prior - H(x_star) by the time it returns.
-        # A subsequent `logpdf(prior, x)` call must still reflect the
-        # prior's own snapshot — i.e. the quadratic form against Q_prior
-        # AND the log-determinant of Q_prior, not Q_post. Before the fix
-        # in `_update_hessian!`, `ensure_loaded!` would short-circuit on
-        # version match even though `ws.Q` actually held a transient
-        # Newton iterate, and the logdet term would be wrong.
+        # GA leaves ws factorized at Q_post; a subsequent logpdf(prior) must
+        # still evaluate against Q_prior (both quadratic form and logdet).
         using Distributions: Poisson
         Q_prior = spdiagm(-1 => fill(-0.3, 4), 0 => fill(2.0, 5), 1 => fill(-0.3, 4))
         y_obs = [2, 1, 3, 0, 4]
@@ -182,18 +176,14 @@ using Random
         obs_lik = ExponentialFamily(Poisson)(PoissonObservations(y_obs))
         _ = gaussian_approximation(prior, obs_lik)
 
-        # GA leaves ws in a state where ws.Q = Q_post. A correct logpdf
-        # on `prior` must still evaluate at Q_prior, not Q_post.
         lp_after = logpdf(prior, z_eval)
         @test lp_after ≈ lp_ref rtol = 1.0e-10
     end
 
     @testset "gaussian_approximation reseeds prior_nzval from owner" begin
-        # Regression: when a workspace is shared between two priors and the
-        # other prior is loaded last, gaussian_approximation must still seed
-        # its Newton loop from this prior's snapshot. Without ensure_loaded!
-        # at the entry of GA, the captured `prior_nzval` was inherited from
-        # whoever last touched ws.Q.
+        # When two priors share a workspace, GA on one prior must seed its
+        # Newton loop from that prior's snapshot, not from whichever prior
+        # last touched ws.
         using Distributions: Poisson
         Q_a = spdiagm(0 => fill(2.0, 5), 1 => fill(-0.3, 4), -1 => fill(-0.3, 4))
         Q_b = spdiagm(0 => fill(5.0, 5), 1 => fill(-0.7, 4), -1 => fill(-0.7, 4))
