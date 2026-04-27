@@ -1,6 +1,7 @@
 using GaussianMarkovRandomFields
 using ForwardDiff
 using FiniteDiff
+using Zygote
 using Distributions
 using Distributions: logdetcov, logpdf
 using SparseArrays
@@ -456,6 +457,44 @@ using Test
         @test all(isfinite.(grad_fwd))
         @test maximum(abs_error) < 1.0e-2
         @test maximum(rel_error) < 5.0e-2
+    end
+
+    @testset "logpdf through ConstrainedGMRF with Dual Q" begin
+        # Exercises the Q-path derivative through log_constraint_correction.
+        # ConstrainedGMRF stores A_tilde_T and L_c as Float64 in the struct, so
+        # naive Dual arithmetic would drop partials from Q's dependence on θ.
+        # The ForwardDiff extension's `_constraint_info` override reconstructs
+        # a Dual A_tilde_T and L_c via implicit differentiation; this test
+        # cross-checks against Zygote (rrule) and FiniteDiff.
+        function ar_precision_cg(ρ, k)
+            return spdiagm(
+                -1 => -ρ * ones(k - 1),
+                0 => ones(k) .+ ρ^2,
+                1 => -ρ * ones(k - 1),
+            )
+        end
+
+        function constrained_logpdf_pipeline(θ, z, k, A, e)
+            ρ, μ_const = θ[1], θ[2]
+            Q = ar_precision_cg(ρ, k)
+            μ = μ_const * ones(k)
+            return logpdf(ConstrainedGMRF(GMRF(μ, Q), A, e), z)
+        end
+
+        Random.seed!(42)
+        k = 8
+        A = ones(1, k)
+        e = [0.0]
+        z = randn(k); z .-= sum(z) / k
+        θ = [0.5, 0.1]
+
+        f = θ -> constrained_logpdf_pipeline(θ, z, k, A, e)
+        grad_fwd = ForwardDiff.gradient(f, θ)
+        grad_zyg = Zygote.gradient(f, θ)[1]
+        grad_fin = FiniteDiff.finite_difference_gradient(f, θ)
+
+        @test grad_fwd ≈ grad_zyg rtol = 1.0e-6
+        @test maximum(abs.(grad_fwd - grad_fin)) < 1.0e-4
     end
 
     @testset "Integration with higher-level operations (logpdf)" begin

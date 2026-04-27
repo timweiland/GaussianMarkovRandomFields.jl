@@ -105,26 +105,50 @@ struct ConstrainedGMRF{T <: Real, L <: Union{LinearMaps.LinearMap{T}, AbstractMa
         # Cholesky factorization
         L_c = cholesky(Symmetric(AA_tilde))
 
-        # Step 3: Compute the constrained mean
-        # μ_c = μ - Ã^T * L_c^(-T) * L_c^(-1) * (A*μ - e)
-        # Simplifying: μ_c = μ - Ã^T * (A*A_tilde)^(-1) * (A*μ - e)
-        residual = A_dense * μ_base - e_vec
-        correction = A_tilde_T * (L_c \ residual)
-        constrained_mean = μ_base - correction
-
-        # Precompute the log-density correction for logpdf (Rue & Held 2005, §2.3.3).
-        # This is constant w.r.t. z: -log p_A(e) - ½ log|AA'|
-        resid_e = e_vec - A_dense * μ_base
-        r = length(resid_e)
-        log_constraint_correction =
-            0.5 * (r * log(2π) + logdet(L_c) + dot(resid_e, L_c \ resid_e)) -
-            0.5 * logdet(cholesky(Symmetric(A_dense * A_dense')))
+        # Steps 3–4: compute constrained_mean and log_constraint_correction.
+        # Factored out so extensions (e.g. ForwardDiff) can override for Dual
+        # inputs where the stored primal `A_tilde_T` / `L_c` would silently
+        # drop Q-path derivatives through log_constraint_correction.
+        constrained_mean, log_constraint_correction =
+            _constraint_info(base_gmrf, A_dense, e_vec, A_tilde_T, L_c)
 
         return new{T_result, L, G}(
             base_gmrf, A_dense, e_vec, A_tilde_T, L_c, constrained_mean,
             log_constraint_correction
         )
     end
+end
+
+"""
+    _constraint_info(base_gmrf, A_dense, e_vec, A_tilde_T, L_c)
+    -> (constrained_mean, log_constraint_correction)
+
+Compute the constrained mean and the log-density correction
+(Rue & Held 2005, §2.3.3) given the precomputed primal Ã^T and L_c.
+
+The default implementation computes everything with the provided primal
+Ã^T / L_c, which gives correct μ-path derivatives via generic arithmetic
+but silently drops Q-path derivatives when `base_gmrf` carries Duals.
+The ForwardDiff extension overrides this method for `GMRF{<:Dual}` and
+reconstructs Dual-valued Ã^T and L_c via implicit differentiation so
+log_constraint_correction propagates all partials correctly.
+"""
+function _constraint_info(
+        base_gmrf, A_dense::AbstractMatrix, e_vec::AbstractVector,
+        A_tilde_T::AbstractMatrix, L_c
+    )
+    μ_base = mean(base_gmrf)
+    residual = A_dense * μ_base - e_vec
+    correction = A_tilde_T * (L_c \ residual)
+    constrained_mean = μ_base - correction
+
+    resid_e = e_vec - A_dense * μ_base
+    r = length(resid_e)
+    log_constraint_correction =
+        0.5 * (r * log(2π) + logdet(L_c) + dot(resid_e, L_c \ resid_e)) -
+        0.5 * logdet(cholesky(Symmetric(A_dense * A_dense')))
+
+    return constrained_mean, log_constraint_correction
 end
 
 # Required AbstractGMRF interface methods
