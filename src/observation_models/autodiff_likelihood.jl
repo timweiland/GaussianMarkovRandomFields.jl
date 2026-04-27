@@ -3,7 +3,41 @@ import DifferentiationInterface as DI
 export AutoDiffLikelihood, AutoDiffObservationModel
 
 """
-    AutoDiffLikelihood{F, B, SB, GP, HP, PF} <: ObservationLikelihood
+    _ADPrepCache
+
+Mutable, eltype-keyed cache of `DI.prepare_gradient` / `DI.prepare_hessian`
+results. A single `AutoDiffLikelihood` holds one of these so repeated calls
+with the same input eltype reuse the prep (the common case), while
+unexpected eltypes (e.g. `ForwardDiff.Dual` from a nested-AD caller) trigger
+a one-time prep on first miss instead of failing.
+
+`get!` on the underlying `Dict`s isn't safe under concurrent mutation, so
+the cache holds a `ReentrantLock`. The prep itself can be expensive; we
+don't try to avoid duplicated work under contention beyond the lock.
+"""
+mutable struct _ADPrepCache
+    n_latent::Int
+    grad_preps::Dict{DataType, Any}
+    hess_preps::Dict{DataType, Any}
+    lock::ReentrantLock
+end
+
+_ADPrepCache(n_latent::Int) = _ADPrepCache(n_latent, Dict{DataType, Any}(), Dict{DataType, Any}(), ReentrantLock())
+
+function _get_or_prepare_grad!(cache::_ADPrepCache, loglik_func, backend, ::Type{T}) where {T}
+    return @lock cache.lock get!(cache.grad_preps, T) do
+        DI.prepare_gradient(loglik_func, backend, zeros(T, cache.n_latent))
+    end
+end
+
+function _get_or_prepare_hess!(cache::_ADPrepCache, loglik_func, backend, ::Type{T}) where {T}
+    return @lock cache.lock get!(cache.hess_preps, T) do
+        DI.prepare_hessian(loglik_func, backend, zeros(T, cache.n_latent))
+    end
+end
+
+"""
+    AutoDiffLikelihood{F, B, SB, PF} <: ObservationLikelihood
 
 Automatic differentiation-based observation likelihood that wraps a user-provided log-likelihood function.
 
@@ -14,16 +48,15 @@ function is typically a closure that already includes hyperparameters and data.
 - `F`: Type of the log-likelihood function (usually a closure)
 - `B`: Type of the AD backend for gradients
 - `SB`: Type of the AD backend for Hessians
-- `GP`: Type of the gradient preparation object
-- `HP`: Type of the Hessian preparation object
 - `PF`: Type of the pointwise log-likelihood function (Union{Nothing, Function})
 
 # Fields
 - `loglik_func::F`: Log-likelihood function with signature `(x) -> Real`
 - `grad_backend::B`: AD backend for gradient computation
 - `hess_backend::SB`: AD backend for Hessian computation
-- `grad_prep::GP`: Preparation object for gradient computation
-- `hess_prep::HP`: Preparation object for Hessian computation
+- `prep_cache::_ADPrepCache`: Eltype-keyed cache of DI gradient/Hessian preparations.
+  The `Float64` entry is populated at construction; other eltypes (e.g.
+  `ForwardDiff.Dual` from a nested-AD caller) prep on first miss.
 - `pointwise_loglik_func::PF`: Optional pointwise log-likelihood function with signature `(x) -> Vector{Real}`
 
 # Usage
@@ -57,12 +90,11 @@ The Hessian computation automatically:
 
 See also: [`loglik`](@ref), [`loggrad`](@ref), [`loghessian`](@ref)
 """
-struct AutoDiffLikelihood{F, B, SB, GP, HP, PF} <: GaussianMarkovRandomFields.ObservationLikelihood
+struct AutoDiffLikelihood{F, B, SB, PF} <: GaussianMarkovRandomFields.ObservationLikelihood
     loglik_func::F
     grad_backend::B
     hess_backend::SB
-    grad_prep::GP
-    hess_prep::HP
+    prep_cache::_ADPrepCache
     pointwise_loglik_func::PF  # Union{Nothing, Function}
 end
 
@@ -206,10 +238,12 @@ function AutoDiffLikelihood(loglik_func; n_latent, grad_backend = default_grad_b
         hessian_backend = grad_backend
         @warn "Hessian backend has type $(typeof(hessian_backend)) which may produce dense Hessians!!"
     end
-    x_proto = zeros(n_latent)
-    grad_prep = DI.prepare_gradient(loglik_func, grad_backend, x_proto)
-    hess_prep = DI.prepare_hessian(loglik_func, hessian_backend, x_proto)
-    return AutoDiffLikelihood(loglik_func, grad_backend, hessian_backend, grad_prep, hess_prep, pointwise_loglik_func)
+    cache = _ADPrepCache(n_latent)
+    # Eagerly populate the Float64 entry so the warmup cost lands at
+    # construction time (matching pre-cache behavior).
+    _get_or_prepare_grad!(cache, loglik_func, grad_backend, Float64)
+    _get_or_prepare_hess!(cache, loglik_func, hessian_backend, Float64)
+    return AutoDiffLikelihood(loglik_func, grad_backend, hessian_backend, cache, pointwise_loglik_func)
 end
 
 function (obs_model::AutoDiffObservationModel)(y; kwargs...)
@@ -256,11 +290,13 @@ function loglik(x, obs_lik::AutoDiffLikelihood)
 end
 
 function loggrad(x, obs_lik::AutoDiffLikelihood)
-    return DI.gradient(obs_lik.loglik_func, obs_lik.grad_prep, obs_lik.grad_backend, x)
+    prep = _get_or_prepare_grad!(obs_lik.prep_cache, obs_lik.loglik_func, obs_lik.grad_backend, eltype(x))
+    return DI.gradient(obs_lik.loglik_func, prep, obs_lik.grad_backend, x)
 end
 
 function loghessian(x, obs_lik::AutoDiffLikelihood)
-    return DI.hessian(obs_lik.loglik_func, obs_lik.hess_prep, obs_lik.hess_backend, x)
+    prep = _get_or_prepare_hess!(obs_lik.prep_cache, obs_lik.loglik_func, obs_lik.hess_backend, eltype(x))
+    return DI.hessian(obs_lik.loglik_func, prep, obs_lik.hess_backend, x)
 end
 
 # =======================================================================================
@@ -268,8 +304,12 @@ end
 # =======================================================================================
 autodiff_gradient_backend(obs_lik::AutoDiffLikelihood) = obs_lik.grad_backend
 autodiff_hessian_backend(obs_lik::AutoDiffLikelihood) = obs_lik.hess_backend
-autodiff_gradient_prep(obs_lik::AutoDiffLikelihood) = obs_lik.grad_prep
-autodiff_hessian_prep(obs_lik::AutoDiffLikelihood) = obs_lik.hess_prep
+# AutoDiffLikelihood has its own loggrad/loghessian that goes through the
+# eltype-keyed cache, so the generic-fallback accessors aren't on its hot path.
+# We still return the Float64 prep so external callers that fetch it directly
+# (and the existing test suite) keep working.
+autodiff_gradient_prep(obs_lik::AutoDiffLikelihood) = obs_lik.prep_cache.grad_preps[Float64]
+autodiff_hessian_prep(obs_lik::AutoDiffLikelihood) = obs_lik.prep_cache.hess_preps[Float64]
 
 # =======================================================================================
 # POINTWISE LOG-LIKELIHOOD IMPLEMENTATION
