@@ -8,9 +8,9 @@ using Random
 using DifferentiationInterface
 using FiniteDiff, Mooncake
 
-backends = Any[("Mooncake", AutoMooncake())]
+chordal_backends = Any[("Mooncake", AutoMooncake())]
 
-@testset "$backend_name ChordalGMRF autodiff tests" for (backend_name, backend) in backends
+@testset "$backend_name ChordalGMRF autodiff tests" for (backend_name, backend) in chordal_backends
     # Set seed for reproducibility
     Random.seed!(42)
     fd_backend = AutoFiniteDiff()
@@ -21,7 +21,7 @@ backends = Any[("Mooncake", AutoMooncake())]
     end
 
     # Test pipeline: hyperparameters → ChordalGMRF → gaussian_approximation → logpdf
-    function test_gauss_approx_pipeline(θ::Vector, y::Vector, x::Vector, k::Int)
+    function test_gauss_approx_pipeline_chordal(θ::Vector, y::Vector, x::Vector, k::Int)
         # Extract hyperparameters
         ρ = θ[1]        # AR parameter
         μ_const = θ[2]  # constant mean
@@ -54,13 +54,13 @@ backends = Any[("Mooncake", AutoMooncake())]
         x = randn(k) .+ 0.5  # Evaluation point
 
         grad_test = DifferentiationInterface.gradient(
-            θ -> test_gauss_approx_pipeline(θ, y, x, k),
+            θ -> test_gauss_approx_pipeline_chordal(θ, y, x, k),
             backend,
             θ
         )
 
         grad_fd = DifferentiationInterface.gradient(
-            θ -> test_gauss_approx_pipeline(θ, y, x, k),
+            θ -> test_gauss_approx_pipeline_chordal(θ, y, x, k),
             fd_backend,
             θ
         )
@@ -83,13 +83,13 @@ backends = Any[("Mooncake", AutoMooncake())]
                 θ = [ρ, μ_const]
 
                 grad_test = DifferentiationInterface.gradient(
-                    θ -> test_gauss_approx_pipeline(θ, y, x, k),
+                    θ -> test_gauss_approx_pipeline_chordal(θ, y, x, k),
                     backend,
                     θ
                 )
 
                 grad_fd = DifferentiationInterface.gradient(
-                    θ -> test_gauss_approx_pipeline(θ, y, x, k),
+                    θ -> test_gauss_approx_pipeline_chordal(θ, y, x, k),
                     fd_backend,
                     θ
                 )
@@ -150,13 +150,13 @@ backends = Any[("Mooncake", AutoMooncake())]
         x = randn(k) .+ 0.4
 
         grad_test = DifferentiationInterface.gradient(
-            θ -> test_gauss_approx_pipeline(θ, y, x, k),
+            θ -> test_gauss_approx_pipeline_chordal(θ, y, x, k),
             backend,
             θ
         )
 
         grad_fd = DifferentiationInterface.gradient(
-            θ -> test_gauss_approx_pipeline(θ, y, x, k),
+            θ -> test_gauss_approx_pipeline_chordal(θ, y, x, k),
             fd_backend,
             θ
         )
