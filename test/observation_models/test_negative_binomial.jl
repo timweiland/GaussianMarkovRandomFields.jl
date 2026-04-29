@@ -213,6 +213,7 @@ using SparseArrays
     # ============================================================
     @testset "Poisson limit (r → ∞)" begin
         count_data = [3, 1, 8, 0, 5]
+        Random.seed!(42)
         η = randn(5)
         r_large = 1.0e8
 
