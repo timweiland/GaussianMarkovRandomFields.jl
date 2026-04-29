@@ -7,10 +7,10 @@ using CliqueTrees.Multifrontal: ChordalCholesky
 @is_primitive MinimalCtx Tuple{Type{ChordalGMRF}, AbstractVector, SparseMatrixCSC}
 
 function Mooncake.rrule!!(
-    ::CoDual{Type{ChordalGMRF}},
-    cdμ::CoDual{<:AbstractVector},
-    cdQ::CoDual{<:SparseMatrixCSC},
-)
+        ::CoDual{Type{ChordalGMRF}},
+        cdμ::CoDual{<:AbstractVector},
+        cdQ::CoDual{<:SparseMatrixCSC},
+    )
     μ, Σμ = MooncakeSparse.primaltangent(cdμ)
     Q, ΣQ = MooncakeSparse.primaltangent(cdQ)
 
@@ -33,11 +33,11 @@ end
 @is_primitive MinimalCtx Tuple{Type{ChordalGMRF}, AbstractVector, Hermitian, ChordalCholesky}
 
 function Mooncake.rrule!!(
-    ::CoDual{Type{ChordalGMRF}},
-    cdμ::CoDual{<:AbstractVector},
-    cdQ::CoDual{<:Hermitian},
-    cdF::CoDual{<:ChordalCholesky},
-)
+        ::CoDual{Type{ChordalGMRF}},
+        cdμ::CoDual{<:AbstractVector},
+        cdQ::CoDual{<:Hermitian},
+        cdF::CoDual{<:ChordalCholesky},
+    )
     μ, Σμ = MooncakeSparse.primaltangent(cdμ)
     Q, ΣQ = MooncakeSparse.primaltangent(cdQ)
     F = primal(cdF)
@@ -66,10 +66,10 @@ end
 @is_primitive MinimalCtx Tuple{typeof(Core.kwcall), Any, typeof(gaussian_approximation_notangent), ChordalGMRF, ObservationLikelihood}
 
 function Mooncake.rrule!!(
-    ::CoDual{typeof(gaussian_approximation_notangent)},
-    cdprior::CoDual{<:ChordalGMRF},
-    cdobslik::CoDual{<:ObservationLikelihood},
-)
+        ::CoDual{typeof(gaussian_approximation_notangent)},
+        cdprior::CoDual{<:ChordalGMRF},
+        cdobslik::CoDual{<:ObservationLikelihood},
+    )
     prior = primal(cdprior)
     obslik = primal(cdobslik)
     posterior = gaussian_approximation_notangent(prior, obslik)
@@ -82,12 +82,12 @@ function Mooncake.rrule!!(
 end
 
 function Mooncake.rrule!!(
-    ::CoDual{typeof(Core.kwcall)},
-    cdkwargs::CoDual,
-    ::CoDual{typeof(gaussian_approximation_notangent)},
-    cdprior::CoDual{<:ChordalGMRF},
-    cdobslik::CoDual{<:ObservationLikelihood},
-)
+        ::CoDual{typeof(Core.kwcall)},
+        cdkwargs::CoDual,
+        ::CoDual{typeof(gaussian_approximation_notangent)},
+        cdprior::CoDual{<:ChordalGMRF},
+        cdobslik::CoDual{<:ObservationLikelihood},
+    )
     prior = primal(cdprior)
     obslik = primal(cdobslik)
     kwargs = primal(cdkwargs)
@@ -101,10 +101,10 @@ function Mooncake.rrule!!(
 end
 
 @mooncake_overlay function gaussian_approximation(
-    prior::ChordalGMRF,
-    obslik::ObservationLikelihood;
-    kwargs...
-)
+        prior::ChordalGMRF,
+        obslik::ObservationLikelihood;
+        kwargs...
+    )
     posterior = gaussian_approximation_notangent(prior, obslik; kwargs...)
     x_star = mean(posterior)
 

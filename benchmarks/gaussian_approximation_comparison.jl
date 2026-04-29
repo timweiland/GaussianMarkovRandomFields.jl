@@ -148,8 +148,8 @@ for (matrix_name, desc) in test_matrices
         # Use prepared gradients for both backends
         prep_gmrf = DifferentiationInterface.prepare_gradient(loss_gmrf, AutoZygote(), μ)
         grad_gmrf = DifferentiationInterface.gradient(loss_gmrf, prep_gmrf, AutoZygote(), μ)
-        prep_chordal = DifferentiationInterface.prepare_gradient(loss_chordal, AutoMooncake(; config=nothing), μ)
-        grad_chordal = DifferentiationInterface.gradient(loss_chordal, prep_chordal, AutoMooncake(; config=nothing), μ)
+        prep_chordal = DifferentiationInterface.prepare_gradient(loss_chordal, AutoMooncake(; config = nothing), μ)
+        grad_chordal = DifferentiationInterface.gradient(loss_chordal, prep_chordal, AutoMooncake(; config = nothing), μ)
         grad_abs_diff = norm(grad_gmrf - grad_chordal)
         grad_rel_diff = grad_abs_diff / (norm(grad_gmrf) + 1.0e-10)
 
@@ -168,7 +168,7 @@ for (matrix_name, desc) in test_matrices
         println("$(@sprintf("%.3f", time_grad_gmrf)) ms")
 
         print("    ChordalGMRF (Mooncake)... ")
-        bench_grad_chordal = @benchmark DifferentiationInterface.gradient($loss_chordal, $prep_chordal, AutoMooncake(; config=nothing), $μ) samples = 10 seconds = 10
+        bench_grad_chordal = @benchmark DifferentiationInterface.gradient($loss_chordal, $prep_chordal, AutoMooncake(; config = nothing), $μ) samples = 10 seconds = 10
         time_grad_chordal = minimum(bench_grad_chordal.times) / 1.0e6
         println("$(@sprintf("%.3f", time_grad_chordal)) ms")
 

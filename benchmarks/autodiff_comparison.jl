@@ -189,17 +189,17 @@ try
 
     # Prepare gradient (includes warmup/compilation)
     print("  Preparing... ")
-    prep_chordal = DifferentiationInterface.prepare_gradient(loss_chordal, AutoMooncake(; config=nothing), θ_init)
+    prep_chordal = DifferentiationInterface.prepare_gradient(loss_chordal, AutoMooncake(; config = nothing), θ_init)
     println("✓")
 
     # Compute gradient once
     print("  Computing gradient... ")
-    grad_chordal = DifferentiationInterface.gradient(loss_chordal, prep_chordal, AutoMooncake(; config=nothing), θ_init)
+    grad_chordal = DifferentiationInterface.gradient(loss_chordal, prep_chordal, AutoMooncake(; config = nothing), θ_init)
     println("✓")
 
     # Benchmark with prepared gradient
     print("  Benchmarking... ")
-    bench_chordal = @benchmark DifferentiationInterface.gradient($loss_chordal, $prep_chordal, AutoMooncake(; config=nothing), $θ_init) samples = 10 seconds = 30
+    bench_chordal = @benchmark DifferentiationInterface.gradient($loss_chordal, $prep_chordal, AutoMooncake(; config = nothing), $θ_init) samples = 10 seconds = 30
 
     results["ChordalGMRF+Mooncake"] = (
         gradient = grad_chordal,
