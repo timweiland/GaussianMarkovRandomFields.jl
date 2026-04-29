@@ -1,7 +1,7 @@
 using LinearAlgebra
 using SparseArrays
 using LinearMaps
-using CliqueTrees.Multifrontal: chordal, ChordalCholesky, triangular
+using CliqueTrees.Multifrontal: ChordalCholesky
 
 export gaussian_approximation
 
