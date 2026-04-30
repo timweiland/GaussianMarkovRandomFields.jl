@@ -89,8 +89,15 @@ using ForwardDiff
         # The DI prep cache used to be a single Float64 prep; nested-AD
         # callers (e.g. ForwardDiff over loghessian) hit a
         # PreparationMismatchError. The cache is now eltype-keyed.
+        # Pin the inner backends to ForwardDiff so the outer ForwardDiff
+        # nests cleanly; default-picked Enzyme can't return Dual values.
         loglik_func = x -> -sum(exp.(x) .- 2 .* x)
-        obs_lik = AutoDiffLikelihood(loglik_func; n_latent = 5)
+        obs_lik = AutoDiffLikelihood(
+            loglik_func;
+            n_latent = 5,
+            grad_backend = DI.AutoForwardDiff(),
+            hessian_backend = DI.AutoForwardDiff(),
+        )
         x0 = ones(5)
         v = [1.0, 0.0, 0.0, 0.0, 0.0]
 
