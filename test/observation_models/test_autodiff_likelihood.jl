@@ -84,4 +84,35 @@ using ForwardDiff
         x = [1.0, 2.0, 3.0]
         @test loglik(x, simple_lik) == sum(x .^ 2)
     end
+
+    @testset "Nested AD through loggrad/loghessian (issue #85)" begin
+        # The DI prep cache used to be a single Float64 prep; nested-AD
+        # callers (e.g. ForwardDiff over loghessian) hit a
+        # PreparationMismatchError. The cache is now eltype-keyed.
+        # Pin the inner backends to ForwardDiff so the outer ForwardDiff
+        # nests cleanly; default-picked Enzyme can't return Dual values.
+        loglik_func = x -> -sum(exp.(x) .- 2 .* x)
+        obs_lik = AutoDiffLikelihood(
+            loglik_func;
+            n_latent = 5,
+            grad_backend = DI.AutoForwardDiff(),
+            hessian_backend = DI.AutoForwardDiff(),
+        )
+        x0 = ones(5)
+        v = [1.0, 0.0, 0.0, 0.0, 0.0]
+
+        # d/dt sum(loghessian(x0 + t*v)) at t=0 equals -exp(x0[1]) for diagonal H.
+        val_h = ForwardDiff.derivative(t -> sum(loghessian(x0 .+ t .* v, obs_lik)), 0.0)
+        @test val_h ≈ -exp(x0[1])
+
+        # d/dt sum(loggrad(x0 + t*v)) at t=0 equals -exp(x0[1]).
+        val_g = ForwardDiff.derivative(t -> sum(loggrad(x0 .+ t .* v, obs_lik)), 0.0)
+        @test val_g ≈ -exp(x0[1])
+
+        # Repeat use exercises the cached Dual prep.
+        @test ForwardDiff.derivative(t -> sum(loghessian(x0 .+ t .* v, obs_lik)), 0.0) ≈ val_h
+
+        # Float64 path still produces correct results after the Dual prep is cached.
+        @test loggrad(x0, obs_lik) ≈ -(exp.(x0) .- 2)
+    end
 end
