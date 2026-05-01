@@ -295,8 +295,31 @@ function loggrad(x, obs_lik::AutoDiffLikelihood)
 end
 
 function loghessian(x, obs_lik::AutoDiffLikelihood)
+    # Fast path: if the user provided a pointwise log-likelihood (typical for
+    # conditionally-independent observations), the joint Hessian is diagonal
+    # and we compute it as N independent single-variable second derivatives.
+    # Nests cleanly under an outer Dual, bypassing both the eltype-keyed DI
+    # prep cache and any inner backend that can't return Dual values (Enzyme,
+    # Mooncake reverse-of-reverse, etc.). The actual implementation lives in
+    # the ForwardDiff extension; this default raises if pointwise is set but
+    # ForwardDiff isn't loaded.
+    if obs_lik.pointwise_loglik_func !== nothing
+        return _pointwise_diagonal_hessian(obs_lik.pointwise_loglik_func, x)
+    end
     prep = _get_or_prepare_hess!(obs_lik.prep_cache, obs_lik.loglik_func, obs_lik.hess_backend, eltype(x))
     return DI.hessian(obs_lik.loglik_func, prep, obs_lik.hess_backend, x)
+end
+
+# Hook for the ForwardDiff extension. The default errors with guidance so
+# users who set `pointwise_loglik_func` but haven't loaded ForwardDiff get a
+# clear message rather than a confusing fallback.
+function _pointwise_diagonal_hessian(pointwise_loglik_func, x)
+    return error(
+        "Pointwise-diagonal Hessian fast path requires ForwardDiff to be loaded. " *
+            "Either `using ForwardDiff` to enable the fast path, or omit " *
+            "`pointwise_loglik_func` from the AutoDiffLikelihood/AutoDiffObservationModel " *
+            "to fall back to DI.hessian on the joint log-likelihood."
+    )
 end
 
 # =======================================================================================

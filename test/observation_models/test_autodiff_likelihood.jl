@@ -2,6 +2,7 @@ using Test
 using GaussianMarkovRandomFields
 import DifferentiationInterface as DI
 using ForwardDiff
+using LinearAlgebra: Diagonal, diag
 
 @testset "AutoDiff Likelihood System" begin
 
@@ -114,5 +115,45 @@ using ForwardDiff
 
         # Float64 path still produces correct results after the Dual prep is cached.
         @test loggrad(x0, obs_lik) ≈ -(exp.(x0) .- 2)
+    end
+
+    @testset "Pointwise-diagonal Hessian fast path (issue #89)" begin
+        # When `pointwise_loglik_func` is supplied, `loghessian` should use a
+        # per-element second-derivative path that nests cleanly under outer
+        # ForwardDiff regardless of the user-selected backends — unblocks
+        # nested AD even with default backends that can't return Duals
+        # (Enzyme, Mooncake reverse-of-reverse, etc.).
+        loglik_func = x -> sum(-(x .- 1.0) .^ 2 .* exp.(x))
+        pointwise_func = x -> -(x .- 1.0) .^ 2 .* exp.(x)
+
+        obs_lik = AutoDiffLikelihood(
+            loglik_func;
+            n_latent = 5,
+            pointwise_loglik_func = pointwise_func,
+        )
+        x0 = ones(5)
+
+        # Float64 baseline matches a direct ForwardDiff.hessian.
+        H = loghessian(x0, obs_lik)
+        @test H isa Diagonal
+        H_ref = ForwardDiff.hessian(loglik_func, x0)
+        @test diag(H) ≈ diag(H_ref) rtol = 1.0e-10
+
+        # Nested AD: derivative of trace(H(αx0)) wrt α should match finite diff.
+        f = α -> sum(diag(loghessian(α .* x0, obs_lik)))
+        g_ad = ForwardDiff.derivative(f, 1.0)
+        g_fd = (f(1.0 + 1.0e-5) - f(1.0 - 1.0e-5)) / 2.0e-5
+        @test g_ad ≈ g_fd rtol = 1.0e-5
+
+        # No pointwise → falls through to DI.hessian on the joint loglik;
+        # eltype-keyed prep cache still handles the Float64 baseline.
+        obs_lik_nopointwise = AutoDiffLikelihood(
+            loglik_func;
+            n_latent = 5,
+            grad_backend = DI.AutoForwardDiff(),
+            hessian_backend = DI.AutoForwardDiff(),
+        )
+        H2 = loghessian(x0, obs_lik_nopointwise)
+        @test Matrix(H2) ≈ H_ref rtol = 1.0e-10
     end
 end
