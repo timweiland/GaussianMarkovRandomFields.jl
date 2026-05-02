@@ -155,5 +155,26 @@ using LinearAlgebra: Diagonal, diag
         )
         H2 = loghessian(x0, obs_lik_nopointwise)
         @test Matrix(H2) ≈ H_ref rtol = 1.0e-10
+
+        # Sensitivity flowing through closure-captured Duals: outer AD
+        # differentiates a hyperparameter, but `x` itself is plain Float64.
+        # The result eltype must come from the function output, not from x,
+        # otherwise the diagonal buffer is wrongly typed and assignment fails.
+        function laplace_marginal(log_φ)
+            φ = exp(log_φ)
+            pointwise = x -> -(x .- 1.0) .^ 2 .* φ
+            loglik = x -> sum(pointwise(x))
+            obs = AutoDiffLikelihood(
+                loglik;
+                n_latent = 5,
+                grad_backend = DI.AutoForwardDiff(),
+                hessian_backend = DI.AutoForwardDiff(),
+                pointwise_loglik_func = pointwise,
+            )
+            return sum(diag(loghessian(ones(5), obs)))
+        end
+        g_closure_ad = ForwardDiff.derivative(laplace_marginal, 0.0)
+        g_closure_fd = (laplace_marginal(1.0e-5) - laplace_marginal(-1.0e-5)) / 2.0e-5
+        @test g_closure_ad ≈ g_closure_fd rtol = 1.0e-5
     end
 end

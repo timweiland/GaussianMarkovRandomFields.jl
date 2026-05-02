@@ -9,7 +9,13 @@
 # Dual-of-Dual.
 
 function GMRFs._pointwise_diagonal_hessian(pointwise_loglik_func, x::AbstractVector)
-    diag_vals = similar(x)
+    # Probe the output eltype: sensitivity may flow through closure-captured
+    # Duals (e.g. a hyperparameter being differentiated by an outer AD pass)
+    # rather than `x` itself, in which case `eltype(x)` is plain `Float64` but
+    # the result is `Dual`. Take the eltype of the function output and
+    # promote with `eltype(x)` so we cover both directions of sensitivity.
+    T = promote_type(eltype(pointwise_loglik_func(x)), eltype(x))
+    diag_vals = Vector{T}(undef, length(x))
     for i in eachindex(x)
         scalar_f = let i = i, x = x
             xi -> pointwise_loglik_func(_replace_index(x, i, xi))[i]
