@@ -3,6 +3,7 @@ using GaussianMarkovRandomFields
 import DifferentiationInterface as DI
 using ForwardDiff
 using LinearAlgebra: Diagonal, diag
+using Distributions: logpdf
 
 @testset "AutoDiff Likelihood System" begin
 
@@ -176,5 +177,36 @@ using LinearAlgebra: Diagonal, diag
         g_closure_ad = ForwardDiff.derivative(laplace_marginal, 0.0)
         g_closure_fd = (laplace_marginal(1.0e-5) - laplace_marginal(-1.0e-5)) / 2.0e-5
         @test g_closure_ad ≈ g_closure_fd rtol = 1.0e-5
+    end
+
+    @testset "OutT type-param dispatch (closure-Dual through gaussian_approximation)" begin
+        # End-to-end nested-AD pipeline: outer ForwardDiff differentiates a
+        # hyperparameter that's captured by closure into the AutoDiffLikelihood.
+        # Newton inside `gaussian_approximation` would crash poking Dual
+        # values into the workspace's Float64 Q buffer; the OutT type-param
+        # dispatch routes through the existing IFT obs-dual helper instead.
+        using SparseArrays: sparse
+        using LinearAlgebra: SymTridiagonal
+
+        function laplace_logpdf(log_φ)
+            φ = exp(log_φ)
+            pointwise = x -> -(x .- 1.0) .^ 2 .* φ
+            loglik = x -> sum(pointwise(x))
+            obs = AutoDiffLikelihood(
+                loglik;
+                n_latent = 5,
+                grad_backend = DI.AutoForwardDiff(),
+                hessian_backend = DI.AutoForwardDiff(),
+                pointwise_loglik_func = pointwise,
+            )
+            Q = sparse(SymTridiagonal(fill(2.0, 5), fill(-0.3, 4)))
+            prior = GMRF(zeros(5), Q)
+            posterior = gaussian_approximation(prior, obs)
+            return logpdf(posterior, zeros(5))
+        end
+
+        g_ad = ForwardDiff.derivative(laplace_logpdf, 0.0)
+        g_fd = (laplace_logpdf(1.0e-5) - laplace_logpdf(-1.0e-5)) / 2.0e-5
+        @test g_ad ≈ g_fd rtol = 1.0e-5
     end
 end
