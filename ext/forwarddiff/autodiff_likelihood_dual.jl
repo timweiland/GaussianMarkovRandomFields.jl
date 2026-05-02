@@ -29,20 +29,38 @@ end
 GMRFs.loghessian(x, view::_PrimalAutoDiffView) = _strip_dual(GMRFs.loghessian(x, view.inner))
 
 # `loggrad` / `loghessian` overrides for closure-Dual `AutoDiffLikelihood`.
-# The default DI-backed paths in main src key their prep cache on
-# `eltype(x)`, which doesn't reflect closure-Dual outputs — DI's prepared
-# output buffer ends up undersized and the gradient comes back as
-# `Vector{Any}`. Bypass DI here and use ForwardDiff directly; it handles
-# nested Duals (closure-captured outer + inner FD layer) natively.
-function GMRFs.loggrad(x, obs_lik::_DualAutoDiffLik)
-    return ForwardDiff.gradient(obs_lik.loglik_func, x)
+# Two problems with going through the default DI path:
+#
+#   1. DI's prep cache is keyed on `eltype(x)`, which doesn't reflect
+#      closure-Dual outputs. The prepared output buffer ends up
+#      undersized and the gradient comes back as `Vector{Any}`.
+#   2. Calling `ForwardDiff.gradient(f, x::Vector{Float64})` directly
+#      doesn't help: ForwardDiff allocates a fresh inner tag for the
+#      gradient pass that has no defined ordering relative to the
+#      closure's outer Dual tag — `DualMismatchError` at the first
+#      arithmetic op that mixes the two.
+#
+# Lift `x` to `Vector{OutT}` first so the inner FD tag wraps the outer
+# (closure-captured) layer instead of running parallel to it. The
+# resulting Dual nesting is unambiguous and FD's standard arithmetic
+# handles it.
+function GMRFs.loggrad(
+        x,
+        obs_lik::GMRFs.AutoDiffLikelihood{F, B, SB, PF, OutT}
+    ) where {F, B, SB, PF, OutT <: ForwardDiff.Dual}
+    x_lifted = convert(Vector{OutT}, x)
+    return ForwardDiff.gradient(obs_lik.loglik_func, x_lifted)
 end
 
-function GMRFs.loghessian(x, obs_lik::_DualAutoDiffLik)
+function GMRFs.loghessian(
+        x,
+        obs_lik::GMRFs.AutoDiffLikelihood{F, B, SB, PF, OutT}
+    ) where {F, B, SB, PF, OutT <: ForwardDiff.Dual}
+    x_lifted = convert(Vector{OutT}, x)
     if obs_lik.pointwise_loglik_func !== nothing
-        return GMRFs._pointwise_diagonal_hessian(obs_lik.pointwise_loglik_func, x)
+        return GMRFs._pointwise_diagonal_hessian(obs_lik.pointwise_loglik_func, x_lifted)
     end
-    return ForwardDiff.hessian(obs_lik.loglik_func, x)
+    return ForwardDiff.hessian(obs_lik.loglik_func, x_lifted)
 end
 
 # Element-wise primal stripping that preserves matrix structure (Diagonal
