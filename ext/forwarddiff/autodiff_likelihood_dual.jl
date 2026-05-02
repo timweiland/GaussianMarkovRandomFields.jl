@@ -28,6 +28,23 @@ end
 
 GMRFs.loghessian(x, view::_PrimalAutoDiffView) = _strip_dual(GMRFs.loghessian(x, view.inner))
 
+# `loggrad` / `loghessian` overrides for closure-Dual `AutoDiffLikelihood`.
+# The default DI-backed paths in main src key their prep cache on
+# `eltype(x)`, which doesn't reflect closure-Dual outputs — DI's prepared
+# output buffer ends up undersized and the gradient comes back as
+# `Vector{Any}`. Bypass DI here and use ForwardDiff directly; it handles
+# nested Duals (closure-captured outer + inner FD layer) natively.
+function GMRFs.loggrad(x, obs_lik::_DualAutoDiffLik)
+    return ForwardDiff.gradient(obs_lik.loglik_func, x)
+end
+
+function GMRFs.loghessian(x, obs_lik::_DualAutoDiffLik)
+    if obs_lik.pointwise_loglik_func !== nothing
+        return GMRFs._pointwise_diagonal_hessian(obs_lik.pointwise_loglik_func, x)
+    end
+    return ForwardDiff.hessian(obs_lik.loglik_func, x)
+end
+
 # Element-wise primal stripping that preserves matrix structure (Diagonal
 # stays Diagonal, sparse stays sparse, dense stays dense). Broadcasting
 # `ForwardDiff.value` over a `Diagonal` materializes a dense `Matrix`,
