@@ -253,4 +253,81 @@ end
         @test maximum(abs_error) < 1.0e-3
         @test maximum(rel_error) < 5.0e-2
     end
+
+    @testset "Float64 WorkspaceGMRF + AutoDiffLikelihood Dual hyperparams" begin
+        # IFT path for AutoDiffLikelihood with a Dual scalar hyperparameter:
+        # the closure remains primal, hyperparams are stored on the likelihood,
+        # and the FD-extension `gaussian_approximation` dispatch detects the
+        # Dual and runs primal-Newton + per-partial θ-tangent FD.
+        Random.seed!(7)
+        k = 8
+        y = [2, 1, 3, 0, 4, 1, 2, 3]
+        x = zeros(k)
+        model = AR1Model(k)
+        ws = make_workspace(model; τ = 1.0, ρ = 0.3)
+        prior = model(ws; τ = 1.0, ρ = 0.3)  # WorkspaceGMRF{Float64}
+
+        function poisson_loglik(x; y, φ)
+            return sum(y .* (φ .* x) .- exp.(φ .* x))
+        end
+        obs_model = AutoDiffObservationModel(
+            poisson_loglik;
+            n_latent = k,
+            hyperparams = (:φ,),
+            grad_backend = AutoForwardDiff(),
+            hessian_backend = AutoForwardDiff(),
+        )
+
+        function pipeline(θ)
+            obs_lik = obs_model(y; φ = exp(θ[1]))
+            posterior = gaussian_approximation(prior, obs_lik)
+            return logpdf(posterior, x)
+        end
+
+        θ = [0.0]
+        grad_fwd = DifferentiationInterface.gradient(pipeline, AutoForwardDiff(), θ)
+        grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
+
+        abs_error = abs.(grad_fwd - grad_fd)
+        rel_error = abs_error ./ (abs.(grad_fd) .+ 1.0e-10)
+        @test maximum(abs_error) < 1.0e-3
+        @test maximum(rel_error) < 5.0e-2
+    end
+
+    @testset "Constrained Float64 WorkspaceGMRF + AutoDiffLikelihood Dual hyperparams" begin
+        # Same IFT path through a constrained prior (RW1 sum-to-zero).
+        Random.seed!(11)
+        k = 8
+        y = randn(k) .* 0.3
+        x_eval = randn(k); x_eval .-= sum(x_eval) / k
+        model = RW1Model(k)
+        ws = make_workspace(model; τ = 1.0)
+        prior = model(ws; τ = 1.0)  # constrained WorkspaceGMRF{Float64}
+
+        function gauss_loglik(x; y, φ)
+            return -0.5 * sum((y .- x) .^ 2) * exp(2 * φ) + length(y) * φ
+        end
+        obs_model = AutoDiffObservationModel(
+            gauss_loglik;
+            n_latent = k,
+            hyperparams = (:φ,),
+            grad_backend = AutoForwardDiff(),
+            hessian_backend = AutoForwardDiff(),
+        )
+
+        function pipeline(θ)
+            obs_lik = obs_model(y; φ = θ[1])
+            posterior = gaussian_approximation(prior, obs_lik)
+            return logpdf(posterior, x_eval)
+        end
+
+        θ = [log(2.0)]
+        grad_fwd = DifferentiationInterface.gradient(pipeline, AutoForwardDiff(), θ)
+        grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
+
+        abs_error = abs.(grad_fwd - grad_fd)
+        rel_error = abs_error ./ (abs.(grad_fd) .+ 1.0e-10)
+        @test maximum(abs_error) < 1.0e-3
+        @test maximum(rel_error) < 5.0e-2
+    end
 end
