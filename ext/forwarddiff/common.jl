@@ -60,7 +60,11 @@ const _DualNormalLik = GMRFs.NormalLikelihood{<:GMRFs.LinkFunction, <:Any, <:For
 const _DualNegBinLik = GMRFs.NegBinLikelihood{<:GMRFs.LinkFunction, <:Any, <:Any, <:ForwardDiff.Dual}
 const _DualGammaLik = GMRFs.GammaLikelihood{<:GMRFs.LinkFunction, <:Any, <:ForwardDiff.Dual}
 const _DualStudentTLik = GMRFs.StudentTLikelihood{<:GMRFs.LinkFunction, <:Any, <:ForwardDiff.Dual}
-const _DualObsLik = Union{_DualNormalLik, _DualNegBinLik, _DualGammaLik, _DualStudentTLik}
+# AutoDiffLikelihood whose probed output type is a Dual — i.e. the
+# user's closure captures Duals (typical for outer-AD callers wrapping
+# `gaussian_approximation` in a `hyperparameter_logpdf` style function).
+const _DualAutoDiffLik = GMRFs.AutoDiffLikelihood{<:Any, <:Any, <:Any, <:Any, <:ForwardDiff.Dual}
+const _DualObsLik = Union{_DualNormalLik, _DualNegBinLik, _DualGammaLik, _DualStudentTLik, _DualAutoDiffLik}
 
 function _dual_type_from_obs_lik(::GMRFs.NormalLikelihood{L, I, D}) where {L, I, D}
     return D
@@ -73,4 +77,7 @@ function _dual_type_from_obs_lik(::GMRFs.GammaLikelihood{L, I, D}) where {L, I, 
 end
 function _dual_type_from_obs_lik(::GMRFs.StudentTLikelihood{L, I, D}) where {L, I, D}
     return D
+end
+function _dual_type_from_obs_lik(::GMRFs.AutoDiffLikelihood{F, B, SB, PF, OutT}) where {F, B, SB, PF, OutT}
+    return OutT
 end

@@ -2,6 +2,8 @@ using Test
 using GaussianMarkovRandomFields
 import DifferentiationInterface as DI
 using ForwardDiff
+using LinearAlgebra: Diagonal, diag
+using Distributions: logpdf
 
 @testset "AutoDiff Likelihood System" begin
 
@@ -114,5 +116,97 @@ using ForwardDiff
 
         # Float64 path still produces correct results after the Dual prep is cached.
         @test loggrad(x0, obs_lik) ≈ -(exp.(x0) .- 2)
+    end
+
+    @testset "Pointwise-diagonal Hessian fast path (issue #89)" begin
+        # When `pointwise_loglik_func` is supplied, `loghessian` should use a
+        # per-element second-derivative path that nests cleanly under outer
+        # ForwardDiff regardless of the user-selected backends — unblocks
+        # nested AD even with default backends that can't return Duals
+        # (Enzyme, Mooncake reverse-of-reverse, etc.).
+        loglik_func = x -> sum(-(x .- 1.0) .^ 2 .* exp.(x))
+        pointwise_func = x -> -(x .- 1.0) .^ 2 .* exp.(x)
+
+        obs_lik = AutoDiffLikelihood(
+            loglik_func;
+            n_latent = 5,
+            pointwise_loglik_func = pointwise_func,
+        )
+        x0 = ones(5)
+
+        # Float64 baseline matches a direct ForwardDiff.hessian.
+        H = loghessian(x0, obs_lik)
+        @test H isa Diagonal
+        H_ref = ForwardDiff.hessian(loglik_func, x0)
+        @test diag(H) ≈ diag(H_ref) rtol = 1.0e-10
+
+        # Nested AD: derivative of trace(H(αx0)) wrt α should match finite diff.
+        f = α -> sum(diag(loghessian(α .* x0, obs_lik)))
+        g_ad = ForwardDiff.derivative(f, 1.0)
+        g_fd = (f(1.0 + 1.0e-5) - f(1.0 - 1.0e-5)) / 2.0e-5
+        @test g_ad ≈ g_fd rtol = 1.0e-5
+
+        # No pointwise → falls through to DI.hessian on the joint loglik;
+        # eltype-keyed prep cache still handles the Float64 baseline.
+        obs_lik_nopointwise = AutoDiffLikelihood(
+            loglik_func;
+            n_latent = 5,
+            grad_backend = DI.AutoForwardDiff(),
+            hessian_backend = DI.AutoForwardDiff(),
+        )
+        H2 = loghessian(x0, obs_lik_nopointwise)
+        @test Matrix(H2) ≈ H_ref rtol = 1.0e-10
+
+        # Sensitivity flowing through closure-captured Duals: outer AD
+        # differentiates a hyperparameter, but `x` itself is plain Float64.
+        # The result eltype must come from the function output, not from x,
+        # otherwise the diagonal buffer is wrongly typed and assignment fails.
+        function laplace_marginal(log_φ)
+            φ = exp(log_φ)
+            pointwise = x -> -(x .- 1.0) .^ 2 .* φ
+            loglik = x -> sum(pointwise(x))
+            obs = AutoDiffLikelihood(
+                loglik;
+                n_latent = 5,
+                grad_backend = DI.AutoForwardDiff(),
+                hessian_backend = DI.AutoForwardDiff(),
+                pointwise_loglik_func = pointwise,
+            )
+            return sum(diag(loghessian(ones(5), obs)))
+        end
+        g_closure_ad = ForwardDiff.derivative(laplace_marginal, 0.0)
+        g_closure_fd = (laplace_marginal(1.0e-5) - laplace_marginal(-1.0e-5)) / 2.0e-5
+        @test g_closure_ad ≈ g_closure_fd rtol = 1.0e-5
+    end
+
+    @testset "OutT type-param dispatch (closure-Dual through gaussian_approximation)" begin
+        # End-to-end nested-AD pipeline: outer ForwardDiff differentiates a
+        # hyperparameter that's captured by closure into the AutoDiffLikelihood.
+        # Newton inside `gaussian_approximation` would crash poking Dual
+        # values into the workspace's Float64 Q buffer; the OutT type-param
+        # dispatch routes through the existing IFT obs-dual helper instead.
+        using SparseArrays: sparse
+        using LinearAlgebra: SymTridiagonal
+
+        function laplace_logpdf(log_φ)
+            φ = exp(log_φ)
+            pointwise = x -> -(x .- 1.0) .^ 2 .* φ
+            loglik = x -> sum(pointwise(x))
+            obs = AutoDiffLikelihood(
+                loglik;
+                n_latent = 5,
+                grad_backend = DI.AutoForwardDiff(),
+                hessian_backend = DI.AutoForwardDiff(),
+                pointwise_loglik_func = pointwise,
+            )
+            Q = sparse(SymTridiagonal(fill(2.0, 5), fill(-0.3, 4)))
+            prior = GMRF(zeros(5), Q)
+            posterior = gaussian_approximation(prior, obs)
+            return logpdf(posterior, zeros(5))
+        end
+
+        g_ad = ForwardDiff.derivative(laplace_logpdf, 0.0)
+        g_fd = (laplace_logpdf(1.0e-5) - laplace_logpdf(-1.0e-5)) / 2.0e-5
+        @test g_ad ≈ g_fd rtol = 1.0e-5
     end
 end

@@ -37,7 +37,7 @@ function _get_or_prepare_hess!(cache::_ADPrepCache, loglik_func, backend, ::Type
 end
 
 """
-    AutoDiffLikelihood{F, B, SB, PF} <: ObservationLikelihood
+    AutoDiffLikelihood{F, B, SB, PF, OutT} <: ObservationLikelihood
 
 Automatic differentiation-based observation likelihood that wraps a user-provided log-likelihood function.
 
@@ -49,6 +49,9 @@ function is typically a closure that already includes hyperparameters and data.
 - `B`: Type of the AD backend for gradients
 - `SB`: Type of the AD backend for Hessians
 - `PF`: Type of the pointwise log-likelihood function (Union{Nothing, Function})
+- `OutT`: Output type of `loglik_func` at the probe point. Reveals
+  closure-captured Duals at the type level (used by the ForwardDiff
+  extension to dispatch nested-AD calls through the IFT path).
 
 # Fields
 - `loglik_func::F`: Log-likelihood function with signature `(x) -> Real`
@@ -90,12 +93,19 @@ The Hessian computation automatically:
 
 See also: [`loglik`](@ref), [`loggrad`](@ref), [`loghessian`](@ref)
 """
-struct AutoDiffLikelihood{F, B, SB, PF} <: GaussianMarkovRandomFields.ObservationLikelihood
+struct AutoDiffLikelihood{F, B, SB, PF, OutT} <: GaussianMarkovRandomFields.ObservationLikelihood
     loglik_func::F
     grad_backend::B
     hess_backend::SB
     prep_cache::_ADPrepCache
     pointwise_loglik_func::PF  # Union{Nothing, Function}
+
+    function AutoDiffLikelihood{F, B, SB, PF, OutT}(
+            loglik_func::F, grad_backend::B, hess_backend::SB,
+            prep_cache::_ADPrepCache, pointwise_loglik_func::PF
+        ) where {F, B, SB, PF, OutT}
+        return new{F, B, SB, PF, OutT}(loglik_func, grad_backend, hess_backend, prep_cache, pointwise_loglik_func)
+    end
 end
 
 """
@@ -233,7 +243,14 @@ poisson_loglik(x) = sum([1, 3, 0, 2] .* x .- exp.(x))  # Closure with data
 obs_lik = AutoDiffLikelihood(poisson_loglik; n_latent=4)
 ```
 """
-function AutoDiffLikelihood(loglik_func; n_latent, grad_backend = default_grad_backend(), hessian_backend = default_hessian_backend(grad_backend), pointwise_loglik_func = nothing)
+function AutoDiffLikelihood(
+        loglik_func;
+        n_latent,
+        grad_backend = default_grad_backend(),
+        hessian_backend = default_hessian_backend(grad_backend),
+        pointwise_loglik_func = nothing,
+        probe_x::AbstractVector = zeros(n_latent),
+    )
     if hessian_backend === nothing
         hessian_backend = grad_backend
         @warn "Hessian backend has type $(typeof(hessian_backend)) which may produce dense Hessians!!"
@@ -243,7 +260,23 @@ function AutoDiffLikelihood(loglik_func; n_latent, grad_backend = default_grad_b
     # construction time (matching pre-cache behavior).
     _get_or_prepare_grad!(cache, loglik_func, grad_backend, Float64)
     _get_or_prepare_hess!(cache, loglik_func, hessian_backend, Float64)
-    return AutoDiffLikelihood(loglik_func, grad_backend, hessian_backend, cache, pointwise_loglik_func)
+    # Probe the output type so dispatchers downstream (notably the
+    # ForwardDiff extension) can detect closure-captured Duals at the type
+    # level. Closures encode their captures in their generated type, so
+    # `typeof(loglik_func(probe_x))` reveals whether the captures carry
+    # Duals — `OutT` becomes the dispatch handle for that case.
+    #
+    # `OutT` is fixed at construction. If the closure later mutates state
+    # that changes its output type (rare; not the factory pattern), rebuild
+    # the AutoDiffLikelihood instead of reusing the stale instance.
+    OutT = typeof(loglik_func(probe_x))
+    F = typeof(loglik_func)
+    B = typeof(grad_backend)
+    SB = typeof(hessian_backend)
+    PF = typeof(pointwise_loglik_func)
+    return AutoDiffLikelihood{F, B, SB, PF, OutT}(
+        loglik_func, grad_backend, hessian_backend, cache, pointwise_loglik_func
+    )
 end
 
 function (obs_model::AutoDiffObservationModel)(y; kwargs...)
@@ -295,8 +328,31 @@ function loggrad(x, obs_lik::AutoDiffLikelihood)
 end
 
 function loghessian(x, obs_lik::AutoDiffLikelihood)
+    # Fast path: if the user provided a pointwise log-likelihood (typical for
+    # conditionally-independent observations), the joint Hessian is diagonal
+    # and we compute it as N independent single-variable second derivatives.
+    # Nests cleanly under an outer Dual, bypassing both the eltype-keyed DI
+    # prep cache and any inner backend that can't return Dual values (Enzyme,
+    # Mooncake reverse-of-reverse, etc.). The actual implementation lives in
+    # the ForwardDiff extension; this default raises if pointwise is set but
+    # ForwardDiff isn't loaded.
+    if obs_lik.pointwise_loglik_func !== nothing
+        return _pointwise_diagonal_hessian(obs_lik.pointwise_loglik_func, x)
+    end
     prep = _get_or_prepare_hess!(obs_lik.prep_cache, obs_lik.loglik_func, obs_lik.hess_backend, eltype(x))
     return DI.hessian(obs_lik.loglik_func, prep, obs_lik.hess_backend, x)
+end
+
+# Hook for the ForwardDiff extension. The default errors with guidance so
+# users who set `pointwise_loglik_func` but haven't loaded ForwardDiff get a
+# clear message rather than a confusing fallback.
+function _pointwise_diagonal_hessian(pointwise_loglik_func, x)
+    return error(
+        "Pointwise-diagonal Hessian fast path requires ForwardDiff to be loaded. " *
+            "Either `using ForwardDiff` to enable the fast path, or omit " *
+            "`pointwise_loglik_func` from the AutoDiffLikelihood/AutoDiffObservationModel " *
+            "to fall back to DI.hessian on the joint log-likelihood."
+    )
 end
 
 # =======================================================================================
