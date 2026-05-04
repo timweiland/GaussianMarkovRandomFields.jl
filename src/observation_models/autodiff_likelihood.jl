@@ -14,6 +14,18 @@ trigger a one-time prep on first miss instead of failing.
 `get!` on the underlying `Dict`s isn't safe under concurrent mutation, so
 the cache holds a `ReentrantLock`. The prep itself can be expensive; we
 don't try to avoid duplicated work under contention beyond the lock.
+
+The cache key includes the full `ForwardDiff.Tag` of any outer-Dual eltype.
+This is structurally necessary — the prep's internal buffers bake the
+outer-Dual scalar type (Tag and all) into their own value-type, so two
+distinct outer Tags produce incompatible prep buffers. Stripping the Tag
+from the key would point at a prep DI's `checktag`/`copyto!` machinery
+would reject. Practical consequence: each outer ForwardDiff call site adds
+one cache entry. For `ForwardDiff.gradient(f, θ)` with a hoisted `f`, the
+Tag is stable across calls and the cache stays at 1–2 entries; if `f` is
+re-allocated as a fresh closure inside a hot loop, the cache grows by one
+entry per iteration. Hoist outer closures to top-level functions to avoid
+this.
 """
 mutable struct _ADPrepCache
     n_latent::Int
