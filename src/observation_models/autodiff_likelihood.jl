@@ -1,4 +1,5 @@
 import DifferentiationInterface as DI
+using LinearAlgebra: Diagonal
 
 export AutoDiffLikelihood, AutoDiffObservationModel
 
@@ -8,24 +9,23 @@ export AutoDiffLikelihood, AutoDiffObservationModel
 Mutable, eltype-keyed cache of `DI.prepare_gradient` / `DI.prepare_hessian`
 results. A single `AutoDiffLikelihood` holds one of these so repeated calls
 with the same input eltype reuse the prep (the common case), while
-unexpected eltypes (e.g. `ForwardDiff.Dual` from a nested-AD caller)
-trigger a one-time prep on first miss instead of failing.
+unexpected eltypes (e.g. AD-tagged scalars from a nested-AD caller) trigger
+a one-time prep on first miss instead of failing.
 
 `get!` on the underlying `Dict`s isn't safe under concurrent mutation, so
 the cache holds a `ReentrantLock`. The prep itself can be expensive; we
 don't try to avoid duplicated work under contention beyond the lock.
 
-The cache key includes the full `ForwardDiff.Tag` of any outer-Dual eltype.
-This is structurally necessary — the prep's internal buffers bake the
-outer-Dual scalar type (Tag and all) into their own value-type, so two
-distinct outer Tags produce incompatible prep buffers. Stripping the Tag
-from the key would point at a prep DI's `checktag`/`copyto!` machinery
-would reject. Practical consequence: each outer ForwardDiff call site adds
-one cache entry. For `ForwardDiff.gradient(f, θ)` with a hoisted `f`, the
-Tag is stable across calls and the cache stays at 1–2 entries; if `f` is
-re-allocated as a fresh closure inside a hot loop, the cache grows by one
-entry per iteration. Hoist outer closures to top-level functions to avoid
-this.
+For AD backends with type-level perturbation tracking (e.g. ForwardDiff's
+`Dual{Tag, V, N}`), the cache key carries the full tagged eltype. This is
+structurally necessary — the prep's internal buffers bake the tagged
+scalar type into their own value-type, so two distinct outer-AD passes
+produce incompatible prep buffers. Stripping the tag from the key would
+point at a prep the backend's safety checks would reject. Practical
+consequence: each outer AD call site adds one cache entry. With a hoisted
+outer function the tag is stable across calls and the cache stays at 1–2
+entries; with a fresh closure per iteration the cache grows by one entry
+per iteration. Hoist outer closures to top-level functions to avoid this.
 """
 mutable struct _ADPrepCache
     n_latent::Int
@@ -62,10 +62,10 @@ arguments to `loglik_func`, so the user's function signature
 
 Storing hyperparameters explicitly (rather than capturing them in a
 closure) is what makes nested-AD scenarios work cleanly: when a
-hyperparameter carries `ForwardDiff.Dual` partials from an outer AD pass,
-the Dual-ness is visible in `HP`'s type parameter and the
-`gaussian_approximation` IFT path can detect it via dispatch and route
-through a primal-Newton + manual-θ-tangent flow without nested AD.
+hyperparameter carries AD partials from an outer pass, the AD-tagged-ness
+is visible in `HP`'s type parameter, and AD-backend extensions can detect
+it via dispatch and route `gaussian_approximation` through a primal-Newton
++ manual-θ-tangent flow without nesting AD inside the Newton iteration.
 
 # Type Parameters
 - `F`: Type of the log-likelihood function
@@ -211,30 +211,31 @@ function AutoDiffLikelihood(
 end
 
 """
-    _strip_dual_hyperparams(hp::NamedTuple) -> NamedTuple
+    _strip_ad_partials_hyperparams(hp::NamedTuple) -> NamedTuple
 
-Strip any Dual values from a hyperparameter `NamedTuple`, returning the
-primal-valued counterpart. No-op for non-Dual entries. Used at construction
-time to size the Float64 prep cache correctly even when the caller already
-has Dual hyperparams in scope.
+Strip any AD-partial-carrying values from a hyperparameter `NamedTuple`,
+returning the primal-valued counterpart. No-op for non-AD entries. Used at
+construction time to size the Float64 prep cache correctly even when the
+caller already has AD-tagged hyperparams in scope.
 """
-_strip_dual_hyperparams(hp::NamedTuple) = NamedTuple{keys(hp)}(map(_strip_dual_value, values(hp)))
-_strip_dual_value(x) = x
+_strip_ad_partials_hyperparams(hp::NamedTuple) = NamedTuple{keys(hp)}(map(_strip_ad_partials, values(hp)))
+_strip_ad_partials(x) = x
 
-# Detection of Dual sensitivity in stored hyperparams. The actual
-# Dual-recognition methods live in the ForwardDiff extension on
-# `_carries_dual_value`; main src just provides the default
-# (no-Dual) fallback so this works without ForwardDiff loaded.
+# Detection of AD-partial sensitivity in stored hyperparams. The actual
+# recognition methods live in AD-backend extensions (currently the
+# ForwardDiff ext, which extends `_carries_ad_partials` for `Dual`
+# scalars and arrays). Main src just provides the default (no-AD)
+# fallback so this works without any AD backend loaded.
 """
-    _hp_carries_dual(hp::NamedTuple) -> Bool
+    _hp_carries_ad_partials(hp::NamedTuple) -> Bool
 
-True if any element of `hp` is a `ForwardDiff.Dual` (scalar) or a container
-whose eltype is a `Dual`. The ForwardDiff extension overrides
-`_carries_dual_value` for `Dual` and `AbstractArray{<:Dual}`; the default
-returns `false` so the main src doesn't need to know about ForwardDiff.
+True if any element of `hp` carries AD partial information (e.g. a
+`ForwardDiff.Dual`). AD-backend extensions override `_carries_ad_partials`
+for the relevant scalar/array types; the default returns `false` so the
+main src doesn't need to know about any specific AD backend.
 """
-_hp_carries_dual(hp::NamedTuple) = any(_carries_dual_value, values(hp))
-_carries_dual_value(::Any) = false
+_hp_carries_ad_partials(hp::NamedTuple) = any(_carries_ad_partials, values(hp))
+_carries_ad_partials(::Any) = false
 
 function (obs_model::AutoDiffObservationModel)(y; kwargs...)
     hyperparams = NamedTuple(kwargs)
@@ -310,9 +311,42 @@ function loggrad(x, obs_lik::AutoDiffLikelihood)
 end
 
 function loghessian(x, obs_lik::AutoDiffLikelihood)
+    if obs_lik.pointwise_loglik_func !== nothing
+        return _diagonal_hessian_via_pointwise(x, obs_lik)
+    end
     f = _build_call(obs_lik)
     prep = _get_or_prepare_hess!(obs_lik.prep_cache, f, obs_lik.hess_backend, eltype(x))
     return DI.hessian(f, prep, obs_lik.hess_backend, x)
+end
+
+# Pointwise structured-Hessian fast path. For conditionally-independent
+# observation likelihoods (which `pointwise_loglik_func` declares):
+#
+#   loglik(x) = sum_i pointwise[i](x_i; y_i, θ)
+#
+# the Hessian is diagonal with `H[i,i] = ∂²pointwise[i]/∂x_i²`. Each entry
+# is a 1D second derivative — the cleanest case for nested AD — so this
+# path also doubles as the friction-free route for outer-AD callers (no
+# DI nested-Dual prep machinery to navigate).
+function _diagonal_hessian_via_pointwise(x, obs_lik::AutoDiffLikelihood)
+    pf = _build_pointwise_call(obs_lik)
+    n = length(x)
+    backend = obs_lik.hess_backend
+    diag_vals = map(1:n) do i
+        # Closure that returns the i-th pointwise contribution as a function
+        # of x[i] alone. `pf(x_perturbed)` computes the full vector, but only
+        # the i-th entry depends on the perturbed x[i] — others are wasted
+        # but correct. (Acceptable cost given this only runs when the dense
+        # DI.hessian path would be worse, e.g. nested-AD scenarios.)
+        # The comprehension promotes eltype to whatever `xi` is, so this
+        # works under outer AD that injects Dual scalars into the closure.
+        f_i = function (xi)
+            x_perturbed = [j == i ? xi : x[j] for j in 1:n]
+            return pf(x_perturbed)[i]
+        end
+        DI.second_derivative(f_i, backend, x[i])
+    end
+    return Diagonal(diag_vals)
 end
 
 # =======================================================================================

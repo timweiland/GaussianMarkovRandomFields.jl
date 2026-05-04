@@ -24,11 +24,11 @@
 # scalars and Dual-eltype arrays.
 # ----------------------------------------------------------------------------
 
-GMRFs._strip_dual_value(x::ForwardDiff.Dual) = ForwardDiff.value(x)
-GMRFs._strip_dual_value(x::AbstractArray{<:ForwardDiff.Dual}) = ForwardDiff.value.(x)
+GMRFs._strip_ad_partials(x::ForwardDiff.Dual) = ForwardDiff.value(x)
+GMRFs._strip_ad_partials(x::AbstractArray{<:ForwardDiff.Dual}) = ForwardDiff.value.(x)
 
-GMRFs._carries_dual_value(::ForwardDiff.Dual) = true
-GMRFs._carries_dual_value(x::AbstractArray{<:ForwardDiff.Dual}) = true
+GMRFs._carries_ad_partials(::ForwardDiff.Dual) = true
+GMRFs._carries_ad_partials(x::AbstractArray{<:ForwardDiff.Dual}) = true
 
 # ----------------------------------------------------------------------------
 # Outer-Dual introspection
@@ -65,32 +65,25 @@ function _perturb_one(v::AbstractArray{<:ForwardDiff.Dual}, j, ε)
 end
 _perturb_one(v, j, ε) = v
 
-# Build a primal-eltype version of the AutoDiffLikelihood with stripped
-# hyperparameters. The new instance has its own prep cache (Float64-only),
-# but reuses everything else from the original.
-function _primal_autodiff_likelihood(lik::GMRFs.AutoDiffLikelihood)
-    primal_hp = GMRFs._strip_dual_hyperparams(lik.hyperparams)
+# Build a fresh AutoDiffLikelihood with the same wrapped function, data,
+# and AD backends as `lik`, but with a different `hyperparams` NamedTuple.
+# Allocates its own prep cache (since the input eltype changes with `hp`).
+function _rebuild_autodiff_likelihood(lik::GMRFs.AutoDiffLikelihood, hp::NamedTuple)
     return GMRFs.AutoDiffLikelihood(
         lik.loglik_func;
         n_latent = lik.prep_cache.n_latent,
         y = lik.y,
-        hyperparams = primal_hp,
+        hyperparams = hp,
         grad_backend = lik.grad_backend,
         hessian_backend = lik.hess_backend,
         pointwise_loglik_func = lik.pointwise_loglik_func,
     )
 end
 
-# Build a perturbed AutoDiffLikelihood for a given partial direction.
-function _perturbed_autodiff_likelihood(lik::GMRFs.AutoDiffLikelihood, j::Int, ε::Float64)
-    perturbed_hp = _perturb_along_partial(lik.hyperparams, j, ε)
-    return GMRFs.AutoDiffLikelihood(
-        lik.loglik_func;
-        n_latent = lik.prep_cache.n_latent,
-        y = lik.y,
-        hyperparams = perturbed_hp,
-        grad_backend = lik.grad_backend,
-        hessian_backend = lik.hess_backend,
-        pointwise_loglik_func = lik.pointwise_loglik_func,
-    )
-end
+# Primal-stripped likelihood: AD partials removed from each hyperparam.
+_primal_autodiff_likelihood(lik::GMRFs.AutoDiffLikelihood) =
+    _rebuild_autodiff_likelihood(lik, GMRFs._strip_ad_partials_hyperparams(lik.hyperparams))
+
+# Likelihood perturbed along the j-th partial direction by ±ε in θ-space.
+_perturbed_autodiff_likelihood(lik::GMRFs.AutoDiffLikelihood, j::Int, ε::Float64) =
+    _rebuild_autodiff_likelihood(lik, _perturb_along_partial(lik.hyperparams, j, ε))

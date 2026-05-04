@@ -331,6 +331,46 @@ end
         @test maximum(rel_error) < 5.0e-2
     end
 
+    @testset "Multi-hyperparam + length(θ)>1 outer gradient" begin
+        # IFT path with two named scalar hyperparameters, both carrying
+        # Duals from an outer ForwardDiff.gradient over a length-2 θ.
+        # Exercises N=2 partials in the IFT-loop and the multi-hp perturb
+        # path that single-hyperparam tests don't.
+        Random.seed!(17)
+        k = 8
+        y = [2, 1, 3, 0, 4, 1, 2, 3]
+        x = zeros(k)
+        model = AR1Model(k)
+        ws = make_workspace(model; τ = 1.0, ρ = 0.3)
+        prior = model(ws; τ = 1.0, ρ = 0.3)
+
+        function poisson_loglik2(x; y, φ, β)
+            return sum(y .* (φ .* x .+ β) .- exp.(φ .* x .+ β))
+        end
+        obs_model = AutoDiffObservationModel(
+            poisson_loglik2;
+            n_latent = k,
+            hyperparams = (:φ, :β),
+            grad_backend = AutoForwardDiff(),
+            hessian_backend = AutoForwardDiff(),
+        )
+
+        function pipeline(θ)
+            obs_lik = obs_model(y; φ = exp(θ[1]), β = θ[2])
+            posterior = gaussian_approximation(prior, obs_lik)
+            return logpdf(posterior, x)
+        end
+
+        θ = [0.0, 0.1]
+        grad_fwd = DifferentiationInterface.gradient(pipeline, AutoForwardDiff(), θ)
+        grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
+
+        abs_error = abs.(grad_fwd - grad_fd)
+        rel_error = abs_error ./ (abs.(grad_fd) .+ 1.0e-10)
+        @test maximum(abs_error) < 1.0e-3
+        @test maximum(rel_error) < 5.0e-2
+    end
+
     @testset "Matrix-valued Dual hyperparam (shape preservation)" begin
         # Regression for a bug in `_perturb_one(::AbstractArray{<:Dual})`
         # where the partials were flattened to a Vector via comprehension,

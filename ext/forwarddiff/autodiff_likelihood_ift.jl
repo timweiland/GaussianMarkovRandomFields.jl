@@ -17,7 +17,7 @@ carries Dual partials.
 """
 _is_dual_autodifflik(lik) = false
 function _is_dual_autodifflik(lik::GMRFs.AutoDiffLikelihood)
-    return GMRFs._hp_carries_dual(lik.hyperparams)
+    return GMRFs._hp_carries_ad_partials(lik.hyperparams)
 end
 
 # ----------------------------------------------------------------------------
@@ -82,17 +82,30 @@ function _assemble_q_post_dual(
     return _assemble_q_post_dual_impl(Q_prior, H_primal, H_dθ, DualT, Val(N))
 end
 
-# Diagonal H — write in place into a copy of Q_prior's nzval.
-function _assemble_q_post_dual_impl(
-        Q_prior::SparseMatrixCSC{Float64}, H_primal::Diagonal, H_dθ, ::Type{DualT}, ::Val{N}
+# Allocate `nzval_dual` as a copy of Q_prior.nzval lifted to `DualT` with
+# zero partials everywhere. Both sparse-pattern-preserving variants below
+# start from this and overwrite entries that intersect H.
+function _alloc_dual_nzval_from_qprior(
+        Q_prior::SparseMatrixCSC{Float64}, ::Type{DualT}, ::Val{N}
     ) where {DualT, N}
-    n = size(Q_prior, 1)
     PartialsT = ForwardDiff.Partials{N, Float64}
     zero_partials = PartialsT(ntuple(_ -> 0.0, Val(N)))
     nzval_dual = Vector{DualT}(undef, length(Q_prior.nzval))
     @inbounds for i in eachindex(Q_prior.nzval)
         nzval_dual[i] = DualT(Q_prior.nzval[i], zero_partials)
     end
+    return nzval_dual, PartialsT
+end
+
+_q_post_with_pattern(Q_prior::SparseMatrixCSC, nzval_dual) =
+    SparseMatrixCSC(Q_prior.m, Q_prior.n, copy(Q_prior.colptr), copy(Q_prior.rowval), nzval_dual)
+
+# Diagonal H — write in place into a copy of Q_prior's nzval.
+function _assemble_q_post_dual_impl(
+        Q_prior::SparseMatrixCSC{Float64}, H_primal::Diagonal, H_dθ, ::Type{DualT}, ::Val{N}
+    ) where {DualT, N}
+    n = size(Q_prior, 1)
+    nzval_dual, PartialsT = _alloc_dual_nzval_from_qprior(Q_prior, DualT, Val(N))
     @inbounds for j in 1:n
         for k in nzrange(Q_prior, j)
             if Q_prior.rowval[k] == j
@@ -104,7 +117,7 @@ function _assemble_q_post_dual_impl(
             end
         end
     end
-    return SparseMatrixCSC(Q_prior.m, Q_prior.n, copy(Q_prior.colptr), copy(Q_prior.rowval), nzval_dual)
+    return _q_post_with_pattern(Q_prior, nzval_dual)
 end
 
 # Sparse non-diagonal H — match Q_prior's pattern, write H values where they
@@ -118,13 +131,7 @@ function _assemble_q_post_dual_impl(
     ) where {DualT, N}
     _check_h_pattern_subset(H_primal, Q_prior)
     n = size(Q_prior, 1)
-    PartialsT = ForwardDiff.Partials{N, Float64}
-    zero_partials = PartialsT(ntuple(_ -> 0.0, Val(N)))
-    nzval_dual = Vector{DualT}(undef, length(Q_prior.nzval))
-    @inbounds for i in eachindex(Q_prior.nzval)
-        nzval_dual[i] = DualT(Q_prior.nzval[i], zero_partials)
-    end
-    # Look up H entries by (row, col) and subtract.
+    nzval_dual, PartialsT = _alloc_dual_nzval_from_qprior(Q_prior, DualT, Val(N))
     @inbounds for col in 1:n
         for k in nzrange(Q_prior, col)
             row = Q_prior.rowval[k]
@@ -134,7 +141,7 @@ function _assemble_q_post_dual_impl(
             nzval_dual[k] = DualT(primal, h_partials)
         end
     end
-    return SparseMatrixCSC(Q_prior.m, Q_prior.n, copy(Q_prior.colptr), copy(Q_prior.rowval), nzval_dual)
+    return _q_post_with_pattern(Q_prior, nzval_dual)
 end
 
 # Verify every nonzero of H is at a (row, col) that's also nonzero in
