@@ -330,4 +330,48 @@ end
         @test maximum(abs_error) < 1.0e-3
         @test maximum(rel_error) < 5.0e-2
     end
+
+    @testset "Matrix-valued Dual hyperparam (shape preservation)" begin
+        # Regression for a bug in `_perturb_one(::AbstractArray{<:Dual})`
+        # where the partials were flattened to a Vector via comprehension,
+        # breaking broadcast against same-shape values for non-vector
+        # hyperparams. Use a small Matrix hyperparam.
+        Random.seed!(13)
+        k = 6
+        y = randn(k) .* 0.3
+        x = zeros(k)
+        model = AR1Model(k)
+        ws = make_workspace(model; τ = 1.0, ρ = 0.3)
+        prior = model(ws; τ = 1.0, ρ = 0.3)
+
+        # Loglik that uses a 2x2 hyperparam matrix W in a way that contracts
+        # to a scalar. The pipeline differentiates through trace(W).
+        function mat_loglik(x; y, W)
+            s = sum(W) / size(W, 1)
+            return -0.5 * sum((y .- x) .^ 2) * s
+        end
+        obs_model = AutoDiffObservationModel(
+            mat_loglik;
+            n_latent = k,
+            hyperparams = (:W,),
+            grad_backend = AutoForwardDiff(),
+            hessian_backend = AutoForwardDiff(),
+        )
+
+        function pipeline(θ)
+            W = [θ[1] 0.0; 0.0 θ[1]]
+            obs_lik = obs_model(y; W = W)
+            posterior = gaussian_approximation(prior, obs_lik)
+            return logpdf(posterior, x)
+        end
+
+        θ = [1.0]
+        grad_fwd = DifferentiationInterface.gradient(pipeline, AutoForwardDiff(), θ)
+        grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
+
+        abs_error = abs.(grad_fwd - grad_fd)
+        rel_error = abs_error ./ (abs.(grad_fd) .+ 1.0e-10)
+        @test maximum(abs_error) < 1.0e-3
+        @test maximum(rel_error) < 5.0e-2
+    end
 end

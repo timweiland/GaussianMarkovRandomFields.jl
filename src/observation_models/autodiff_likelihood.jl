@@ -268,6 +268,16 @@ hyperparam eltype, which is what the prep cache keys on.
 
 Bare-closure-form likelihoods (constructed without `y`/`hyperparams`)
 short-circuit to the stored `loglik_func` directly.
+
+Note: each `_build_call` call returns a fresh closure *object*, but two
+closures produced from the same `obs_lik` share a generated closure
+*type* (Julia gives one type per closure expression at the same source
+location, parameterised by the captures' types). DI's PreparationMismatch
+check is type-based, so reusing a prep prepared with an earlier
+`_build_call(obs_lik)` against a later one is safe under current Julia
+semantics. If Julia ever changes closure-type generation to depend on
+captured-value identity rather than just captured-type, this assumption
+needs revisiting.
 """
 function _build_call(obs_lik::AutoDiffLikelihood)
     if obs_lik.y === nothing && isempty(obs_lik.hyperparams)

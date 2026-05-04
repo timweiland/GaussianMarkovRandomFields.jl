@@ -108,11 +108,15 @@ function _assemble_q_post_dual_impl(
 end
 
 # Sparse non-diagonal H — match Q_prior's pattern, write H values where they
-# overlap. Tolerates H having a smaller pattern than Q_prior.
+# overlap. Requires H's pattern to be a subset of Q_prior's; otherwise we'd
+# silently drop H nonzeros outside Q_prior and return a wrong Q_post. Errors
+# loudly in that case so the caller knows workspace reuse isn't applicable
+# for this likelihood/prior combination.
 function _assemble_q_post_dual_impl(
         Q_prior::SparseMatrixCSC{Float64}, H_primal::SparseMatrixCSC,
         H_dθ, ::Type{DualT}, ::Val{N}
     ) where {DualT, N}
+    _check_h_pattern_subset(H_primal, Q_prior)
     n = size(Q_prior, 1)
     PartialsT = ForwardDiff.Partials{N, Float64}
     zero_partials = PartialsT(ntuple(_ -> 0.0, Val(N)))
@@ -131,6 +135,37 @@ function _assemble_q_post_dual_impl(
         end
     end
     return SparseMatrixCSC(Q_prior.m, Q_prior.n, copy(Q_prior.colptr), copy(Q_prior.rowval), nzval_dual)
+end
+
+# Verify every nonzero of H is at a (row, col) that's also nonzero in
+# Q_prior. If not, the IFT-with-workspace path can't preserve Q_prior's
+# sparse pattern, and silently returning a Q_post built only from
+# Q_prior's pattern would drop real H entries.
+function _check_h_pattern_subset(H::SparseMatrixCSC, Q_prior::SparseMatrixCSC)
+    for col in 1:size(H, 2)
+        for k in nzrange(H, col)
+            iszero(H.nzval[k]) && continue
+            row = H.rowval[k]
+            _sparse_lookup_present(Q_prior, row, col) || throw(
+                ArgumentError(
+                    "AutoDiffLikelihood IFT path: observation Hessian has a nonzero at " *
+                        "($row, $col) outside the prior precision sparsity pattern. The " *
+                        "workspace-reuse path requires H's pattern to be a subset of Q_prior. " *
+                        "Use a likelihood whose Hessian is structurally diagonal " *
+                        "(e.g. supply `pointwise_loglik_func`) or call `gaussian_approximation` " *
+                        "without a `WorkspaceGMRF` prior."
+                )
+            )
+        end
+    end
+    return nothing
+end
+
+function _sparse_lookup_present(A::SparseMatrixCSC, row::Int, col::Int)
+    @inbounds for k in nzrange(A, col)
+        A.rowval[k] == row && return true
+    end
+    return false
 end
 
 # Generic / dense H — falls back to algebraic subtract; result loses sparse

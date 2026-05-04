@@ -58,7 +58,10 @@ function _perturb_along_partial(hp_dual::NamedTuple, j::Int, ε::Float64)
 end
 _perturb_one(v::ForwardDiff.Dual, j, ε) = ForwardDiff.value(v) + ε * ForwardDiff.partials(v, j)
 function _perturb_one(v::AbstractArray{<:ForwardDiff.Dual}, j, ε)
-    return ForwardDiff.value.(v) .+ ε .* [ForwardDiff.partials(v[i], j) for i in eachindex(v)]
+    # `map` preserves shape for AbstractArrays; a comprehension would flatten
+    # to a Vector and break broadcasting against the same-shape values for
+    # Matrix or higher-rank hyperparameters.
+    return ForwardDiff.value.(v) .+ ε .* map(x -> ForwardDiff.partials(x, j), v)
 end
 _perturb_one(v, j, ε) = v
 
