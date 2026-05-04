@@ -258,7 +258,7 @@ end
         # IFT path for AutoDiffLikelihood with a Dual scalar hyperparameter:
         # the closure remains primal, hyperparams are stored on the likelihood,
         # and the FD-extension `gaussian_approximation` dispatch detects the
-        # Dual and runs primal-Newton + per-partial θ-tangent FD.
+        # Dual and runs primal-Newton + exact-AD θ-tangents (no FD).
         Random.seed!(7)
         k = 8
         y = [2, 1, 3, 0, 4, 1, 2, 3]
@@ -288,10 +288,10 @@ end
         grad_fwd = DifferentiationInterface.gradient(pipeline, AutoForwardDiff(), θ)
         grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
 
+        # Tight thresholds — AD-on-θ should match FD up to FD's own discretization
+        # error (~1e-7 with AutoFiniteDiff defaults).
         abs_error = abs.(grad_fwd - grad_fd)
-        rel_error = abs_error ./ (abs.(grad_fd) .+ 1.0e-10)
-        @test maximum(abs_error) < 1.0e-3
-        @test maximum(rel_error) < 5.0e-2
+        @test maximum(abs_error) < 1.0e-4
     end
 
     @testset "Constrained Float64 WorkspaceGMRF + AutoDiffLikelihood Dual hyperparams" begin
@@ -326,9 +326,7 @@ end
         grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
 
         abs_error = abs.(grad_fwd - grad_fd)
-        rel_error = abs_error ./ (abs.(grad_fd) .+ 1.0e-10)
-        @test maximum(abs_error) < 1.0e-3
-        @test maximum(rel_error) < 5.0e-2
+        @test maximum(abs_error) < 1.0e-4
     end
 
     @testset "Multi-hyperparam + length(θ)>1 outer gradient" begin
@@ -366,16 +364,15 @@ end
         grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
 
         abs_error = abs.(grad_fwd - grad_fd)
-        rel_error = abs_error ./ (abs.(grad_fd) .+ 1.0e-10)
-        @test maximum(abs_error) < 1.0e-3
-        @test maximum(rel_error) < 5.0e-2
+        @test maximum(abs_error) < 1.0e-4
     end
 
     @testset "Matrix-valued Dual hyperparam (shape preservation)" begin
-        # Regression for a bug in `_perturb_one(::AbstractArray{<:Dual})`
-        # where the partials were flattened to a Vector via comprehension,
-        # breaking broadcast against same-shape values for non-vector
-        # hyperparams. Use a small Matrix hyperparam.
+        # Regression for shape preservation when extracting partials from a
+        # Matrix-valued hyperparameter. Originally this exercised an
+        # FD-on-θ helper that flattened partials via list comprehension; the
+        # AD-on-θ rewrite uses ForwardDiff.partials directly, but the test
+        # still pins the contract that Matrix hyperparams round-trip cleanly.
         Random.seed!(13)
         k = 6
         y = randn(k) .* 0.3
@@ -410,8 +407,6 @@ end
         grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
 
         abs_error = abs.(grad_fwd - grad_fd)
-        rel_error = abs_error ./ (abs.(grad_fd) .+ 1.0e-10)
-        @test maximum(abs_error) < 1.0e-3
-        @test maximum(rel_error) < 5.0e-2
+        @test maximum(abs_error) < 1.0e-4
     end
 end

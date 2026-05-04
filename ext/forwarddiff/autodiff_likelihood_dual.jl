@@ -8,16 +8,21 @@
 #
 #   1. Stripping Duals from `obs_lik.hyperparams` and running primal Newton
 #      to convergence on a plain Float64 likelihood.
-#   2. For each outer-FD partial direction, computing
-#      ∂(∇_x loglik)/∂θ at the converged x* via central finite differences
-#      on the stored hyperparams (no nested AD — outer θ-direction is FD,
-#      inner ∇_x is primal).
+#   2. Computing ∂(∇_x loglik)/∂θ at the converged x* via *exact AD*: lift
+#      x* to a `Dual{outer_tag, Float64, N}` with zero outer-partials, call
+#      `loggrad`, and read partials off the result. The closure carries
+#      Dual hyperparams so the output naturally captures θ-direction
+#      partials.
 #   3. Solving the IFT linear system Q_post · dx*/dθ_j = grad_dθ_j with the
 #      primal posterior Cholesky for each partial direction.
-#   4. Assembling a Dual posterior mean from primal x_star + per-direction
-#      partials, and a Dual posterior precision by writing into the primal
-#      Q's exact sparse structure (preserves `colptr`/`rowval` bit-for-bit
-#      so workspace pattern checks aren't tripped).
+#   4. Assembling a Dual posterior mean from primal x_star + IFT-derived
+#      partials. Computing the *total* `dH/dθ` via one `loghessian` call on
+#      Dual x* (carrying dx/dθ partials) + Dual hyperparams. Writing into
+#      the primal Q's exact sparse structure (preserves `colptr`/`rowval`
+#      bit-for-bit so workspace pattern checks aren't tripped).
+#
+# This path uses no finite differences anywhere — all derivatives are
+# computed via AD.
 
 # ----------------------------------------------------------------------------
 # Strip / detect helpers — extend the main-src defaults to recognise Dual
@@ -47,23 +52,9 @@ function _outer_tag_and_npartials(hp::NamedTuple)
     return error("no Dual hyperparam in $(keys(hp))")
 end
 
-# Build a primal-stripped `hyperparams` with the j-th partial direction added
-# to each Dual entry, scaled by ε. Non-Dual entries pass through unchanged.
-function _perturb_along_partial(hp_dual::NamedTuple, j::Int, ε::Float64)
-    pairs = map(keys(hp_dual)) do name
-        v = getfield(hp_dual, name)
-        name => _perturb_one(v, j, ε)
-    end
-    return (; pairs...)
-end
-_perturb_one(v::ForwardDiff.Dual, j, ε) = ForwardDiff.value(v) + ε * ForwardDiff.partials(v, j)
-function _perturb_one(v::AbstractArray{<:ForwardDiff.Dual}, j, ε)
-    # `map` preserves shape for AbstractArrays; a comprehension would flatten
-    # to a Vector and break broadcasting against the same-shape values for
-    # Matrix or higher-rank hyperparameters.
-    return ForwardDiff.value.(v) .+ ε .* map(x -> ForwardDiff.partials(x, j), v)
-end
-_perturb_one(v, j, ε) = v
+# ----------------------------------------------------------------------------
+# Likelihood rebuild + primal stripping
+# ----------------------------------------------------------------------------
 
 # Build a fresh AutoDiffLikelihood with the same wrapped function, data,
 # and AD backends as `lik`, but with a different `hyperparams` NamedTuple.
@@ -83,7 +74,3 @@ end
 # Primal-stripped likelihood: AD partials removed from each hyperparam.
 _primal_autodiff_likelihood(lik::GMRFs.AutoDiffLikelihood) =
     _rebuild_autodiff_likelihood(lik, GMRFs._strip_ad_partials_hyperparams(lik.hyperparams))
-
-# Likelihood perturbed along the j-th partial direction by ±ε in θ-space.
-_perturbed_autodiff_likelihood(lik::GMRFs.AutoDiffLikelihood, j::Int, ε::Float64) =
-    _rebuild_autodiff_likelihood(lik, _perturb_along_partial(lik.hyperparams, j, ε))

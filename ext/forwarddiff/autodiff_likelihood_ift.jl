@@ -1,13 +1,18 @@
 # `gaussian_approximation` IFT path for AutoDiffLikelihood with Dual hyperparams.
 #
-# Sequence:
+# Sequence (pure AD — no finite differences):
 #   1. Strip Duals → primal AutoDiffLikelihood, run primal Newton.
-#   2. For each outer-FD partial direction j, compute ∂(∇_x loglik)/∂θ_j at
-#      the converged primal x* via central finite differences in θ-space
-#      (no nested AD).
+#   2. Compute ∂(∇_x loglik)/∂θ at the converged primal x* via exact AD:
+#      lift x* to `Dual{outer_tag, Float64, N}` with zero outer-partials,
+#      call `loggrad` against the Dual-θ likelihood, read outer partials
+#      off the result.
 #   3. Solve Q_post · dx*/dθ_j = grad_dθ_j with the primal posterior factor.
-#   4. Assemble Dual x* and Dual Q_post; return as the appropriate result type
-#      for the prior (GMRF / ConstrainedGMRF / WorkspaceGMRF).
+#   4. Build x_star_dual carrying dx/dθ as outer partials.
+#   5. Compute the total `dH/dθ = ∂H/∂θ + ∂H/∂x · dx/dθ` via exact AD: one
+#      `loghessian` call on `x_star_dual` (with dx/dθ partials) + Dual-θ
+#      likelihood. Read total derivative off the result's outer partials.
+#   6. Assemble Dual `Q_post` by writing primal Q_prior values + H-derived
+#      partials into a copy of Q_prior's exact sparse pattern.
 
 """
     _is_dual_autodifflik(lik) -> Bool
@@ -21,32 +26,14 @@ function _is_dual_autodifflik(lik::GMRFs.AutoDiffLikelihood)
 end
 
 # ----------------------------------------------------------------------------
-# Per-direction θ-tangent of `loggrad` at fixed x via central FD on θ.
-# ----------------------------------------------------------------------------
-
-function _grad_dθ_central(lik::GMRFs.AutoDiffLikelihood, x_star, j::Int, ε::Float64)
-    lik_plus = _perturbed_autodiff_likelihood(lik, j, +ε)
-    lik_minus = _perturbed_autodiff_likelihood(lik, j, -ε)
-    return (GMRFs.loggrad(x_star, lik_plus) .- GMRFs.loggrad(x_star, lik_minus)) ./ (2ε)
-end
-
-function _hess_dθ_central(lik::GMRFs.AutoDiffLikelihood, x_star, dx_j, j::Int, ε::Float64)
-    # Total derivative dH/d(outer_j) = ∂H/∂θ · v_j + ∂H/∂x · dx*/d(outer_j).
-    # Combined finite-difference perturbation captures both terms in one pair
-    # of evaluations.
-    lik_plus = _perturbed_autodiff_likelihood(lik, j, +ε)
-    lik_minus = _perturbed_autodiff_likelihood(lik, j, -ε)
-    x_plus = x_star .+ ε .* dx_j
-    x_minus = x_star .- ε .* dx_j
-    H_plus = _maybe_downcast_diagonal(GMRFs.loghessian(x_plus, lik_plus))
-    H_minus = _maybe_downcast_diagonal(GMRFs.loghessian(x_minus, lik_minus))
-    return _structurally_subtract(H_plus, H_minus, 2ε)
-end
-
 # DI.hessian returns a dense Matrix even when the underlying Hessian is
 # structurally diagonal (the typical case for a sum-of-pointwise loglik).
 # Sniff for off-diagonal zeros and downcast so the IFT path can preserve
-# Q_prior's sparse pattern through `_assemble_q_post_dual`.
+# Q_prior's sparse pattern through `_assemble_q_post_dual`. With a
+# `pointwise_loglik_func` set, `loghessian` already returns a `Diagonal`
+# directly via the main-src fast path, so this is a defensive fallback.
+# ----------------------------------------------------------------------------
+
 _maybe_downcast_diagonal(H::Diagonal) = H
 _maybe_downcast_diagonal(H::SparseMatrixCSC) = H
 function _maybe_downcast_diagonal(H::AbstractMatrix)
@@ -59,28 +46,12 @@ function _maybe_downcast_diagonal(H::AbstractMatrix)
     return Diagonal([H[i, i] for i in 1:n])
 end
 
-# (H_plus - H_minus) / (2ε), preserving Diagonal/sparse structure where
-# applicable so downstream consumers can dispatch correctly.
-_structurally_subtract(A::Diagonal, B::Diagonal, denom) = Diagonal((A.diag .- B.diag) ./ denom)
-function _structurally_subtract(A::SparseMatrixCSC, B::SparseMatrixCSC, denom)
-    A.colptr == B.colptr && A.rowval == B.rowval || return (A - B) / denom
-    return SparseMatrixCSC(A.m, A.n, copy(A.colptr), copy(A.rowval), (A.nzval .- B.nzval) ./ denom)
-end
-_structurally_subtract(A::AbstractMatrix, B::AbstractMatrix, denom) = (A - B) ./ denom
-
 # ----------------------------------------------------------------------------
 # Q_post_dual builder — preserves Q_prior's exact sparse structure for
 # diagonal Hessians (the dominant case via pointwise_loglik_func). For
-# non-diagonal Hessians, falls back to algebraic subtraction (which can
-# alter sparse structure).
+# subset-pattern sparse Hessians we still preserve Q_prior's pattern. For
+# arbitrary dense Hessians we fall back to algebraic subtraction.
 # ----------------------------------------------------------------------------
-
-function _assemble_q_post_dual(
-        Q_prior::SparseMatrixCSC{Float64}, H_primal, H_dθ, OuterTag, ::Val{N}
-    ) where {N}
-    DualT = ForwardDiff.Dual{OuterTag, Float64, N}
-    return _assemble_q_post_dual_impl(Q_prior, H_primal, H_dθ, DualT, Val(N))
-end
 
 # Allocate `nzval_dual` as a copy of Q_prior.nzval lifted to `DualT` with
 # zero partials everywhere. Both sparse-pattern-preserving variants below
@@ -94,24 +65,29 @@ function _alloc_dual_nzval_from_qprior(
     @inbounds for i in eachindex(Q_prior.nzval)
         nzval_dual[i] = DualT(Q_prior.nzval[i], zero_partials)
     end
-    return nzval_dual, PartialsT
+    return nzval_dual
 end
 
 _q_post_with_pattern(Q_prior::SparseMatrixCSC, nzval_dual) =
     SparseMatrixCSC(Q_prior.m, Q_prior.n, copy(Q_prior.colptr), copy(Q_prior.rowval), nzval_dual)
 
-# Diagonal H — write in place into a copy of Q_prior's nzval.
-function _assemble_q_post_dual_impl(
-        Q_prior::SparseMatrixCSC{Float64}, H_primal::Diagonal, H_dθ, ::Type{DualT}, ::Val{N}
+# Diagonal H_dual — write Q_prior - H_dual into a copy of Q_prior's nzval.
+# Reads primal H values via `ForwardDiff.value`, partials via
+# `ForwardDiff.partials`. No FD anywhere.
+function _assemble_q_post_dual(
+        Q_prior::SparseMatrixCSC{Float64}, H_dual::Diagonal{<:ForwardDiff.Dual},
+        ::Type{DualT}, ::Val{N}
     ) where {DualT, N}
     n = size(Q_prior, 1)
-    nzval_dual, PartialsT = _alloc_dual_nzval_from_qprior(Q_prior, DualT, Val(N))
+    nzval_dual = _alloc_dual_nzval_from_qprior(Q_prior, DualT, Val(N))
     @inbounds for j in 1:n
         for k in nzrange(Q_prior, j)
             if Q_prior.rowval[k] == j
-                # subtract H_primal[j,j] from primal, with partials = -H_dθ[k][j,j]
-                primal = Q_prior.nzval[k] - H_primal.diag[j]
-                partials = PartialsT(ntuple(d -> -H_dθ[d].diag[j], Val(N)))
+                h = H_dual.diag[j]
+                primal = Q_prior.nzval[k] - ForwardDiff.value(h)
+                partials = ForwardDiff.Partials{N, Float64}(
+                    ntuple(d -> -ForwardDiff.partials(h, d), Val(N))
+                )
                 nzval_dual[k] = DualT(primal, partials)
                 break
             end
@@ -120,25 +96,28 @@ function _assemble_q_post_dual_impl(
     return _q_post_with_pattern(Q_prior, nzval_dual)
 end
 
-# Sparse non-diagonal H — match Q_prior's pattern, write H values where they
-# overlap. Requires H's pattern to be a subset of Q_prior's; otherwise we'd
-# silently drop H nonzeros outside Q_prior and return a wrong Q_post. Errors
-# loudly in that case so the caller knows workspace reuse isn't applicable
-# for this likelihood/prior combination.
-function _assemble_q_post_dual_impl(
-        Q_prior::SparseMatrixCSC{Float64}, H_primal::SparseMatrixCSC,
-        H_dθ, ::Type{DualT}, ::Val{N}
+# Sparse non-diagonal H_dual — match Q_prior's pattern, write H values where
+# they overlap. Requires H's pattern to be a subset of Q_prior's; otherwise
+# we'd silently drop H nonzeros outside Q_prior and return a wrong Q_post.
+# Errors loudly in that case so the caller knows workspace reuse isn't
+# applicable for this likelihood/prior combination.
+function _assemble_q_post_dual(
+        Q_prior::SparseMatrixCSC{Float64},
+        H_dual::SparseMatrixCSC{<:ForwardDiff.Dual},
+        ::Type{DualT}, ::Val{N}
     ) where {DualT, N}
-    _check_h_pattern_subset(H_primal, Q_prior)
+    _check_h_pattern_subset(H_dual, Q_prior)
     n = size(Q_prior, 1)
-    nzval_dual, PartialsT = _alloc_dual_nzval_from_qprior(Q_prior, DualT, Val(N))
+    nzval_dual = _alloc_dual_nzval_from_qprior(Q_prior, DualT, Val(N))
     @inbounds for col in 1:n
         for k in nzrange(Q_prior, col)
             row = Q_prior.rowval[k]
-            h_primal = _sparse_lookup(H_primal, row, col)
-            h_partials = PartialsT(ntuple(d -> -_sparse_lookup(H_dθ[d], row, col), Val(N)))
-            primal = Q_prior.nzval[k] - h_primal
-            nzval_dual[k] = DualT(primal, h_partials)
+            h = _sparse_lookup(H_dual, row, col)
+            primal = Q_prior.nzval[k] - ForwardDiff.value(h)
+            partials = ForwardDiff.Partials{N, Float64}(
+                ntuple(d -> -ForwardDiff.partials(h, d), Val(N))
+            )
+            nzval_dual[k] = DualT(primal, partials)
         end
     end
     return _q_post_with_pattern(Q_prior, nzval_dual)
@@ -175,20 +154,26 @@ function _sparse_lookup_present(A::SparseMatrixCSC, row::Int, col::Int)
     return false
 end
 
-# Generic / dense H — falls back to algebraic subtract; result loses sparse
-# structure, which means workspace pattern checks will fail. Only used as a
-# last resort for non-pointwise + non-sparse Hessians.
-function _assemble_q_post_dual_impl(
-        Q_prior::SparseMatrixCSC{Float64}, H_primal::AbstractMatrix,
-        H_dθ, ::Type{DualT}, ::Val{N}
+# Generic / dense H_dual — falls back to algebraic subtract. Result loses
+# Q_prior's sparse structure, so workspace pattern checks downstream will
+# fail. Only used as a last resort for non-pointwise + non-sparse
+# Hessians, which is rare.
+function _assemble_q_post_dual(
+        Q_prior::SparseMatrixCSC{Float64},
+        H_dual::AbstractMatrix{<:ForwardDiff.Dual},
+        ::Type{DualT}, ::Val{N}
     ) where {DualT, N}
     n = size(Q_prior, 1)
-    PartialsT = ForwardDiff.Partials{N, Float64}
-    Q_dense_primal = Matrix(Q_prior) - H_primal
     Q_post_dual = Matrix{DualT}(undef, n, n)
     @inbounds for i in 1:n, j in 1:n
-        partials = PartialsT(ntuple(d -> -H_dθ[d][i, j], Val(N)))
-        Q_post_dual[i, j] = DualT(Q_dense_primal[i, j], partials)
+        h = H_dual[i, j]
+        # Q_prior is Float64 sparse; entries outside its pattern are 0.
+        q_primal = _sparse_lookup(Q_prior, i, j)
+        primal = q_primal - ForwardDiff.value(h)
+        partials = ForwardDiff.Partials{N, Float64}(
+            ntuple(d -> -ForwardDiff.partials(h, d), Val(N))
+        )
+        Q_post_dual[i, j] = DualT(primal, partials)
     end
     return Q_post_dual
 end
@@ -207,11 +192,12 @@ end
 function _autodifflik_ift_workspace(
         prior_gmrf::GMRFs.WorkspaceGMRF{Float64},
         lik::GMRFs.AutoDiffLikelihood;
-        ε::Float64 = sqrt(eps()),
         ga_kwargs...
     )
     OuterTag, N = _outer_tag_and_npartials(lik.hyperparams)
     DualT = ForwardDiff.Dual{OuterTag, Float64, N}
+    PartialsT = ForwardDiff.Partials{N, Float64}
+    zero_partials = PartialsT(ntuple(_ -> 0.0, Val(N)))
 
     # Step 1: primal Newton on stripped likelihood.
     primal_lik = _primal_autodiff_likelihood(lik)
@@ -219,9 +205,14 @@ function _autodifflik_ift_workspace(
     x_star = GMRFs.mean(posterior_primal)
     n = length(x_star)
 
-    # Step 2: per-partial ∂(∇_x loglik)/∂θ_j by central FD on θ. No nested AD —
-    # outer θ-direction is FD, inner ∇_x is primal.
-    grad_dθ = ntuple(j -> _grad_dθ_central(lik, x_star, j, ε), N)
+    # Step 2: ∂(∇_x loglik)/∂θ at fixed x* via exact AD.
+    # Lift x_star to Dual{OuterTag, Float64, N} with zero outer partials, so
+    # the closure (which carries Dual θ) propagates θ-partials through arithmetic
+    # while x's partial contribution is zero. The result's outer partials are
+    # the partial-θ derivatives at fixed x.
+    x_star_dual_zero = [DualT(x_star[i], zero_partials) for i in 1:n]
+    g_dual_at_xstar = GMRFs.loggrad(x_star_dual_zero, lik)
+    grad_dθ = ntuple(j -> [ForwardDiff.partials(g_dual_at_xstar[i], j) for i in 1:n], Val(N))
 
     # Step 3: IFT solve. We have neg_grad = Q_prior(x_star - μ) - loggrad,
     # which evaluates to 0 at the converged primal x_star (Newton condition).
@@ -240,17 +231,19 @@ function _autodifflik_ift_workspace(
         dx[:, j] .= step
     end
 
-    # Step 4: assemble Dual x*.
-    x_star_dual = map(1:n) do i
-        DualT(x_star[i], ForwardDiff.Partials{N, Float64}(ntuple(j -> dx[i, j], Val(N))))
-    end
+    # Step 4: assemble Dual x* with dx/dθ as outer partials.
+    x_star_dual = [
+        DualT(x_star[i], PartialsT(ntuple(j -> dx[i, j], Val(N))))
+            for i in 1:n
+    ]
 
-    # Step 5: assemble Dual Q_post via nzval-only update from primal Q_prior.
-    # For the H tangent we need dH/d(outer_j) = ∂H/∂θ · v_j + ∂H/∂x · dx*/d(outer_j),
-    # captured in one combined FD perturbation per direction.
-    H_primal = _maybe_downcast_diagonal(GMRFs.loghessian(x_star, primal_lik))
-    H_dθ = ntuple(j -> _hess_dθ_central(lik, x_star, view(dx, :, j), j, ε), N)
-    Q_post_dual = _assemble_q_post_dual(prior_gmrf.precision, H_primal, H_dθ, OuterTag, Val(N))
+    # Step 5: total dH/dθ via one exact-AD loghessian call.
+    # `loghessian(x_star_dual, lik)` propagates BOTH the x-tangent (via
+    # x_star_dual's outer partials = dx/dθ) AND the θ-tangent (via lik's
+    # Dual hyperparams), so the result's outer partials are the total
+    # derivative `∂H/∂θ + ∂H/∂x · dx/dθ` — exactly what Q_post needs.
+    H_dual = _maybe_downcast_diagonal(GMRFs.loghessian(x_star_dual, lik))
+    Q_post_dual = _assemble_q_post_dual(prior_gmrf.precision, H_dual, DualT, Val(N))
 
     # Step 6: result. Diagonal/sparse Q_post_dual is structure-compatible with
     # the workspace pattern (we copied Q_prior's colptr/rowval), so the Dual
