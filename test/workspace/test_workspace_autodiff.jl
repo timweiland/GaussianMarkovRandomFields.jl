@@ -367,6 +367,116 @@ end
         @test maximum(abs_error) < 1.0e-4
     end
 
+    @testset "Analytic AD-on-θ cross-check (Gaussian loglik)" begin
+        # Validates the AD-on-θ partial extraction at machine precision
+        # against a closed-form analytic derivative. Uses a Gaussian loglik
+        # whose Hessian and Hessian-θ-derivative are known exactly.
+        #
+        #   loglik(x; y, α) = -0.5 * α * Σ(y_i - x_i)²
+        #     g_i   = ∂loglik/∂x_i  = α * (y_i - x_i)
+        #     ∂g_i/∂α at fixed x    = y_i - x_i
+        #     H_ii  = ∂²loglik/∂x_i² = -α
+        #     ∂H_ii/∂α at fixed x   = -1
+        #     ∂H_ii/∂x_j            = 0 → total dH/dα equals ∂H/∂α regardless of dx/dα
+        #
+        # This is a direct AD-machinery test — bypasses gaussian_approximation
+        # so the only error sources are AD itself (which is exact) and
+        # floating-point. The 1e-12 threshold pins this.
+        function gauss_α(x; y, α)
+            return -0.5 * α * sum((y .- x) .^ 2)
+        end
+        n_latent = 4
+        obs_model = AutoDiffObservationModel(
+            gauss_α;
+            n_latent = n_latent,
+            hyperparams = (:α,),
+            grad_backend = AutoForwardDiff(),
+            hessian_backend = AutoForwardDiff(),
+        )
+        y_data = [1.0, 2.0, 3.0, 4.0]
+        x_test = [0.5, 1.5, 2.5, 3.5]
+
+        # Driver function that returns sum of grad partials so outer
+        # ForwardDiff.derivative reduces to an analytic-comparable scalar.
+        # Inside, it exercises exactly the AD-on-θ lift we use in
+        # `_autodifflik_ift_workspace` step 2.
+        function grad_dα_sum(α)
+            obs_lik = obs_model(y_data; α = α)
+            φ = obs_lik.hyperparams.α
+            if φ isa ForwardDiff.Dual
+                DT = typeof(φ)
+                N = ForwardDiff.npartials(DT)
+                zp = ForwardDiff.Partials{N, Float64}(ntuple(_ -> 0.0, Val(N)))
+                x_lifted = [DT(x_test[i], zp) for i in 1:n_latent]
+                g = loggrad(x_lifted, obs_lik)
+                # Reduce to scalar via sum so outer FD.derivative returns Float64.
+                return sum(g)
+            else
+                return sum(loggrad(x_test, obs_lik))
+            end
+        end
+
+        α_val = 2.0
+        # Outer FD.derivative passes Dual α; AD-on-θ path returns sum(g) as
+        # Dual; outer derivative reads partial.
+        ad_partial = ForwardDiff.derivative(grad_dα_sum, α_val)
+        # Analytic Σᵢ ∂gᵢ/∂α at fixed x = Σᵢ (yᵢ - xᵢ)
+        analytic_partial = sum(y_data .- x_test)
+        @test abs(ad_partial - analytic_partial) < 1.0e-12
+
+        # Hessian total derivative — same loglik. dH/dα at fixed x = -n
+        # (since H = -α I and dH_ii/dα = -1 with no x-dependence).
+        function hess_dα_sum(α)
+            obs_lik = obs_model(y_data; α = α)
+            φ = obs_lik.hyperparams.α
+            if φ isa ForwardDiff.Dual
+                DT = typeof(φ)
+                N = ForwardDiff.npartials(DT)
+                # Use arbitrary dx/dα — H is x-independent so total = ∂H/∂α.
+                dx_dα = [0.3, -0.7, 0.1, 0.05]
+                x_lifted = [
+                    DT(x_test[i], ForwardDiff.Partials{N, Float64}((dx_dα[i],)))
+                        for i in 1:n_latent
+                ]
+                H = loghessian(x_lifted, obs_lik)
+                return sum(diag(H))
+            else
+                H = loghessian(x_test, obs_lik)
+                return sum(diag(H))
+            end
+        end
+        ad_hess_partial = ForwardDiff.derivative(hess_dα_sum, α_val)
+        # Analytic: dH_ii/dα = -1 for each of n_latent diagonal entries
+        analytic_hess_partial = -float(n_latent)
+        @test abs(ad_hess_partial - analytic_hess_partial) < 1.0e-12
+    end
+
+    @testset "Mismatched outer-Dual tags errors loudly" begin
+        # Defensive guard: if hyperparams carry Duals from different outer
+        # AD passes (different Tags), `_outer_tag_and_npartials` should
+        # error rather than silently misread partials.
+        function loglik2(x; y, α, β)
+            return sum(α .* x .+ β .* x .^ 2)
+        end
+        obs_model = AutoDiffObservationModel(
+            loglik2;
+            n_latent = 3,
+            hyperparams = (:α, :β),
+            grad_backend = AutoForwardDiff(),
+            hessian_backend = AutoForwardDiff(),
+        )
+        y = [1.0, 2.0, 3.0]
+        # Manually build two Duals with DISTINCT tags to simulate the
+        # "two independent outer passes" misuse case.
+        TagA = ForwardDiff.Tag{Symbol("A"), Float64}
+        TagB = ForwardDiff.Tag{Symbol("B"), Float64}
+        α_d = ForwardDiff.Dual{TagA, Float64, 1}(0.5, ForwardDiff.Partials{1, Float64}((1.0,)))
+        β_d = ForwardDiff.Dual{TagB, Float64, 1}(0.3, ForwardDiff.Partials{1, Float64}((1.0,)))
+        obs_lik = obs_model(y; α = α_d, β = β_d)
+        prior = WorkspaceGMRF(zeros(3), spdiagm(0 => ones(3)))
+        @test_throws ErrorException gaussian_approximation(prior, obs_lik)
+    end
+
     @testset "Matrix-valued Dual hyperparam (shape preservation)" begin
         # Regression for shape preservation when extracting partials from a
         # Matrix-valued hyperparameter. Originally this exercised an

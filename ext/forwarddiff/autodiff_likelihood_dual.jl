@@ -39,18 +39,36 @@ GMRFs._carries_ad_partials(x::AbstractArray{<:ForwardDiff.Dual}) = true
 # Outer-Dual introspection
 # ----------------------------------------------------------------------------
 
-# Locate the (Tag, N) carried by Dual hyperparams. Assumes a single outer
-# ForwardDiff pass — all Duals share the same Tag and number of partials.
+# Locate the (Tag, N) carried by Dual hyperparams. The IFT path requires
+# all Dual hyperparams to share a single outer-AD pass — same Tag and
+# same number of partials. Mixing Duals from independent outer passes (or
+# different chunk sizes) would silently misread partials in step 2/5.
 function _outer_tag_and_npartials(hp::NamedTuple)
-    for v in values(hp)
-        if v isa ForwardDiff.Dual
-            return ForwardDiff.tagtype(typeof(v)), ForwardDiff.npartials(typeof(v))
-        elseif v isa AbstractArray && eltype(v) <: ForwardDiff.Dual
-            return ForwardDiff.tagtype(eltype(v)), ForwardDiff.npartials(eltype(v))
+    Tag = nothing
+    N = nothing
+    for (k, v) in pairs(hp)
+        T_v, N_v = _hp_entry_tag_npartials(v)
+        T_v === nothing && continue
+        if Tag === nothing
+            Tag, N = T_v, N_v
+        elseif T_v !== Tag || N_v != N
+            error(
+                "AutoDiffLikelihood IFT path: hyperparams carry Duals from " *
+                    "different outer-AD passes (entry `$k` has Tag=$T_v / N=$N_v, " *
+                    "expected Tag=$Tag / N=$N). All Dual hyperparams must come " *
+                    "from a single outer ForwardDiff pass."
+            )
         end
     end
-    return error("no Dual hyperparam in $(keys(hp))")
+    Tag === nothing && error("no Dual hyperparam in $(keys(hp))")
+    return Tag, N
 end
+
+_hp_entry_tag_npartials(v::ForwardDiff.Dual) =
+    ForwardDiff.tagtype(typeof(v)), ForwardDiff.npartials(typeof(v))
+_hp_entry_tag_npartials(v::AbstractArray{<:ForwardDiff.Dual}) =
+    ForwardDiff.tagtype(eltype(v)), ForwardDiff.npartials(eltype(v))
+_hp_entry_tag_npartials(::Any) = (nothing, nothing)
 
 # ----------------------------------------------------------------------------
 # Likelihood rebuild + primal stripping
