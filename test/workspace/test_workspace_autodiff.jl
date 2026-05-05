@@ -519,4 +519,67 @@ end
         abs_error = abs.(grad_fwd - grad_fd)
         @test maximum(abs_error) < 1.0e-4
     end
+
+    @testset "Q_post assembly — sparse + dense + pattern-subset paths" begin
+        # Direct unit tests of the FD-extension internals not exercised by the
+        # pipeline tests above. The pipeline tests all use pointwise loglik,
+        # which produces a Diagonal Hessian (one of three `_assemble_q_post_dual`
+        # methods). Here we cover the sparse-pattern-subset method, the
+        # dense-fallback error, and the pattern-violation error.
+        FDExt = Base.get_extension(GaussianMarkovRandomFields, :GaussianMarkovRandomFieldsForwardDiff)
+        @assert FDExt !== nothing "FD extension not loaded"
+
+        OuterTag = ForwardDiff.Tag{Symbol("test_q_assembly"), Float64}
+        DualT = ForwardDiff.Dual{OuterTag, Float64, 1}
+        # Trigger Tag's tagcount registration before later comparisons. This
+        # mirrors what real ForwardDiff drivers do via `Tag(f, V)`.
+        ForwardDiff.tagcount(OuterTag)
+
+        # Tridiagonal Q_prior on n = 4
+        Q_prior = SparseMatrixCSC(spdiagm(-1 => -ones(3), 0 => 2 * ones(4), 1 => -ones(3)))
+
+        # Sparse pattern-subset H_dual — diagonal entries only, but stored as
+        # SparseMatrixCSC{Dual} so dispatch hits the sparse method.
+        h_diag = [
+            DualT(-0.5, ForwardDiff.Partials{1, Float64}((-1.0,))),
+            DualT(-0.6, ForwardDiff.Partials{1, Float64}((-1.5,))),
+            DualT(-0.7, ForwardDiff.Partials{1, Float64}((-2.0,))),
+            DualT(-0.8, ForwardDiff.Partials{1, Float64}((-2.5,))),
+        ]
+        H_sparse = SparseMatrixCSC(spdiagm(0 => h_diag))
+        Q_post_sparse = FDExt._assemble_q_post_dual(Q_prior, H_sparse, DualT, Val(1))
+        @test Q_post_sparse isa SparseMatrixCSC
+        @test Q_post_sparse.colptr == Q_prior.colptr
+        @test Q_post_sparse.rowval == Q_prior.rowval
+        # Diagonal entries should be Q_prior.diag - H.diag
+        for i in 1:4
+            entry = Q_post_sparse[i, i]
+            @test ForwardDiff.value(entry) ≈ 2.0 - ForwardDiff.value(h_diag[i])
+            @test ForwardDiff.partials(entry, 1) ≈ -ForwardDiff.partials(h_diag[i], 1)
+        end
+        # Off-diagonal entries (still in Q_prior pattern) should keep Q_prior's
+        # primal value with zero partials.
+        @test ForwardDiff.value(Q_post_sparse[1, 2]) ≈ -1.0
+        @test ForwardDiff.partials(Q_post_sparse[1, 2], 1) == 0.0
+
+        # Pattern violation: H has nonzero outside Q_prior pattern (entry 1,4).
+        h_oob = [
+            DualT(-0.5, ForwardDiff.Partials{1, Float64}((-1.0,))),
+            DualT(-0.6, ForwardDiff.Partials{1, Float64}((-1.5,))),
+            DualT(-0.7, ForwardDiff.Partials{1, Float64}((-2.0,))),
+            DualT(-0.8, ForwardDiff.Partials{1, Float64}((-2.5,))),
+        ]
+        H_violator = SparseMatrixCSC(spdiagm(0 => h_oob))
+        H_violator[1, 4] = DualT(0.1, ForwardDiff.Partials{1, Float64}((0.5,)))
+        @test_throws ArgumentError FDExt._assemble_q_post_dual(
+            Q_prior, H_violator, DualT, Val(1)
+        )
+
+        # Dense fallback — explicit error rather than producing a Matrix that
+        # the WorkspaceGMRF constructor would reject downstream.
+        H_dense = Matrix{DualT}(H_sparse)
+        @test_throws ArgumentError FDExt._assemble_q_post_dual(
+            Q_prior, H_dense, DualT, Val(1)
+        )
+    end
 end

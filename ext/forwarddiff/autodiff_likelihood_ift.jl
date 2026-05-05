@@ -154,28 +154,28 @@ function _sparse_lookup_present(A::SparseMatrixCSC, row::Int, col::Int)
     return false
 end
 
-# Generic / dense H_dual — falls back to algebraic subtract. Result loses
-# Q_prior's sparse structure, so workspace pattern checks downstream will
-# fail. Only used as a last resort for non-pointwise + non-sparse
-# Hessians, which is rare.
+# Generic / dense H_dual — error path. The workspace IFT pipeline produces
+# a `WorkspaceGMRF`, whose constructor demands `SparseMatrixCSC` precision
+# matching the workspace's symbolic factorization pattern. Returning a
+# dense `Matrix` here would just shift the failure to the constructor with
+# a less actionable message, so we error explicitly with guidance.
 function _assemble_q_post_dual(
         Q_prior::SparseMatrixCSC{Float64},
         H_dual::AbstractMatrix{<:ForwardDiff.Dual},
         ::Type{DualT}, ::Val{N}
     ) where {DualT, N}
-    n = size(Q_prior, 1)
-    Q_post_dual = Matrix{DualT}(undef, n, n)
-    @inbounds for i in 1:n, j in 1:n
-        h = H_dual[i, j]
-        # Q_prior is Float64 sparse; entries outside its pattern are 0.
-        q_primal = _sparse_lookup(Q_prior, i, j)
-        primal = q_primal - ForwardDiff.value(h)
-        partials = ForwardDiff.Partials{N, Float64}(
-            ntuple(d -> -ForwardDiff.partials(h, d), Val(N))
+    throw(
+        ArgumentError(
+            "AutoDiffLikelihood IFT path: observation Hessian is dense " *
+                "(eltype $(eltype(H_dual)), size $(size(H_dual))), but the " *
+                "workspace-reuse path requires a structurally diagonal or " *
+                "Q_prior-pattern-subset sparse Hessian to preserve the workspace's " *
+                "symbolic factorization. Supply `pointwise_loglik_func` to opt into " *
+                "the structured Diagonal path, use a sparse Hessian backend " *
+                "(`AutoSparse(AutoForwardDiff())`), or call `gaussian_approximation` " *
+                "with a non-`WorkspaceGMRF` prior."
         )
-        Q_post_dual[i, j] = DualT(primal, partials)
-    end
-    return Q_post_dual
+    )
 end
 
 function _sparse_lookup(A::SparseMatrixCSC, row::Int, col::Int)
