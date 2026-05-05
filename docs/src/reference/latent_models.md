@@ -20,15 +20,40 @@ hyperparameters(ar1)  # (τ = Real, ρ = Real)
 gmrf = ar1(τ=2.0, ρ=0.8)  # Returns GMRF or ConstrainedGMRF automatically
 ```
 
-## LatentModel Interface
+## Latent prior hierarchy
+
+```
+AbstractLatentPrior
+   ├── LatentModel              ← Gaussian: precision_matrix, mean, callable
+   └── NonGaussianLatentPrior   ← non-Gaussian: requires local_quadratic
+```
+
+`LatentModel` is the abstract type for Gaussian latent priors — every
+model that ships with this package (AR, RW, IID, Matérn, Besag, BYM2, …)
+is a `LatentModel`. `NonGaussianLatentPrior` is a separate sibling for
+priors whose log-density is *not* quadratic in `x`; instead of a
+materialised GMRF, they expose a [`local_quadratic`](@ref) method that
+re-linearises the prior around any reference point. The
+[Gaussian Approximation](gaussian_approximation.md) reference page
+covers the iterated-linearisation Newton driven by these priors.
 
 ```@docs
+AbstractLatentPrior
 LatentModel
-hyperparameters(::LatentModel)
+NonGaussianLatentPrior
+hyperparameters(::AbstractLatentPrior)
 precision_matrix(::LatentModel)
-mean
-constraints
-model_name
+mean(::LatentModel)
+constraints(::AbstractLatentPrior)
+model_name(::AbstractLatentPrior)
+```
+
+## Local quadratic interface
+
+```@docs
+LocalLatentQuadratic
+local_quadratic
+prior_quadratic
 ```
 
 ## Available Models

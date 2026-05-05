@@ -1,146 +1,127 @@
-export LatentModel, hyperparameters, precision_matrix, mean, constraints, model_name
+export AbstractLatentPrior, LatentModel, NonGaussianLatentPrior,
+    hyperparameters, precision_matrix, mean, constraints, model_name
 
 """
-    LatentModel
+    AbstractLatentPrior
 
-Abstract type for latent variable models that can be used to construct GMRFs.
+Top of the latent-prior hierarchy. Anything that can be the prior side of
+`gaussian_approximation` is an `AbstractLatentPrior`. Two children:
 
-A LatentModel provides a structured way to define commonly used GMRFs such as 
-AR1, RW1, and other temporal/spatial models by specifying:
+- [`LatentModel`](@ref): a Gaussian latent prior. `(Q, μ)` are determined
+  by the hyperparameters alone, so the prior materialises as a `GMRF`.
+- [`NonGaussianLatentPrior`](@ref): a latent prior whose log-density is
+  not quadratic in `x`. There is no canonical materialised `GMRF`; the
+  prior is only meaningful at a chosen reference point through
+  [`local_quadratic`](@ref).
 
-1. The hyperparameters of the model
-2. How to construct the precision matrix from hyperparameters  
-3. How to construct the mean vector from hyperparameters
-4. Any linear constraints that should be applied
+Every concrete subtype must implement:
+- `length(prior)` — number of latent variables.
+- `hyperparameters(prior)` — names/types of hyperparameters.
+- `model_name(prior)` — `Symbol` used for `CombinedModel` parameter prefixing.
+- `constraints(prior; θ...)` — `nothing` or `(A, e)`.
+"""
+abstract type AbstractLatentPrior end
 
-# Interface
+"""
+    LatentModel <: AbstractLatentPrior
 
-Each concrete subtype must implement:
-- `length(model)`: Return the size/dimension of the latent process
-- `hyperparameters(model)`: Return a NamedTuple describing the hyperparameters
-- `precision_matrix(model; kwargs...)`: Construct precision matrix from hyperparameter values
-- `mean(model; kwargs...)`: Construct mean vector from hyperparameter values  
-- `constraints(model; kwargs...)`: Return constraint information or `nothing`
-- `model_name(model)`: Return a Symbol representing the preferred name for this model type
-- `(model)(; kwargs...)`: Instantiate a concrete GMRF from hyperparameter values
+Abstract type for *Gaussian* latent priors. `(Q, μ)` depend only on the
+hyperparameters `θ`, so the prior materialises as a `GMRF` /
+`ConstrainedGMRF`. In addition to the [`AbstractLatentPrior`](@ref)
+interface, every concrete subtype must implement:
+
+- `precision_matrix(model; θ...)`
+- `mean(model; θ...)`
+- `(model)(; θ...) -> AbstractGMRF`
+
+`local_quadratic(::LatentModel, x_ref; θ...)` has a default that uses
+these methods together with `logpdf`, so subtypes don't need to override
+it for the iterated path.
 
 # Usage
-
 ```julia
-# Define a model
-model = SomeLatentModel(n=100)
-
-# Get hyperparameter specification
-params = hyperparameters(model)  # e.g. (τ=Real, ρ=Real)
-
-# Instantiate GMRF with specific parameter values
-gmrf = model(τ=2.0, ρ=0.8)  # Returns GMRF or ConstrainedGMRF
+model = AR1Model(100)
+gmrf = model(; τ = 2.0, ρ = 0.8)   # materialise a GMRF
 ```
 """
-abstract type LatentModel end
+abstract type LatentModel <: AbstractLatentPrior end
 
 """
-    Base.length(model::LatentModel)
+    NonGaussianLatentPrior <: AbstractLatentPrior
 
-Return the size/dimension of the latent process.
+Abstract type for latent priors whose `log p(x | θ)` is *not* quadratic
+in `x`. There is no canonical materialised `GMRF`; the prior is queried
+through [`local_quadratic`](@ref) at a reference point `x_ref`. In
+addition to the [`AbstractLatentPrior`](@ref) interface, every concrete
+subtype must implement:
 
-# Returns
-An integer representing the number of latent variables in the model.
+- `local_quadratic(prior, x_ref; θ...) -> LocalLatentQuadratic`
+
+Models of this type cannot be called as `prior(; θ...)` because
+materialisation is x-dependent. Use `gaussian_approximation(prior, obs_lik; θ...)`
+to drive the iterated-linearisation Newton; pass `x0` explicitly if
+zeros aren't an appropriate starting point.
 """
-function Base.length(model::LatentModel)
-    error("length not implemented for $(typeof(model))")
-end
-
-"""
-    hyperparameters(model::LatentModel)
-
-Return a NamedTuple describing the hyperparameters and their types for the model.
-
-# Returns
-A NamedTuple where keys are parameter names and values are their expected types.
-"""
-function hyperparameters(model::LatentModel)
-    error("hyperparameters not implemented for $(typeof(model))")
-end
+abstract type NonGaussianLatentPrior <: AbstractLatentPrior end
 
 """
-    precision_matrix(model::LatentModel; kwargs...)
+    length(prior::AbstractLatentPrior) -> Int
 
-Construct the precision matrix for the model given hyperparameter values.
-
-# Arguments  
-- `model`: The LatentModel instance
-- `kwargs...`: Hyperparameter values as keyword arguments
-
-# Returns
-A precision matrix (AbstractMatrix or LinearMap) for use in GMRF construction.
+Number of latent variables in the prior.
 """
-function precision_matrix(model::LatentModel; kwargs...)
+Base.length(prior::AbstractLatentPrior) =
+    error("length not implemented for $(typeof(prior))")
+
+"""
+    hyperparameters(prior::AbstractLatentPrior) -> NamedTuple
+
+`NamedTuple` describing the hyperparameter names and their expected types.
+"""
+hyperparameters(prior::AbstractLatentPrior) =
+    error("hyperparameters not implemented for $(typeof(prior))")
+
+"""
+    constraints(prior::AbstractLatentPrior; θ...) -> Union{Nothing, Tuple}
+
+Linear-equality constraint information for the prior at hyperparameters
+`θ`. Either `nothing` (unconstrained) or a tuple `(A, e)` such that
+`A x = e` is enforced.
+"""
+constraints(prior::AbstractLatentPrior; kwargs...) =
+    error("constraints not implemented for $(typeof(prior))")
+
+"""
+    model_name(prior::AbstractLatentPrior) -> Symbol
+
+Symbol used as a parameter-name suffix when this prior is composed with
+others in a `CombinedModel` (so e.g. `τ` from two priors becomes
+`τ_ar1` and `τ_besag`).
+"""
+model_name(prior::AbstractLatentPrior) =
+    error("model_name not implemented for $(typeof(prior))")
+
+"""
+    precision_matrix(model::LatentModel; θ...) -> AbstractMatrix
+
+Precision matrix of the Gaussian latent prior at hyperparameters `θ`.
+"""
+precision_matrix(model::LatentModel; kwargs...) =
     error("precision_matrix not implemented for $(typeof(model))")
-end
 
 """
-    mean(model::LatentModel; kwargs...)
+    mean(model::LatentModel; θ...) -> AbstractVector
 
-Construct the mean vector for the model given hyperparameter values.
-
-# Arguments
-- `model`: The LatentModel instance  
-- `kwargs...`: Hyperparameter values as keyword arguments
-
-# Returns
-A mean vector (AbstractVector) for use in GMRF construction.
+Mean vector of the Gaussian latent prior at hyperparameters `θ`.
 """
-function mean(model::LatentModel; kwargs...)
+mean(model::LatentModel; kwargs...) =
     error("mean not implemented for $(typeof(model))")
-end
 
 """
-    constraints(model::LatentModel; kwargs...)
+    (model::LatentModel)(; θ...) -> AbstractGMRF
 
-Return constraint information for the model given hyperparameter values.
-
-# Arguments
-- `model`: The LatentModel instance
-- `kwargs...`: Hyperparameter values as keyword arguments  
-
-# Returns
-Either `nothing` if no constraints, or a tuple `(A, e)` where `A` is the 
-constraint matrix and `e` is the constraint vector such that `Ax = e`.
-"""
-function constraints(model::LatentModel; kwargs...)
-    error("constraints not implemented for $(typeof(model))")
-end
-
-"""
-    model_name(model::LatentModel)
-
-Return a Symbol representing the preferred name for this model type.
-
-This name is used for parameter prefixing in CombinedModel to avoid conflicts.
-For example, if two models both have a τ parameter, they become τ_ar1, τ_besag, etc.
-
-# Returns
-A Symbol that will be used as the suffix in parameter names.
-"""
-function model_name(model::LatentModel)
-    error("model_name not implemented for $(typeof(model))")
-end
-
-"""
-    (model::LatentModel)(; kwargs...)
-
-Instantiate a concrete GMRF from the LatentModel with given hyperparameter values.
-
-This method constructs the appropriate GMRF type:
-- `GMRF` if `constraints(model; kwargs...)` returns `nothing`
-- `ConstrainedGMRF` if `constraints(model; kwargs...)` returns constraint information
-
-# Arguments
-- `kwargs...`: Hyperparameter values as keyword arguments
-
-# Returns
-An `AbstractGMRF` instance (either `GMRF` or `ConstrainedGMRF`).
+Materialise a Gaussian `LatentModel` at hyperparameters `θ`. Returns a
+`GMRF` if `constraints(model; θ...) === nothing`, otherwise a
+`ConstrainedGMRF`.
 """
 function (model::LatentModel)(; kwargs...)
     μ = mean(model; kwargs...)
