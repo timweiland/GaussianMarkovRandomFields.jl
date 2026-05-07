@@ -3,6 +3,7 @@
 ```@docs
 AbstractGMRF
 GMRF
+ChordalGMRF
 precision_map
 precision_matrix
 InformationVector

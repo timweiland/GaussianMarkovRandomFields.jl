@@ -1,10 +1,12 @@
 module GaussianMarkovRandomFields
 
+using MooncakeSparse
 include("typedefs.jl")
 include("utils/utils.jl")
 include("linear_maps/linear_maps.jl")
 include("preconditioners/preconditioners.jl")
 include("gmrf.jl")
+include("chordal_gmrf.jl")
 include("metagmrf.jl")
 include("solvers/solvers.jl")
 include("workspace/workspace.jl")
