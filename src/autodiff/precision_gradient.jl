@@ -71,6 +71,25 @@ function ChainRulesCore.rrule(::Type{SymTridiagonal}, dv::AbstractVector, ev::Ab
 end
 
 """
+    ChainRulesCore.rrule(::typeof(sum), Q::SymTridiagonal)
+
+ChainRule for `sum(::SymTridiagonal)`.
+
+Restoring the rrules above triggers method invalidation that exposes a bug in
+ChainRulesCore's `ProjectTo{SymTridiagonal}`: it extracts only one triangle of
+the off-diagonal, dropping the factor of 2 from symmetry. The explicit
+`sum(::SymTridiagonal)` rrule sidesteps the projection and returns the
+correctly-doubled off-diagonal tangent.
+"""
+function ChainRulesCore.rrule(::typeof(sum), Q::SymTridiagonal)
+    function sum_symtridiag_pullback(ȳ)
+        s = unthunk(ȳ)
+        return NoTangent(), Tangent{SymTridiagonal}(dv = fill(s, length(Q.dv)), ev = fill(2s, length(Q.ev)))
+    end
+    return sum(Q), sum_symtridiag_pullback
+end
+
+"""
     compute_precision_gradient(Qinv::AbstractMatrix, r::AbstractVector, ȳ::Real)
 
 Compute the gradient of log-density w.r.t. precision matrix Q.

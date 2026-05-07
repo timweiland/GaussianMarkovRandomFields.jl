@@ -5,6 +5,30 @@ using Random: AbstractRNG, randn
 
 export ChordalGMRF
 
+"""
+    ChordalGMRF{T, Hrm, Fac, Mea} <: AbstractGMRF{T, Hrm}
+
+A `GMRF` backed by a chordal Cholesky factorization (via
+`CliqueTrees.Multifrontal.ChordalCholesky`) instead of CHOLMOD.
+
+The pure-Julia chordal factorization composes naturally with `Mooncake`'s
+reverse-mode AD through the rrules shipped by `MooncakeSparse`, so `logpdf`
+and `gaussian_approximation` give correct gradients with respect to the
+hyperparameters that produced `Q`. This is the recommended GMRF type for
+Mooncake-based hyperparameter optimization (e.g. L-BFGS / Adam on the
+marginal likelihood).
+
+# Fields
+- `μ::AbstractVector`: Mean.
+- `Q::Hermitian`: Precision matrix.
+- `F::ChordalCholesky`: Chordal Cholesky factorization of `Q`.
+
+# Construction
+```julia
+ChordalGMRF(μ, Q)              # factorize Q via ChordalCholesky
+ChordalGMRF(μ, Q, F)           # reuse a precomputed factorization
+```
+"""
 struct ChordalGMRF{T <: Real, Hrm <: Hermitian, Fac <: ChordalCholesky, Mea <: AbstractVector{T}} <: AbstractGMRF{T, Hrm}
     μ::Mea
     Q::Hrm
