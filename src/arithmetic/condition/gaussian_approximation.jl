@@ -120,108 +120,114 @@ function gaussian_approximation(
         max_linesearch_iter::Int = 10,
         verbose::Bool = false
     )
-    # Extract base GMRF and constraints (nothing for regular GMRF)
     base_gmrf = _base_gmrf(prior_gmrf)
     constraints = _extract_constraints(prior_gmrf)
-
-    # Initialize with provided starting point or prior mean
-    x_k = x0 === nothing ? mean(prior_gmrf) : copy(x0)
-
+    x_init = x0 === nothing ? mean(prior_gmrf) : copy(x0)
     cache = deepcopy(linsolve_cache(base_gmrf))
-    Q_base = precision_matrix(base_gmrf)
+    return _newton_loop(
+        prior_gmrf, obs_lik, cache, constraints, x_init;
+        max_iter, mean_change_tol, newton_dec_tol,
+        adaptive_stepsize, max_linesearch_iter, verbose,
+    )
+end
 
-    # Adaptive stepsize state (persists across outer iterations)
+"""
+    _newton_loop(prior, obs_lik, cache, constraints, x_init; ...) -> AbstractGMRF
+
+Shared Newton loop for `gaussian_approximation`. The prior side is
+queried via `prior_quadratic(prior, x_k) -> LocalLatentQuadratic` per
+iterate. For Gaussian priors the returned `(Q, h)` are constant in
+`x_k`; for non-Gaussian latent priors (`LatentPrior` adapter) they
+re-evaluate. Either way the loop body is unchanged.
+
+- `cache` — `LinearSolve` cache whose symbolic factorisation is reused
+  across iterates; the numeric matrix is updated per Newton step via
+  `_update_linsolve_cache!`.
+- `constraints` — `nothing` or `(A=..., e=...)` for KKT projection.
+"""
+function _newton_loop(
+        prior, obs_lik::ObservationLikelihood,
+        cache, constraints, x_init::AbstractVector;
+        max_iter::Int,
+        mean_change_tol::Real,
+        newton_dec_tol::Real,
+        adaptive_stepsize::Bool,
+        max_linesearch_iter::Int,
+        verbose::Bool,
+    )
+    x_k = copy(x_init)
     α = 1.0
-
     verbose && println("Starting Fisher scoring...")
 
     for iter in 1:max_iter
-        # Compute observation likelihood derivatives at current point
-        H_k = loghessian(x_k, obs_lik)  # Hessian: ∇²ₓ log p(y|x)
+        lq = prior_quadratic(prior, x_k)
+        H_k = loghessian(x_k, obs_lik)
+        g_l = loggrad(x_k, obs_lik)
 
-        # Update precision: Q_new = Q_base - H_k (note: H_k contains negative of Hessian)
-        Q_new = prepare_for_linsolve(Q_base - H_k, cache.alg)
-
+        Q_new = prepare_for_linsolve(lq.Q - H_k, cache.alg)
         _update_linsolve_cache!(cache, Q_new)
-        neg_score_k = ∇ₓ_neg_log_posterior(base_gmrf, obs_lik, x_k)
+
+        # ∇ₓ neg_log_posterior(x_k) = -∇log p_prior(x_k) - ∇log p_lik(x_k).
+        # Prior gradient in natural form: ∇log p(x_k) = lq.h - lq.Q · x_k.
+        neg_score_k = (lq.Q * x_k - lq.h) .- g_l
         cache.b = neg_score_k
         step = copy(solve!(cache).u)
-
-        # For constrained problems, project step onto constraint tangent space
-        # via the KKT Schur complement (m sparse solves, m = #constraints).
-        # This ensures A*step = 0, so x_k - α*step stays on the manifold.
         step = _constrain_step(step, cache, constraints)
 
-        # Apply step with adaptive line search or full step
         if adaptive_stepsize
-            obj_current = neg_log_posterior(base_gmrf, obs_lik, x_k)
+            obj_current = -lq.logp_ref - loglik(x_k, obs_lik)
             step_accepted = false
-
+            local x_candidate
             for ls_iter in 1:max_linesearch_iter
-                candidate = x_k - α * step
-                obj_candidate = neg_log_posterior(base_gmrf, obs_lik, candidate)
-
+                x_candidate = x_k - α * step
+                logp_cand = prior_quadratic(prior, x_candidate).logp_ref
+                obj_candidate = -logp_cand - loglik(x_candidate, obs_lik)
                 if obj_candidate <= obj_current
-                    # Accept step, increase α toward 1
-                    μ_new = candidate
                     α = sqrt(α)
                     step_accepted = true
                     verbose && ls_iter > 1 && println("    Accepted at α=$(round(α^2, digits = 3)) after $ls_iter backtracks")
                     break
                 else
-                    # Reject, reduce stepsize
                     α *= 0.1
                     verbose && println("    Backtrack: α=$(round(α, digits = 4))")
-
                     if α * norm(step, Inf) < newton_dec_tol / 1000
-                        μ_new = candidate
                         step_accepted = true
                         break
                     end
                 end
             end
-
-            if !step_accepted
-                μ_new = x_k - α * step
-            end
+            x_new = step_accepted ? x_candidate : (x_k - α * step)
         else
-            μ_new = x_k - step
+            x_new = x_k - step
         end
 
-        # Newton decrement: dot(g, constrained_step) = -g'Δx_nt = Δx_nt'HΔx_nt ≥ 0
         newton_decrement = dot(neg_score_k, step)
-
-        x_new = μ_new
         mean_change = norm(x_new - x_k)
-        mean_change_rel = mean_change / norm(x_k)
-
+        mean_change_rel = mean_change / max(norm(x_k), 1.0e-10)
         verbose && println("  Iter $iter: Newton dec = $(round(newton_decrement, sigdigits = 3)), α = $(round(α, digits = 3))")
+
         if (newton_decrement < newton_dec_tol) || (mean_change < mean_change_tol) || (mean_change_rel < mean_change_tol)
             verbose && println("  Converged after $iter iterations")
-            # Refresh Q at x_new so the posterior mean and precision are
-            # consistent (Q_new above was computed at x_k, not x_new). At
-            # convergence x_new ≈ x_k, but the mismatch shows up as a small
-            # ~1e-4 error in AD gradients and matters for downstream INLA
-            # hyperparameter optimization. The max_iter branch already does
-            # this refresh (it recomputes H_k at the final iterate).
-            H_final = loghessian(x_new, obs_lik)
-            Q_final = prepare_for_linsolve(Q_base - H_final, cache.alg)
-            _update_linsolve_cache!(cache, Q_final)
-            new_gmrf = GMRF(x_new, Q_final; linsolve_cache = cache)
-            return _apply_constraints(new_gmrf, constraints)
+            return _build_posterior(prior, obs_lik, cache, constraints, x_new)
         end
 
-        # Update for next iteration
         x_k = x_new
     end
 
-    verbose && println("  Reached max_iter = $max_iter without convergence")
+    verbose && println("  Reached max_iter without convergence")
+    return _build_posterior(prior, obs_lik, cache, constraints, x_k)
+end
 
-    # Return current best approximation
-    H_k = loghessian(x_k, obs_lik)
-    Q_final = prepare_for_linsolve(Q_base - H_k, cache.alg)
-    cache.A = Q_final
-    final_gmrf = GMRF(x_k, Q_final; linsolve_cache = cache)
+# Refresh Q at the final iterate so the posterior `(mean, precision)` are
+# consistent (the loop's last `_update_linsolve_cache!` happened at
+# `x_k`, not `x_new`). Matters for AD gradients on hyperparameter
+# objectives where small drift turns into ~1e-4 error.
+function _build_posterior(prior, obs_lik, cache, constraints, x_final)
+    Q_p_final = prior_quadratic(prior, x_final).Q
+    H_final = loghessian(x_final, obs_lik)
+    Q_final = prepare_for_linsolve(Q_p_final - H_final, cache.alg)
+    _update_linsolve_cache!(cache, Q_final)
+    final_gmrf = GMRF(x_final, Q_final; linsolve_cache = cache)
     return _apply_constraints(final_gmrf, constraints)
 end
 

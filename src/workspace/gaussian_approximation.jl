@@ -117,16 +117,18 @@ Project Newton step onto constraint tangent space via KKT Schur complement,
 using the workspace's factorization for the m sparse solves.
 """
 _workspace_constrain_step(step, ws, ::Nothing) = step
-function _workspace_constrain_step(step, ws::GMRFWorkspace, constraints::ConstraintInfo)
-    A = constraints.matrix
+_workspace_constrain_step(step, ws::GMRFWorkspace, constraints::ConstraintInfo) =
+    _workspace_constrain_with_matrix(step, ws, constraints.matrix)
+_workspace_constrain_step(step, ws::GMRFWorkspace, constraints::NamedTuple) =
+    _workspace_constrain_with_matrix(step, ws, constraints.A)
+
+function _workspace_constrain_with_matrix(step, ws::GMRFWorkspace, A)
     m = size(A, 1)
     n = length(step)
-
     A_tilde_T = Matrix{eltype(step)}(undef, n, m)
     for i in 1:m
         A_tilde_T[:, i] .= workspace_solve(ws, A[i, :])
     end
-
     L_c = cholesky(Symmetric(A * A_tilde_T))
     return step - A_tilde_T * (L_c \ (A * step))
 end
@@ -159,15 +161,17 @@ function _build_result(ws::GMRFWorkspace, x::Vector, prior_constraints::Constrai
     return WorkspaceGMRF(x, Q_post, ws, prior_constraints.matrix, prior_constraints.vector)
 end
 
+function _build_result(ws::GMRFWorkspace, x::Vector, prior_constraints::NamedTuple)
+    Q_post = _snapshot_Q(ws)
+    return WorkspaceGMRF(x, Q_post, ws, prior_constraints.A, prior_constraints.e)
+end
+
 """
     gaussian_approximation(prior::WorkspaceGMRF, obs_lik::ObservationLikelihood; kwargs...)
 
-Workspace-aware Gaussian approximation via Fisher scoring.
-
-Uses the workspace's factorization engine for numeric-only refactorization
-on each Newton step. Handles both unconstrained and constrained priors
-(constraint-projected Newton steps when `prior.constraints !== nothing`).
-Returns a `WorkspaceGMRF` with the posterior mode and precision.
+Workspace-aware Gaussian approximation via Fisher scoring. Uses the
+workspace's factorisation engine for numeric-only refactorisation on
+each Newton step.
 """
 function gaussian_approximation(
         prior::WorkspaceGMRF,
@@ -181,48 +185,66 @@ function gaussian_approximation(
         verbose::Bool = false
     )
     ws = prior.workspace
-    constraints = prior.constraints
-
-    # Make sure ws.Q reflects this prior's snapshot before reading values
-    # out of it. Without this, a workspace recently used by a different
-    # WorkspaceGMRF would seed `prior_nzval` with the wrong precision.
+    # Make sure ws.Q reflects this prior's snapshot before the loop reads
+    # the prior's `(Q, h)` out of it on iter 1.
     ensure_loaded!(prior)
+    x_init = x0 === nothing ? copy(mean(prior)) : copy(x0)
+    return _workspace_newton_loop(
+        prior, ws, obs_lik, prior.constraints, x_init;
+        max_iter, mean_change_tol, newton_dec_tol,
+        adaptive_stepsize, max_linesearch_iter, verbose,
+    )
+end
 
-    # For the Newton loop, we need the unconstrained base WorkspaceGMRF
-    # (precision_map, gradlogpdf use the unconstrained precision and mean)
-    base_prior = has_constraints(prior) ?
-        WorkspaceGMRF(prior.mean, prior.precision, ws) : prior
+"""
+    _workspace_newton_loop(prior, ws, obs_lik, constraints, x_init; ...) -> WorkspaceGMRF
 
-    prior_nzval = copy(ws.Q.nzval)
+Shared workspace-backed Newton loop. The prior side is queried via
+`prior_quadratic(prior, x_k)` per iterate; for materialised
+`WorkspaceGMRF` priors `(Q, h)` are constant in `x_k`, while for the
+`LatentPrior` adapter they re-evaluate via `local_quadratic`. The
+workspace's symbolic factor is reused as long as the sparsity pattern is
+constant, which is true whenever the prior's structural couplings are
+fixed by the model graph (the realistic case).
+"""
+function _workspace_newton_loop(
+        prior, ws::GMRFWorkspace, obs_lik::ObservationLikelihood,
+        constraints, x_init::AbstractVector;
+        max_iter::Int,
+        mean_change_tol::Real,
+        newton_dec_tol::Real,
+        adaptive_stepsize::Bool,
+        max_linesearch_iter::Int,
+        verbose::Bool,
+    )
     diag_idx = _diagonal_indices(ws.Q)
     sparse_hess_map = nothing
-
-    x_k = x0 === nothing ? copy(mean(prior)) : copy(x0)
+    x_k = copy(x_init)
     α = 1.0
 
     verbose && println("Starting workspace Fisher scoring...")
 
     for iter in 1:max_iter
+        lq = prior_quadratic(prior, x_k)
         H_k = loghessian(x_k, obs_lik)
-        sparse_hess_map = _update_hessian!(ws, H_k, prior_nzval, diag_idx, sparse_hess_map)
+        g_l = loggrad(x_k, obs_lik)
+
+        sparse_hess_map = _update_hessian!(ws, H_k, lq.Q.nzval, diag_idx, sparse_hess_map)
         ensure_numeric!(ws)
 
-        neg_score_k = ∇ₓ_neg_log_posterior(base_prior, obs_lik, x_k)
+        neg_score_k = (lq.Q * x_k - lq.h) .- g_l
         step = workspace_solve(ws, neg_score_k)
-
-        # Constraint projection if needed
         step = _workspace_constrain_step(step, ws, constraints)
 
         if adaptive_stepsize
-            obj_current = neg_log_posterior(base_prior, obs_lik, x_k)
+            obj_current = -lq.logp_ref - loglik(x_k, obs_lik)
             step_accepted = false
-
+            local x_candidate
             for ls_iter in 1:max_linesearch_iter
-                candidate = x_k - α * step
-                obj_candidate = neg_log_posterior(base_prior, obs_lik, candidate)
-
+                x_candidate = x_k - α * step
+                logp_cand = prior_quadratic(prior, x_candidate).logp_ref
+                obj_candidate = -logp_cand - loglik(x_candidate, obs_lik)
                 if obj_candidate <= obj_current
-                    μ_new = candidate
                     α = sqrt(α)
                     step_accepted = true
                     verbose && ls_iter > 1 &&
@@ -231,56 +253,48 @@ function gaussian_approximation(
                 else
                     α *= 0.1
                     verbose && println("    Backtrack: α=$(round(α, digits = 4))")
-
                     if α * norm(step, Inf) < newton_dec_tol / 1000
-                        μ_new = candidate
                         step_accepted = true
                         break
                     end
                 end
             end
-
-            if !step_accepted
-                μ_new = x_k - α * step
-            end
+            x_new = step_accepted ? x_candidate : (x_k - α * step)
         else
-            μ_new = x_k - step
+            x_new = x_k - step
         end
 
         newton_decrement = dot(neg_score_k, step)
-        x_new = μ_new
         mean_change = norm(x_new - x_k)
         mean_change_rel = mean_change / max(norm(x_k), 1.0e-10)
-
-        verbose &&
-            println("  Iter $iter: Newton dec = $(round(newton_decrement, sigdigits = 3)), α = $(round(α, digits = 3))")
+        verbose && println(
+            "  Iter $iter: Newton dec = $(round(newton_decrement, sigdigits = 3)), α = $(round(α, digits = 3))"
+        )
 
         if (newton_decrement < newton_dec_tol) ||
                 (mean_change < mean_change_tol) ||
                 (mean_change_rel < mean_change_tol)
             verbose && println("  Converged after $iter iterations")
-            # Refresh ws.Q to Q_post(x_new) so `_build_result` snapshots the
-            # correct posterior precision. Without this, the line search's
-            # reload of Q_prior (via `ensure_loaded!` when the constrained
-            # branch uses a fresh `base_prior`, or whenever
-            # `_update_hessian!` tags the workspace as unowned) would leave
-            # ws.Q mismatched with x_new.
-            H_final = loghessian(x_new, obs_lik)
-            sparse_hess_map = _update_hessian!(ws, H_final, prior_nzval, diag_idx, sparse_hess_map)
-            ensure_numeric!(ws)
-            return _build_result(ws, x_new, constraints)
+            return _workspace_build_result(prior, ws, obs_lik, constraints, x_new, diag_idx, sparse_hess_map)
         end
 
         x_k = x_new
     end
 
-    verbose && println("  Reached max_iter = $max_iter without convergence")
+    verbose && println("  Reached max_iter without convergence")
+    return _workspace_build_result(prior, ws, obs_lik, constraints, x_k, diag_idx, sparse_hess_map)
+end
 
-    H_k = loghessian(x_k, obs_lik)
-    sparse_hess_map = _update_hessian!(ws, H_k, prior_nzval, diag_idx, sparse_hess_map)
+# Refresh ws.Q to Q_post(x_final) so the snapshot used by `_build_result`
+# reflects the converged iterate (the loop's last `_update_hessian!` may
+# have happened at `x_k`, not `x_new`; line-search reload of Q_prior via
+# `ensure_loaded!` could also have left ws.Q out of sync).
+function _workspace_build_result(prior, ws, obs_lik, constraints, x_final, diag_idx, sparse_hess_map)
+    lq_final = prior_quadratic(prior, x_final)
+    H_final = loghessian(x_final, obs_lik)
+    _update_hessian!(ws, H_final, lq_final.Q.nzval, diag_idx, sparse_hess_map)
     ensure_numeric!(ws)
-
-    return _build_result(ws, x_k, constraints)
+    return _build_result(ws, x_final, constraints)
 end
 
 # Conjugate Normal case: fall back to the existing linear_condition path
