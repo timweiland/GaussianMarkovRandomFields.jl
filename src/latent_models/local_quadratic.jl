@@ -1,4 +1,4 @@
-export LocalLatentQuadratic, local_quadratic, prior_quadratic
+export LocalLatentQuadratic, local_quadratic
 
 """
     LocalLatentQuadratic{TQ, Th, T, Tx}

@@ -53,7 +53,6 @@ model_name(::AbstractLatentPrior)
 ```@docs
 LocalLatentQuadratic
 local_quadratic
-prior_quadratic
 ```
 
 ## Available Models
