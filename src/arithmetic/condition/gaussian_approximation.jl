@@ -219,7 +219,16 @@ function gaussian_approximation(
         verbose && println("  Iter $iter: Newton dec = $(round(newton_decrement, sigdigits = 3)), α = $(round(α, digits = 3))")
         if (newton_decrement < newton_dec_tol) || (mean_change < mean_change_tol) || (mean_change_rel < mean_change_tol)
             verbose && println("  Converged after $iter iterations")
-            return _ga_make_posterior(x_new, Q_new, solver, prior_gmrf, constraints)
+            # Refresh Q at x_new so the posterior mean and precision are
+            # consistent (Q_new above was computed at x_k, not x_new). At
+            # convergence x_new ≈ x_k, but the mismatch shows up as a small
+            # ~1e-4 error in AD gradients and matters for downstream INLA
+            # hyperparameter optimization. The max_iter branch already does
+            # this refresh (it recomputes H_k at the final iterate).
+            H_final = loghessian(x_new, obs_lik)
+            neg_score_final = ∇ₓ_neg_log_posterior(base_gmrf, obs_lik, x_new)
+            Q_final, _ = _ga_update_and_solve!(solver, Q_base, H_final, neg_score_final, base_gmrf)
+            return _ga_make_posterior(x_new, Q_final, solver, prior_gmrf, constraints)
         end
 
         x_k = x_new

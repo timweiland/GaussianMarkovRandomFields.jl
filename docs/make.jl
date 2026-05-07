@@ -20,11 +20,13 @@ makedocs(
             "tutorials/kl_approximation.md",
             "tutorials/automatic_differentiation.md",
             "tutorials/graphical_lasso.md",
+            "tutorials/workspace_factorization_reuse.md",
         ],
         "API Reference" => [
             "Overview" => "reference/index.md",
             "GMRFs" => "reference/gmrfs.md",
             "Latent Models" => "reference/latent_models.md",
+            "Workspaces" => "reference/workspaces.md",
             "Observation Models" => "reference/observation_models.md",
             "Gaussian Approximation" => "reference/gaussian_approximation.md",
             "Hard Constraints" => "reference/hard_constraints.md",
