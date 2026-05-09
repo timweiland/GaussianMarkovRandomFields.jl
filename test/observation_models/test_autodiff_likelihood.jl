@@ -117,10 +117,11 @@ using ForwardDiff
     end
 
     @testset "Pointwise Hessian fast path returns Diagonal" begin
-        # When `pointwise_loglik_func` is set, loghessian short-circuits to
-        # a per-element 1D second-derivative path that returns `Diagonal`
-        # directly — bypassing DI.hessian entirely. Doubles as the
-        # nested-AD-friendly route since 1D second derivatives nest cleanly.
+        # With BOTH `pointwise_loglik_func` and `diagonal_hessian_safe = true`,
+        # loghessian short-circuits to a per-element 1D second-derivative path
+        # that returns `Diagonal` directly — bypassing DI.hessian entirely.
+        # Doubles as the nested-AD-friendly route since 1D second derivatives
+        # nest cleanly.
         using LinearAlgebra: Diagonal
 
         function loglik_sum(x; y, σ)
@@ -137,6 +138,7 @@ using ForwardDiff
             grad_backend = DI.AutoForwardDiff(),
             hessian_backend = DI.AutoForwardDiff(),
             pointwise_loglik_func = loglik_pointwise,
+            diagonal_hessian_safe = true,
         )
 
         y_data = [1.0, 2.0, 3.0, 4.0]
@@ -154,5 +156,74 @@ using ForwardDiff
         v = [1.0, 0.0, 0.0, 0.0]
         val = ForwardDiff.derivative(t -> sum(loghessian(x .+ t .* v, obs_lik)), 0.0)
         @test val ≈ 0.0  # H is constant in x for the Gaussian case
+    end
+
+    @testset "Diagonal-Hessian shortcut is opt-in (issue #102)" begin
+        # Pointwise availability does NOT imply diagonal Hessian. For
+        # `y[i] ~ Normal(Aᵢᵀ x, σ)` the per-observation term `i` depends on
+        # every `x[j]` with `A[i,j] ≠ 0`, so the Hessian is `A' diag(...) A`,
+        # not `Diagonal(...)`. With `diagonal_hessian_safe` defaulting to
+        # `false`, `loghessian` must return the full (correct) Hessian.
+        using LinearAlgebra: Diagonal
+
+        # Linear predictor mixes both latent components in every observation.
+        A = [
+            1.0 0.5;
+            0.5 1.0;
+            0.7 0.3;
+        ]
+
+        function lp_loglik(x; y, σ, A)
+            r = y .- A * x
+            return -0.5 * sum(r .^ 2) / σ^2
+        end
+        function lp_pointwise(x; y, σ, A)
+            r = y .- A * x
+            return -0.5 .* (r .^ 2) ./ σ^2
+        end
+
+        obs_model_unsafe = AutoDiffObservationModel(
+            lp_loglik;
+            n_latent = 2,
+            hyperparams = (:σ, :A),
+            grad_backend = DI.AutoForwardDiff(),
+            hessian_backend = DI.AutoForwardDiff(),
+            pointwise_loglik_func = lp_pointwise,
+            # diagonal_hessian_safe defaults to `false`
+        )
+
+        y_data = [1.0, 2.0, 1.5]
+        σ = 0.5
+        x = [0.7, 1.1]
+        obs_lik_unsafe = obs_model_unsafe(y_data; σ = σ, A = A)
+
+        H_full = loghessian(x, obs_lik_unsafe)
+        H_expected = -A' * A / σ^2
+
+        # Default path returns the full Hessian, not a diagonal stub.
+        @test !(H_full isa Diagonal)
+        @test H_full ≈ H_expected
+        # Off-diagonal must be present and nonzero — the bug was returning 0 here.
+        @test abs(H_full[1, 2]) > 1.0e-3
+
+        # Sanity: diagonal entries also differ from what the broken shortcut
+        # would have produced (the shortcut only sums one observation term per i).
+        # H_full[1,1] = -sum(A[:,1].^2)/σ²; broken[1,1] would have been -A[1,1]²/σ².
+        @test H_full[1, 1] ≈ -sum(A[:, 1] .^ 2) / σ^2
+        @test H_full[1, 1] != -A[1, 1]^2 / σ^2
+
+        # Opting in flips back to the (now wrong-for-this-model) diagonal path.
+        # Verifies the gate, not correctness — user is asserting the safety.
+        obs_model_optedin = AutoDiffObservationModel(
+            lp_loglik;
+            n_latent = 2,
+            hyperparams = (:σ, :A),
+            grad_backend = DI.AutoForwardDiff(),
+            hessian_backend = DI.AutoForwardDiff(),
+            pointwise_loglik_func = lp_pointwise,
+            diagonal_hessian_safe = true,
+        )
+        obs_lik_optedin = obs_model_optedin(y_data; σ = σ, A = A)
+        @test loghessian(x, obs_lik_optedin) isa Diagonal
     end
 end
