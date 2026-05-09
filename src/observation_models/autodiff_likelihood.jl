@@ -83,11 +83,9 @@ it via dispatch and route `gaussian_approximation` through a primal-Newton
 - `pointwise_loglik_func::PF`: Optional pointwise log-likelihood, signature `(x; y, hyperparam_kwargs...) -> Vector{Real}`.
 - `y::Y`: Stored observation data.
 - `hyperparams::HP`: Stored hyperparameter values.
-- `diagonal_hessian_safe::Bool`: User assertion that the i-th pointwise term
-  depends only on `x[i]` (so the full Hessian is exactly diagonal). Gates the
-  per-element 1D second-derivative shortcut in `loghessian`. Defaults to
-  `false`; pointwise availability alone does not imply diagonal Hessian
-  structure.
+- `diagonal_hessian_safe::Bool`: When `true`, gates the per-element 1D
+  second-derivative shortcut in `loghessian`. Only set this when each
+  pointwise term `i` depends solely on `x[i]`.
 """
 struct AutoDiffLikelihood{F, B, SB, PF, Y, HP <: NamedTuple} <: GaussianMarkovRandomFields.ObservationLikelihood
     loglik_func::F
@@ -121,8 +119,9 @@ materializes a likelihood that holds those values explicitly.
 - `hess_backend::SB`: AD backend for Hessians.
 - `hyperparams::H`: Tuple of hyperparameter names.
 - `pointwise_loglik_func::PF`: Optional pointwise log-likelihood.
-- `diagonal_hessian_safe::Bool`: User assertion that the i-th pointwise term
-  depends only on `x[i]` (so the full Hessian is exactly diagonal).
+- `diagonal_hessian_safe::Bool`: When `true`, opts into the diagonal-Hessian
+  shortcut in `loghessian`. Only valid when each pointwise term `i`
+  depends solely on `x[i]`.
 
 # Usage
 ```julia
@@ -168,13 +167,10 @@ Construct an `AutoDiffObservationModel`.
 
 ## `diagonal_hessian_safe`
 
-When `pointwise_loglik_func` is provided AND `diagonal_hessian_safe = true`,
-`loghessian` takes a per-element 1D second-derivative shortcut that returns
-a `Diagonal`. This is mathematically valid only if each pointwise term `i`
-depends only on `x[i]` — i.e. the linear predictor of observation `i` is
-literally `x[i]`. Models like `y[i] ~ Family(Aᵢᵀ x)` (regression on a
-non-trivial design, additive models, link from a covariate combination)
-have a non-diagonal Hessian and must keep the default `false`.
+When both `pointwise_loglik_func` is provided AND `diagonal_hessian_safe = true`,
+`loghessian` returns a `Diagonal` via per-element 1D second derivatives.
+Only valid when the linear predictor of observation `i` is literally `x[i]`;
+models like `y[i] ~ Family(Aᵢᵀ x)` must keep the default `false`.
 """
 function AutoDiffObservationModel(loglik_func; n_latent, hyperparams = (), grad_backend = default_grad_backend(), hessian_backend = default_hessian_backend(grad_backend), pointwise_loglik_func = nothing, diagonal_hessian_safe::Bool = false)
     if hessian_backend === nothing
@@ -202,12 +198,8 @@ Two forms:
    Convenient for one-off uses but loses the nested-AD-friendly dispatch
    route — prefer form (1) when differentiating through a hyperparameter.
 
-`pointwise_loglik_func` enables the WAIC/CPO accumulator path. The
-`diagonal_hessian_safe` keyword (default `false`) is independent: it
-gates the per-element 1D second-derivative shortcut in `loghessian` and
-should only be set `true` when each pointwise term `i` depends solely on
-`x[i]` (e.g. `y[i] ~ Family(x[i])`), not when the linear predictor mixes
-latent components.
+`diagonal_hessian_safe` (default `false`) is independent of
+`pointwise_loglik_func`. See `AutoDiffObservationModel` for the contract.
 """
 function AutoDiffLikelihood(
         loglik_func;
