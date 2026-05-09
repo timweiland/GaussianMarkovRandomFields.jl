@@ -76,10 +76,11 @@ Non-canonical links use general chain rule formulations which may be slower.
 
 See also: [`LinkFunction`](@ref), [`loglik`](@ref), [`conditional_distribution`](@ref)
 """
-struct ExponentialFamily{F <: Distribution, L <: LinkFunction, I} <: ObservationModel
+struct ExponentialFamily{F <: Distribution, L <: LinkFunction, I, A} <: ObservationModel
     family::Type{F}
     link::L
     indices::I  # Can be Nothing, UnitRange, or Vector{Int}
+    kwarg_aliases::A  # Nothing or NamedTuple{inner_names}(outer_name_symbols)
 end
 
 """
@@ -109,11 +110,17 @@ bernoulli_model = ExponentialFamily(Bernoulli) # Uses LogitLink
 
 See also: [`ExponentialFamily`](@ref)
 """
-# Main constructor with optional indices
-ExponentialFamily(family::Type{<:Distribution}; indices = nothing) = ExponentialFamily(family, _default_link(family), indices)
+# Main constructor with optional indices and per-hyperparameter kwarg aliases
+function ExponentialFamily(family::Type{<:Distribution}; indices = nothing, kwargs...)
+    aliases = _build_kwarg_aliases(family, NamedTuple(kwargs))
+    return ExponentialFamily(family, _default_link(family), indices, aliases)
+end
 
-# Constructor with explicit link function and optional indices
-ExponentialFamily(family::Type{<:Distribution}, link::LinkFunction; indices = nothing) = ExponentialFamily(family, link, indices)
+# Constructor with explicit link function and optional indices and aliases
+function ExponentialFamily(family::Type{<:Distribution}, link::LinkFunction; indices = nothing, kwargs...)
+    aliases = _build_kwarg_aliases(family, NamedTuple(kwargs))
+    return ExponentialFamily(family, link, indices, aliases)
+end
 
 _default_link(::Type{<:Normal}) = IdentityLink()
 _default_link(::Type{<:Poisson}) = LogLink()
@@ -122,6 +129,45 @@ _default_link(::Type{<:Binomial}) = LogitLink()
 _default_link(::Type{<:NegativeBinomial}) = LogLink()
 _default_link(::Type{<:Gamma}) = LogLink()
 _default_link(::Type{<:TDist}) = IdentityLink()
+
+# Hyperparameter names that may be aliased per family.
+_hyperparameter_names(::Type{<:Normal}) = (:σ,)
+_hyperparameter_names(::Type{<:Bernoulli}) = ()
+_hyperparameter_names(::Type{<:Binomial}) = ()
+_hyperparameter_names(::Type{<:Poisson}) = ()
+_hyperparameter_names(::Type{<:NegativeBinomial}) = (:r,)
+_hyperparameter_names(::Type{<:Gamma}) = (:phi,)
+_hyperparameter_names(::Type{<:TDist}) = (:σ, :ν)
+
+function _build_kwarg_aliases(family::Type{<:Distribution}, kwargs::NamedTuple{names}) where {names}
+    isempty(names) && return nothing
+    valid = _hyperparameter_names(family)
+    for k in names
+        k in valid || throw(
+            ArgumentError(
+                "`$k` is not a hyperparameter of $family. Valid hyperparameters: $valid",
+            )
+        )
+    end
+    for v in values(kwargs)
+        v isa Symbol || throw(
+            ArgumentError(
+                "ExponentialFamily kwarg aliases must map to Symbol values, got $(typeof(v))",
+            )
+        )
+    end
+    return kwargs
+end
+
+@inline _resolve_aliases(::Nothing, nt::NamedTuple) = nt
+
+@inline function _resolve_aliases(
+        aliases::NamedTuple{inner_names, <:Tuple{Vararg{Symbol}}},
+        nt::NamedTuple,
+    ) where {inner_names}
+    inner_vals = map(outer -> getfield(nt, outer), values(aliases))
+    return merge(nt, NamedTuple{inner_names}(inner_vals))
+end
 
 """
     conditional_distribution(obs_model::ExponentialFamily, x; θ_named...) -> Distribution
@@ -163,6 +209,12 @@ y_new = rand(dist)                  # Sample new data
 ```
 """
 function conditional_distribution(obs_model::ExponentialFamily, x; kwargs...)
+    nt = values(kwargs)
+    resolved = _resolve_aliases(obs_model.kwarg_aliases, nt)
+    return _conditional_distribution(obs_model, x; resolved...)
+end
+
+function _conditional_distribution(obs_model::ExponentialFamily, x; kwargs...)
     η = x  # Linear predictor
     μ = apply_invlink.(Ref(obs_model.link), η)
     return _conditional_distribution_family(obs_model.family, μ; kwargs...)
@@ -184,7 +236,7 @@ function _conditional_distribution_family(::Type{<:Binomial}, μ; n, kwargs...)
     return product_distribution(Binomial.(n, μ))
 end
 
-function conditional_distribution(obs_model::ExponentialFamily{NegativeBinomial}, x; r, offset = nothing, kwargs...)
+function _conditional_distribution(obs_model::ExponentialFamily{NegativeBinomial}, x; r, offset = nothing, kwargs...)
     if (offset !== nothing) && !(obs_model.link isa LogLink)
         throw(ArgumentError("offset is only supported for NegativeBinomial with LogLink"))
     end
@@ -207,7 +259,7 @@ function _conditional_distribution_family(::Type{<:TDist}, μ; σ, ν, kwargs...
     return product_distribution(μ .+ σ_eff .* TDist(ν))
 end
 
-function conditional_distribution(obs_model::ExponentialFamily{Poisson}, x; offset = nothing, kwargs...)
+function _conditional_distribution(obs_model::ExponentialFamily{Poisson}, x; offset = nothing, kwargs...)
     # Offsets are only supported for Poisson with LogLink (log-exposure)
     if (offset !== nothing) && !(obs_model.link isa LogLink)
         throw(ArgumentError("offset is only supported for Poisson with LogLink"))
@@ -226,27 +278,33 @@ end
 # FACTORY PATTERN: Make ExponentialFamily callable to create materialized likelihoods
 # =======================================================================================
 
-function (obs_model::ExponentialFamily{Normal, L, I})(y; σ, kwargs...) where {L, I}
+@inline function (obs_model::ExponentialFamily)(y; kwargs...)
+    nt = values(kwargs)
+    resolved = _resolve_aliases(obs_model.kwarg_aliases, nt)
+    return _materialize(obs_model, y; resolved...)
+end
+
+function _materialize(obs_model::ExponentialFamily{Normal}, y; σ, kwargs...)
     return NormalLikelihood(obs_model.link, Float64.(y), σ, one(σ) / (σ^2), log(σ), obs_model.indices)
 end
 
-function (obs_model::ExponentialFamily{Poisson, L, I})(y::PoissonObservations; kwargs...) where {L, I}
+function _materialize(obs_model::ExponentialFamily{Poisson}, y::PoissonObservations; kwargs...)
     return PoissonLikelihood(obs_model.link, y.counts, obs_model.indices, y.logexposure)
 end
 
-function (obs_model::ExponentialFamily{Bernoulli, L, I})(y; kwargs...) where {L, I}
+function _materialize(obs_model::ExponentialFamily{Bernoulli}, y; kwargs...)
     return BernoulliLikelihood(obs_model.link, Int.(y), obs_model.indices)
 end
 
-function (obs_model::ExponentialFamily{Binomial, L, I})(y::BinomialObservations; kwargs...) where {L, I}
+function _materialize(obs_model::ExponentialFamily{Binomial}, y::BinomialObservations; kwargs...)
     return BinomialLikelihood(obs_model.link, successes(y), trials(y), obs_model.indices)
 end
 
-function (obs_model::ExponentialFamily{NegativeBinomial, L, I})(y::NegativeBinomialObservations; r, kwargs...) where {L, I}
+function _materialize(obs_model::ExponentialFamily{NegativeBinomial}, y::NegativeBinomialObservations; r, kwargs...)
     return NegBinLikelihood(obs_model.link, y.counts, r, obs_model.indices, y.logexposure)
 end
 
-function (obs_model::ExponentialFamily{Gamma, L, I})(y; phi, kwargs...) where {L, I}
+function _materialize(obs_model::ExponentialFamily{Gamma}, y; phi, kwargs...)
     phi > 0 || error("Gamma shape parameter phi must be positive (got $phi)")
     y_f64 = Float64.(y)
     for i in eachindex(y_f64)
@@ -257,7 +315,7 @@ function (obs_model::ExponentialFamily{Gamma, L, I})(y; phi, kwargs...) where {L
     return GammaLikelihood(obs_model.link, y_f64, phi, obs_model.indices)
 end
 
-function (obs_model::ExponentialFamily{TDist, L, I})(y; σ, ν, kwargs...) where {L, I}
+function _materialize(obs_model::ExponentialFamily{TDist}, y; σ, ν, kwargs...)
     σ > 0 || error("Student-t scale parameter σ must be positive (got $σ)")
     ν > 2 || error("Student-t degrees of freedom ν must be > 2 for finite variance (got $ν)")
     T = promote_type(typeof(σ), typeof(ν))
@@ -269,14 +327,9 @@ function (obs_model::ExponentialFamily{TDist, L, I})(y; σ, ν, kwargs...) where
     return StudentTLikelihood(obs_model.link, Float64.(y), σ_T, ν_T, w, νp1, σ_eff, obs_model.indices)
 end
 
-# Hyperparameter interface implementations
-hyperparameters(::ExponentialFamily{<:Normal}) = (:σ,)
-hyperparameters(::ExponentialFamily{<:Bernoulli}) = ()
-hyperparameters(::ExponentialFamily{<:Binomial}) = ()  # No hyperparameters - trials are data
-hyperparameters(::ExponentialFamily{<:Poisson}) = ()
-hyperparameters(::ExponentialFamily{<:NegativeBinomial}) = (:r,)
-hyperparameters(::ExponentialFamily{<:Gamma}) = (:phi,)
-hyperparameters(::ExponentialFamily{<:TDist}) = (:σ, :ν)
+# Hyperparameter interface — names reflect what the materialiser destructures internally,
+# regardless of any user-supplied aliases.
+hyperparameters(::ExponentialFamily{F}) where {F <: Distribution} = _hyperparameter_names(F)
 
 """
     latent_dimension(ef::ExponentialFamily, y::AbstractVector) -> Int
@@ -287,3 +340,19 @@ For ExponentialFamily models, there is a direct 1:1 mapping between observations
 and latent field components, so the latent dimension equals the observation dimension.
 """
 latent_dimension(ef::ExponentialFamily, y::AbstractVector) = length(y)
+
+# COV_EXCL_START
+function Base.show(io::IO, model::ExponentialFamily)
+    print(io, "ExponentialFamily(", nameof(model.family), ", ", model.link)
+    if model.indices !== nothing
+        print(io, ", indices=", model.indices)
+    end
+    aliases = model.kwarg_aliases
+    if aliases !== nothing
+        pairs_str = join(("$k=:$(getfield(aliases, k))" for k in keys(aliases)), ", ")
+        print(io, ", aliases=(", pairs_str, ")")
+    end
+    print(io, ")")
+    return
+end
+# COV_EXCL_STOP
