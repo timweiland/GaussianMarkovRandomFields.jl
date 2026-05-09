@@ -92,3 +92,14 @@ end
 # Primal-stripped likelihood: AD partials removed from each hyperparam.
 _primal_autodiff_likelihood(lik::GMRFs.AutoDiffLikelihood) =
     _rebuild_autodiff_likelihood(lik, GMRFs._strip_ad_partials_hyperparams(lik.hyperparams))
+
+# Extend `_primal_obs_lik` (defined in common.jl for the per-channel Dual
+# likelihoods) to recognise AutoDiffLikelihood and CompositeLikelihood. The
+# unified IFT path uses this to strip the Dual-bearing lik down to a Float64
+# version for the primal Newton pass.
+_primal_obs_lik(lik::GMRFs.AutoDiffLikelihood) =
+    _is_dual_autodifflik(lik) ? _primal_autodiff_likelihood(lik) : lik
+
+function _primal_obs_lik(lik::GMRFs.CompositeLikelihood)
+    return GMRFs.CompositeLikelihood(map(_primal_obs_lik, lik.components))
+end
