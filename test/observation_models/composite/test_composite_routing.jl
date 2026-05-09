@@ -117,6 +117,75 @@ using Distributions: Normal, Poisson
         @inferred loghessian(x, composite_lik)
     end
 
+    @testset "hyperparameters trait" begin
+        gaussian_model = ExponentialFamily(Normal)
+        poisson_model = ExponentialFamily(Poisson)
+
+        @testset "Passthrough route reports component hyperparameters" begin
+            composite_model = CompositeObservationModel((gaussian_model, poisson_model))
+            @test hyperparameters(composite_model) == (:σ,)
+
+            y_composite = CompositeObservations(([1.0, 2.0], PoissonObservations([3, 4])))
+            composite_lik = composite_model(y_composite; σ = 1.5)
+            @test hyperparameters(composite_lik) == (:σ,)
+        end
+
+        @testset "Passthrough with shared kwarg deduplicates" begin
+            composite_model = CompositeObservationModel((gaussian_model, gaussian_model))
+            @test hyperparameters(composite_model) == (:σ,)
+
+            y_composite = CompositeObservations(([1.0, 2.0], [3.0, 4.0]))
+            composite_lik = composite_model(y_composite; σ = 2.0)
+            @test hyperparameters(composite_lik) == (:σ,)
+        end
+
+        @testset "Routes report outer names" begin
+            composite_model = CompositeObservationModel(
+                (gaussian_model, gaussian_model),
+                ((σ = :σ_phys,), (σ = :σ_data,)),
+            )
+            @test hyperparameters(composite_model) == (:σ_phys, :σ_data)
+
+            y_composite = CompositeObservations(([0.5, 1.5], [10.0, 20.0]))
+            composite_lik = composite_model(y_composite; σ_phys = 0.1, σ_data = 5.0)
+            @test hyperparameters(composite_lik) == (:σ_phys, :σ_data)
+        end
+
+        @testset "Route collision deduplicates outer names" begin
+            composite_model = CompositeObservationModel(
+                (gaussian_model, gaussian_model),
+                ((σ = :σ_shared,), (σ = :σ_shared,)),
+            )
+            @test hyperparameters(composite_model) == (:σ_shared,)
+
+            y_composite = CompositeObservations(([1.0, 2.0], [3.0, 4.0]))
+            composite_lik = composite_model(y_composite; σ_shared = 1.0)
+            @test hyperparameters(composite_lik) == (:σ_shared,)
+        end
+
+        @testset "Mixed routing combines outer names and passthrough hps" begin
+            composite_model = CompositeObservationModel(
+                (gaussian_model, poisson_model),
+                ((σ = :σ_obs,), nothing),
+            )
+            @test hyperparameters(composite_model) == (:σ_obs,)
+
+            y_composite = CompositeObservations(([1.0, 2.0], PoissonObservations([3, 4])))
+            composite_lik = composite_model(y_composite; σ_obs = 0.7)
+            @test hyperparameters(composite_lik) == (:σ_obs,)
+        end
+
+        @testset "Passthrough preserves component hp despite identical name in route" begin
+            # Component 1 has a route σ -> :σ; component 2 is passthrough with σ.
+            # Both ultimately surface :σ as the outer name; result should dedupe.
+            composite_model = CompositeObservationModel(
+                (gaussian_model, gaussian_model),
+                ((σ = :σ,), nothing),
+            )
+            @test hyperparameters(composite_model) == (:σ,)
+        end
+    end
+
     @testset "Show method skips trivial routes, displays explicit ones" begin
         gaussian_model = ExponentialFamily(Normal)
         poisson_model = ExponentialFamily(Poisson)

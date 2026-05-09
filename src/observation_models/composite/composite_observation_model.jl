@@ -77,12 +77,18 @@ contributions from all component likelihoods.
 
 # Fields
 - `components::T`: Tuple of materialized component likelihoods
+- `hyperparameter_names::Tuple{Vararg{Symbol}}`: Outer hyperparameter names that were
+  used to materialize this likelihood (matches `hyperparameters` on the source model).
 """
 struct CompositeLikelihood{T <: Tuple} <: ObservationLikelihood
     components::T
+    hyperparameter_names::Tuple{Vararg{Symbol}}
 
-    function CompositeLikelihood(components::T) where {T <: Tuple}
-        return new{T}(components)
+    function CompositeLikelihood(
+            components::T,
+            hyperparameter_names::Tuple{Vararg{Symbol}} = (),
+        ) where {T <: Tuple}
+        return new{T}(components, hyperparameter_names)
     end
 end
 
@@ -112,8 +118,26 @@ function (composite_model::CompositeObservationModel)(y::CompositeObservations; 
         _materialize_component(model, route, y_comp, nt)
     end
 
-    return CompositeLikelihood(component_likelihoods)
+    return CompositeLikelihood(component_likelihoods, hyperparameters(composite_model))
 end
+
+function hyperparameters(model::CompositeObservationModel)
+    out = Symbol[]
+    for (component, route) in zip(model.components, model.routes)
+        if route === nothing
+            for s in hyperparameters(component)
+                s in out || push!(out, s)
+            end
+        else
+            for outer in values(route)
+                outer in out || push!(out, outer)
+            end
+        end
+    end
+    return Tuple(out)
+end
+
+hyperparameters(lik::CompositeLikelihood) = lik.hyperparameter_names
 
 # COV_EXCL_START
 function Base.show(io::IO, model::CompositeObservationModel)
