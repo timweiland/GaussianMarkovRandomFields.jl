@@ -1,4 +1,5 @@
 using Distributions: Normal, Poisson
+using SparseArrays: sparse
 
 @testset "Composite Likelihood Integration Tests" begin
     @testset "End-to-end workflow with indexed models" begin
@@ -118,5 +119,37 @@ using Distributions: Normal, Poisson
         @inferred loglik(x, composite_lik)
         @inferred loggrad(x, composite_lik)
         @inferred loghessian(x, composite_lik)
+    end
+
+    @testset "LTM-wrapped components" begin
+        # Two channels observe distinct linear projections of the same latent field.
+        A1 = sparse(
+            [
+                1.0 0.0 0.5 0.0;
+                0.0 1.0 0.5 0.0;
+                0.0 0.0 1.0 0.5
+            ]
+        )
+        A2 = sparse(
+            [
+                1.0 0.0 0.0 1.0;
+                0.0 1.0 0.0 1.0
+            ]
+        )
+
+        ltm1 = LinearlyTransformedObservationModel(ExponentialFamily(Normal), A1)
+        ltm2 = LinearlyTransformedObservationModel(ExponentialFamily(Poisson), A2)
+        composite_model = CompositeObservationModel((ltm1, ltm2))
+
+        y_composite = CompositeObservations(([1.0, 2.0, 1.5], PoissonObservations([2, 3])))
+        composite_lik = composite_model(y_composite; σ = 0.8)
+        lik1 = ltm1([1.0, 2.0, 1.5]; σ = 0.8)
+        lik2 = ltm2(PoissonObservations([2, 3]); σ = 0.8)
+
+        x = [0.9, 2.1, 1.4, 0.3]
+
+        @test loglik(x, composite_lik) ≈ loglik(x, lik1) + loglik(x, lik2)
+        @test loggrad(x, composite_lik) ≈ loggrad(x, lik1) + loggrad(x, lik2)
+        @test loghessian(x, composite_lik) ≈ loghessian(x, lik1) + loghessian(x, lik2)
     end
 end
