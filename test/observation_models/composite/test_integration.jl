@@ -1,4 +1,5 @@
 using Distributions: Normal, Poisson
+using SparseArrays: sparse
 
 @testset "Composite Likelihood Integration Tests" begin
     @testset "End-to-end workflow with indexed models" begin
@@ -118,5 +119,59 @@ using Distributions: Normal, Poisson
         @inferred loglik(x, composite_lik)
         @inferred loggrad(x, composite_lik)
         @inferred loghessian(x, composite_lik)
+    end
+
+    @testset "LTM-wrapped components" begin
+        # Two channels observe distinct linear projections of the same latent field.
+        n_latent = 5
+        A1 = sparse(
+            [
+                1.0 0.0 0.5 0.0 0.0;
+                0.0 1.0 0.5 0.0 0.0;
+                0.0 0.0 1.0 0.5 0.0;
+                0.0 0.0 0.0 1.0 0.5
+            ]
+        )
+        A2 = sparse(
+            [
+                1.0 0.0 0.0 0.0 1.0;
+                0.0 1.0 0.0 0.0 1.0;
+                0.0 0.0 1.0 0.0 1.0
+            ]
+        )
+
+        gaussian_base = ExponentialFamily(Normal)
+        poisson_base = ExponentialFamily(Poisson)
+
+        ltm_gaussian = LinearlyTransformedObservationModel(gaussian_base, A1)
+        ltm_poisson = LinearlyTransformedObservationModel(poisson_base, A2)
+
+        composite_model = CompositeObservationModel((ltm_gaussian, ltm_poisson))
+
+        y_gaussian = [1.0, 2.0, 1.5, 0.7]
+        y_poisson = PoissonObservations([2, 3, 1])
+        y_composite = CompositeObservations((y_gaussian, y_poisson))
+
+        composite_lik = composite_model(y_composite; σ = 0.8)
+
+        x = [0.9, 2.1, 1.4, 0.3, -0.6]
+
+        ltm_lik1 = ltm_gaussian(y_gaussian; σ = 0.8)
+        ltm_lik2 = ltm_poisson(y_poisson; σ = 0.8)
+
+        ll = loglik(x, composite_lik)
+        ll_manual = loglik(x, ltm_lik1) + loglik(x, ltm_lik2)
+        @test ll isa Float64
+        @test ll ≈ ll_manual
+
+        grad = loggrad(x, composite_lik)
+        grad_manual = loggrad(x, ltm_lik1) + loggrad(x, ltm_lik2)
+        @test length(grad) == n_latent
+        @test grad ≈ grad_manual
+
+        hess = loghessian(x, composite_lik)
+        hess_manual = loghessian(x, ltm_lik1) + loghessian(x, ltm_lik2)
+        @test size(hess) == (n_latent, n_latent)
+        @test hess ≈ hess_manual
     end
 end

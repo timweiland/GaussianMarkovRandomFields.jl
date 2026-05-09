@@ -47,15 +47,13 @@ Each component contributes its Hessian with respect to the full latent field `x`
 For overlapping dependencies, Hessians are automatically summed element-wise.
 """
 function loghessian(x, composite_lik::CompositeLikelihood)
-    # Start with zero Hessian - let first component determine type/structure
-    first_hess = loghessian(x, composite_lik.components[1])
-    total_hess = copy(first_hess)
-
-    # Sum contributions from remaining components
+    # Non-in-place accumulation: some component Hessians (e.g. `Symmetric` from
+    # `LinearlyTransformedLikelihood`) reject broadcasted `setindex!` on
+    # off-diagonal entries.
+    total_hess = loghessian(x, composite_lik.components[1])
     for i in 2:length(composite_lik.components)
-        total_hess .+= loghessian(x, composite_lik.components[i])
+        total_hess = total_hess + loghessian(x, composite_lik.components[i])
     end
-
     return total_hess
 end
 
