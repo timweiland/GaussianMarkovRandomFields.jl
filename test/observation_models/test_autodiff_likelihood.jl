@@ -117,10 +117,8 @@ using ForwardDiff
     end
 
     @testset "Pointwise Hessian fast path returns Diagonal" begin
-        # When `pointwise_loglik_func` is set, loghessian short-circuits to
-        # a per-element 1D second-derivative path that returns `Diagonal`
-        # directly — bypassing DI.hessian entirely. Doubles as the
-        # nested-AD-friendly route since 1D second derivatives nest cleanly.
+        # With both `pointwise_loglik_func` set and `diagonal_hessian_safe = true`,
+        # loghessian returns a `Diagonal` via per-element 1D second derivatives.
         using LinearAlgebra: Diagonal
 
         function loglik_sum(x; y, σ)
@@ -137,6 +135,7 @@ using ForwardDiff
             grad_backend = DI.AutoForwardDiff(),
             hessian_backend = DI.AutoForwardDiff(),
             pointwise_loglik_func = loglik_pointwise,
+            diagonal_hessian_safe = true,
         )
 
         y_data = [1.0, 2.0, 3.0, 4.0]
@@ -154,5 +153,60 @@ using ForwardDiff
         v = [1.0, 0.0, 0.0, 0.0]
         val = ForwardDiff.derivative(t -> sum(loghessian(x .+ t .* v, obs_lik)), 0.0)
         @test val ≈ 0.0  # H is constant in x for the Gaussian case
+    end
+
+    @testset "Diagonal-Hessian shortcut is opt-in (issue #102)" begin
+        # `y[i] ~ Normal(Aᵢᵀ x, σ)`: pointwise term `i` mixes latent components,
+        # so the Hessian is `-A'A/σ²`, not diagonal.
+        using LinearAlgebra: Diagonal
+
+        A = [
+            1.0 0.5;
+            0.5 1.0;
+            0.7 0.3;
+        ]
+
+        function lp_loglik(x; y, σ, A)
+            r = y .- A * x
+            return -0.5 * sum(r .^ 2) / σ^2
+        end
+        function lp_pointwise(x; y, σ, A)
+            r = y .- A * x
+            return -0.5 .* (r .^ 2) ./ σ^2
+        end
+
+        obs_model_unsafe = AutoDiffObservationModel(
+            lp_loglik;
+            n_latent = 2,
+            hyperparams = (:σ, :A),
+            grad_backend = DI.AutoForwardDiff(),
+            hessian_backend = DI.AutoForwardDiff(),
+            pointwise_loglik_func = lp_pointwise,
+        )
+
+        y_data = [1.0, 2.0, 1.5]
+        σ = 0.5
+        x = [0.7, 1.1]
+        obs_lik_unsafe = obs_model_unsafe(y_data; σ = σ, A = A)
+
+        H_full = loghessian(x, obs_lik_unsafe)
+        H_expected = -A' * A / σ^2
+
+        @test !(H_full isa Diagonal)
+        @test H_full ≈ H_expected
+        @test abs(H_full[1, 2]) > 1.0e-3
+        @test H_full[1, 1] ≈ -sum(A[:, 1] .^ 2) / σ^2
+
+        obs_model_optedin = AutoDiffObservationModel(
+            lp_loglik;
+            n_latent = 2,
+            hyperparams = (:σ, :A),
+            grad_backend = DI.AutoForwardDiff(),
+            hessian_backend = DI.AutoForwardDiff(),
+            pointwise_loglik_func = lp_pointwise,
+            diagonal_hessian_safe = true,
+        )
+        obs_lik_optedin = obs_model_optedin(y_data; σ = σ, A = A)
+        @test loghessian(x, obs_lik_optedin) isa Diagonal
     end
 end

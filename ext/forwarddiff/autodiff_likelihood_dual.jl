@@ -64,6 +64,7 @@ function _rebuild_autodiff_likelihood(lik::GMRFs.AutoDiffLikelihood, hp::NamedTu
         grad_backend = lik.grad_backend,
         hessian_backend = lik.hess_backend,
         pointwise_loglik_func = lik.pointwise_loglik_func,
+        diagonal_hessian_safe = lik.diagonal_hessian_safe,
     )
 end
 

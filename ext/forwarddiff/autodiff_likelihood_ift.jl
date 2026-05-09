@@ -53,11 +53,13 @@ _lik_carries_dual_hp(lik::GMRFs.CompositeLikelihood) =
 
 # ----------------------------------------------------------------------------
 # DI.hessian returns a dense Matrix even when the underlying Hessian is
-# structurally diagonal (the typical case for a sum-of-pointwise loglik).
-# Detect off-diagonal zeros and downcast so the IFT path can preserve
-# Q_prior's sparse pattern through `_assemble_q_post_dual`. With a
-# `pointwise_loglik_func` set, `loghessian` already returns a `Diagonal`
-# directly via the main-src fast path, so this is a defensive fallback.
+# structurally diagonal (the typical case for a sum-of-pointwise loglik
+# where each term `i` depends only on `x[i]`). Detect off-diagonal zeros
+# and downcast so the IFT path can preserve Q_prior's sparse pattern
+# through `_assemble_q_post_dual`. With both `pointwise_loglik_func` and
+# `diagonal_hessian_safe = true` set, `loghessian` already returns a
+# `Diagonal` directly via the main-src fast path, so this is a defensive
+# fallback.
 # ----------------------------------------------------------------------------
 
 _maybe_downcast_diagonal(H::Diagonal) = H
@@ -74,9 +76,10 @@ end
 
 # ----------------------------------------------------------------------------
 # Q_post_dual builder — preserves Q_prior's exact sparse structure for
-# diagonal Hessians (the dominant case via pointwise_loglik_func). For
-# subset-pattern sparse Hessians we still preserve Q_prior's pattern. For
-# arbitrary dense Hessians we fall back to algebraic subtraction.
+# diagonal Hessians (the dominant case when `pointwise_loglik_func` is set
+# AND `diagonal_hessian_safe = true`). For subset-pattern sparse Hessians
+# we still preserve Q_prior's pattern. For arbitrary dense Hessians we
+# fall back to algebraic subtraction.
 # ----------------------------------------------------------------------------
 
 # Allocate `nzval_dual` as a copy of Q_prior.nzval typed as `DualT`. For a
@@ -163,8 +166,8 @@ function _check_h_pattern_subset(H::SparseMatrixCSC, Q_prior::SparseMatrixCSC)
                         "($row, $col) outside the prior precision sparsity pattern. The " *
                         "workspace-reuse path requires H's pattern to be a subset of Q_prior. " *
                         "Use a likelihood whose Hessian is structurally diagonal " *
-                        "(e.g. supply `pointwise_loglik_func`) or call `gaussian_approximation` " *
-                        "without a `WorkspaceGMRF` prior."
+                        "(supply `pointwise_loglik_func` AND set `diagonal_hessian_safe = true`) " *
+                        "or call `gaussian_approximation` without a `WorkspaceGMRF` prior."
                 )
             )
         end
@@ -195,10 +198,10 @@ function _assemble_q_post_dual(
                 "(eltype $(eltype(H_dual)), size $(size(H_dual))), but the " *
                 "workspace-reuse path requires a structurally diagonal or " *
                 "Q_prior-pattern-subset sparse Hessian to preserve the workspace's " *
-                "symbolic factorization. Supply `pointwise_loglik_func` to opt into " *
-                "the structured Diagonal path, use a sparse Hessian backend " *
-                "(`AutoSparse(AutoForwardDiff())`), or call `gaussian_approximation` " *
-                "with a non-`WorkspaceGMRF` prior."
+                "symbolic factorization. Supply `pointwise_loglik_func` AND set " *
+                "`diagonal_hessian_safe = true` to opt into the structured Diagonal " *
+                "path, use a sparse Hessian backend (`AutoSparse(AutoForwardDiff())`), " *
+                "or call `gaussian_approximation` with a non-`WorkspaceGMRF` prior."
         )
     )
 end
