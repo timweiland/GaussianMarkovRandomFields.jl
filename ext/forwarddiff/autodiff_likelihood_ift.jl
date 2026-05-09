@@ -5,15 +5,17 @@
 #
 # Unified sequence (pure AD — no finite differences):
 #   1. Strip Duals from prior + lik → primal Newton on the stripped pair.
-#   2. At the converged primal x*, compute ∂(neg_grad)/∂θ via exact AD:
-#      lift x* to `Dual{outer_tag, Float64, N}` with zero outer-partials and
+#   2. At the converged primal x*, compute ∂(neg_grad)/∂θ via exact AD.
+#      Lift x* to `Dual{outer_tag, Float64, N}` with zero outer-partials and
 #      evaluate `Q_prior·(x_dual - μ_prior) - loggrad(x_dual, lik)` against
-#      the ORIGINAL (Dual-carrying) prior + lik. Primal value is zero
-#      (Newton condition); outer partials are the ∂(neg_grad)/∂θ_j vector.
-#      For Float64 prior the prior side contributes zero partials and the
-#      expression reduces to `-∂loggrad/∂θ`; for Float64 lik it reduces to
-#      `Q_prior·dx_partials - ∂μ_prior/∂θ - ...` driven entirely by prior
-#      Duals. Either subset works without special-casing.
+#      the ORIGINAL (Dual-carrying) prior + lik. The primal residual is
+#      zero in the unconstrained case (Newton condition); for the
+#      constrained case its tangent-space projection is zero and the
+#      projection step at IFT solve time uses ci.A_tilde_T / ci.L_c. The
+#      outer partials of the result are ∂(neg_grad)/∂θ at fixed x*. For a
+#      Dual prior they include `∂Q_prior/∂θ · (x* - μ_prior) - Q_prior ·
+#      ∂μ_prior/∂θ`; for a Dual lik they include `-∂loggrad/∂θ`. Either
+#      subset works without special-casing.
 #   3. Solve Q_post · dx*/dθ_j = -∂(neg_grad)/∂θ_j with the primal posterior
 #      factor. Project onto the constraint tangent if constrained.
 #   4. Build x_star_dual carrying dx/dθ as outer partials.
@@ -52,7 +54,7 @@ _lik_carries_dual_hp(lik::GMRFs.CompositeLikelihood) =
 # ----------------------------------------------------------------------------
 # DI.hessian returns a dense Matrix even when the underlying Hessian is
 # structurally diagonal (the typical case for a sum-of-pointwise loglik).
-# Sniff for off-diagonal zeros and downcast so the IFT path can preserve
+# Detect off-diagonal zeros and downcast so the IFT path can preserve
 # Q_prior's sparse pattern through `_assemble_q_post_dual`. With a
 # `pointwise_loglik_func` set, `loghessian` already returns a `Diagonal`
 # directly via the main-src fast path, so this is a defensive fallback.
@@ -223,19 +225,7 @@ _lik_dual_tag_npartials(::Any) = (nothing, nothing)
 _lik_dual_tag_npartials(lik::GMRFs.AutoDiffLikelihood) =
     _is_dual_autodifflik(lik) ? _outer_tag_and_npartials(lik.hyperparams) : (nothing, nothing)
 
-function _lik_dual_tag_npartials(lik::_DualNormalLik)
-    D = _dual_type_from_obs_lik(lik)
-    return ForwardDiff.tagtype(D), ForwardDiff.npartials(D)
-end
-function _lik_dual_tag_npartials(lik::_DualNegBinLik)
-    D = _dual_type_from_obs_lik(lik)
-    return ForwardDiff.tagtype(D), ForwardDiff.npartials(D)
-end
-function _lik_dual_tag_npartials(lik::_DualGammaLik)
-    D = _dual_type_from_obs_lik(lik)
-    return ForwardDiff.tagtype(D), ForwardDiff.npartials(D)
-end
-function _lik_dual_tag_npartials(lik::_DualStudentTLik)
+function _lik_dual_tag_npartials(lik::_DualObsLik)
     D = _dual_type_from_obs_lik(lik)
     return ForwardDiff.tagtype(D), ForwardDiff.npartials(D)
 end
@@ -385,18 +375,25 @@ end
 
 # ----------------------------------------------------------------------------
 # Dispatch hooks: route Dual-bearing prior×lik combinations through the IFT.
+# A single `Union` over the two lik families collapses what would otherwise
+# be four near-identical methods. Kept *separate* from the older
+# `WorkspaceGMRF{D<:Dual} + ObservationLikelihood` dispatch in
+# `workspace_gaussian_approximation.jl` because Julia's resolution would
+# pick the broader method for `_DualObsLik` types we don't want to
+# redirect through the unified path.
 # ----------------------------------------------------------------------------
 
-# Float64 prior + AutoDiffLikelihood — IFT only when hp carries Duals.
+const _WorkspaceDualHpIFTLik = Union{GMRFs.AutoDiffLikelihood, GMRFs.CompositeLikelihood}
+
+# Float64 prior — IFT only when the lik (or one of its components) carries
+# Duals. Otherwise fall through to the primal Newton path.
 function GMRFs.gaussian_approximation(
         prior_gmrf::GMRFs.WorkspaceGMRF{Float64},
-        obs_lik::GMRFs.AutoDiffLikelihood;
+        obs_lik::_WorkspaceDualHpIFTLik;
         kwargs...
     )
-    if _is_dual_autodifflik(obs_lik)
+    _lik_carries_dual_hp(obs_lik) &&
         return _workspace_dualhp_ift(prior_gmrf, obs_lik; kwargs...)
-    end
-    # Fall through to the primal-package's WorkspaceGMRF dispatch.
     return invoke(
         GMRFs.gaussian_approximation,
         Tuple{GMRFs.WorkspaceGMRF, GMRFs.ObservationLikelihood},
@@ -405,37 +402,11 @@ function GMRFs.gaussian_approximation(
     )
 end
 
-# Float64 prior + CompositeLikelihood — IFT when any component carries Duals.
-function GMRFs.gaussian_approximation(
-        prior_gmrf::GMRFs.WorkspaceGMRF{Float64},
-        obs_lik::GMRFs.CompositeLikelihood;
-        kwargs...
-    )
-    if _lik_carries_dual_hp(obs_lik)
-        return _workspace_dualhp_ift(prior_gmrf, obs_lik; kwargs...)
-    end
-    return invoke(
-        GMRFs.gaussian_approximation,
-        Tuple{GMRFs.WorkspaceGMRF, GMRFs.ObservationLikelihood},
-        prior_gmrf, obs_lik;
-        kwargs...
-    )
-end
-
-# Dual prior + AutoDiffLikelihood — always IFT (the prior's Duals would
-# otherwise be smashed by the primal Newton's Float64 workspace nzval).
+# Dual prior — always IFT. The prior's Duals would otherwise be stripped
+# away by the primal Newton's Float64 workspace nzval.
 function GMRFs.gaussian_approximation(
         prior_gmrf::GMRFs.WorkspaceGMRF{<:ForwardDiff.Dual},
-        obs_lik::GMRFs.AutoDiffLikelihood;
-        kwargs...
-    )
-    return _workspace_dualhp_ift(prior_gmrf, obs_lik; kwargs...)
-end
-
-# Dual prior + CompositeLikelihood — same rationale.
-function GMRFs.gaussian_approximation(
-        prior_gmrf::GMRFs.WorkspaceGMRF{<:ForwardDiff.Dual},
-        obs_lik::GMRFs.CompositeLikelihood;
+        obs_lik::_WorkspaceDualHpIFTLik;
         kwargs...
     )
     return _workspace_dualhp_ift(prior_gmrf, obs_lik; kwargs...)

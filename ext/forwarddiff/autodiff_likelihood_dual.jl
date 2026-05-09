@@ -1,28 +1,6 @@
-# IFT path for AutoDiffLikelihood with Dual-valued hyperparameters.
-#
-# When a hyperparameter stored on the likelihood carries `ForwardDiff.Dual`
-# partials (typical for outer-AD callers wrapping `gaussian_approximation`
-# in a `hyperparameter_logpdf(θ)` function), the standard
-# `gaussian_approximation` Newton iteration would try to mutate the
-# workspace's `Float64`-typed `Q.nzval` with Dual values. We sidestep by:
-#
-#   1. Stripping Duals from `obs_lik.hyperparams` and running primal Newton
-#      to convergence on a plain Float64 likelihood.
-#   2. Computing ∂(∇_x loglik)/∂θ at the converged x* via *exact AD*: lift
-#      x* to a `Dual{outer_tag, Float64, N}` with zero outer-partials, call
-#      `loggrad`, and read partials off the result. The closure carries
-#      Dual hyperparams so the output naturally captures θ-direction
-#      partials.
-#   3. Solving the IFT linear system Q_post · dx*/dθ_j = grad_dθ_j with the
-#      primal posterior Cholesky for each partial direction.
-#   4. Assembling a Dual posterior mean from primal x_star + IFT-derived
-#      partials. Computing the *total* `dH/dθ` via one `loghessian` call on
-#      Dual x* (carrying dx/dθ partials) + Dual hyperparams. Writing into
-#      the primal Q's exact sparse structure (preserves `colptr`/`rowval`
-#      bit-for-bit so workspace pattern checks aren't tripped).
-#
-# This path uses no finite differences anywhere — all derivatives are
-# computed via AD.
+# Helpers for AutoDiffLikelihood values whose hyperparameters carry
+# ForwardDiff.Dual partials. The unified workspace IFT implementation
+# (which consumes these helpers) lives in autodiff_likelihood_ift.jl.
 
 # ----------------------------------------------------------------------------
 # Strip / detect helpers — extend the main-src defaults to recognise Dual

@@ -1,5 +1,5 @@
 using GaussianMarkovRandomFields
-using Distributions: logpdf
+using Distributions: logpdf, Normal, NegativeBinomial, Gamma, TDist
 using SparseArrays
 using LinearAlgebra
 using Random
@@ -382,5 +382,168 @@ using FiniteDiff, ForwardDiff
         q_offdiag = Q_prior_dual[1, 2]
         @test ForwardDiff.value(offdiag) ≈ ForwardDiff.value(q_offdiag)
         @test ForwardDiff.partials(offdiag, 1) ≈ ForwardDiff.partials(q_offdiag, 1)
+    end
+
+    @testset "_assemble_q_post_dual: Dual Q_prior + sparse H pattern subset" begin
+        # Same Dual-Q_prior path but with a SparseMatrixCSC H whose pattern
+        # is a strict subset of Q_prior's. Pins the second sparse method.
+        FDExt = Base.get_extension(GaussianMarkovRandomFields, :GaussianMarkovRandomFieldsForwardDiff)
+        Tag = ForwardDiff.Tag{Symbol("test_q_dual_sparse"), Float64}
+        ForwardDiff.tagcount(Tag)
+        DualT = ForwardDiff.Dual{Tag, Float64, 1}
+
+        q_dense = SparseMatrixCSC(spdiagm(-1 => -ones(3), 0 => 2 * ones(4), 1 => -ones(3)))
+        nzval_dual = [
+            DualT(q_dense.nzval[i], ForwardDiff.Partials{1, Float64}((Float64(i),)))
+                for i in eachindex(q_dense.nzval)
+        ]
+        Q_prior_dual = SparseMatrixCSC(q_dense.m, q_dense.n, q_dense.colptr, q_dense.rowval, nzval_dual)
+
+        # H is sparse-tridiagonal with a Dual nonzero on (1,2).
+        h_off = DualT(0.25, ForwardDiff.Partials{1, Float64}((0.5,)))
+        H_sparse = sparse([1, 2], [2, 1], [h_off, h_off], 4, 4)
+        Q_post = FDExt._assemble_q_post_dual(Q_prior_dual, H_sparse, DualT, Val(1))
+        @test Q_post.colptr == Q_prior_dual.colptr
+        @test Q_post.rowval == Q_prior_dual.rowval
+        # Q_post[1,2] = Q_prior[1,2] - h_off
+        entry = Q_post[1, 2]
+        q12 = Q_prior_dual[1, 2]
+        @test ForwardDiff.value(entry) ≈ ForwardDiff.value(q12) - ForwardDiff.value(h_off)
+        @test ForwardDiff.partials(entry, 1) ≈
+            ForwardDiff.partials(q12, 1) - ForwardDiff.partials(h_off, 1)
+    end
+
+    @testset "_lik_dual_tag_npartials covers _DualObsLik subtypes" begin
+        # Direct unit tests that pin the four `_DualObsLik` overloads
+        # (Normal/NegBin/Gamma/StudentT). The IFT path itself doesn't
+        # exercise them when the lik is consumed standalone (those go
+        # through `_forwarddiff_workspace_ga_obs_dual`), but the unified
+        # collector must still recognise them — e.g. when wrapped in a
+        # CompositeLikelihood.
+        FDExt = Base.get_extension(GaussianMarkovRandomFields, :GaussianMarkovRandomFieldsForwardDiff)
+        Tag = ForwardDiff.Tag{Symbol("test_dual_obslik"), Float64}
+        ForwardDiff.tagcount(Tag)
+        DualT = ForwardDiff.Dual{Tag, Float64, 1}
+        d_one = DualT(0.7, ForwardDiff.Partials{1, Float64}((1.0,)))
+        d_two = DualT(2.0, ForwardDiff.Partials{1, Float64}((1.0,)))
+
+        normal_lik = ExponentialFamily(Normal)([0.1, 0.2]; σ = d_one)
+        @test FDExt._lik_dual_tag_npartials(normal_lik) == (Tag, 1)
+        @test FDExt._lik_carries_dual_hp(normal_lik) == true
+
+        negbin_lik = ExponentialFamily(NegativeBinomial)(
+            NegativeBinomialObservations([3, 1, 8]); r = d_two,
+        )
+        @test FDExt._lik_dual_tag_npartials(negbin_lik) == (Tag, 1)
+        @test FDExt._lik_carries_dual_hp(negbin_lik) == true
+
+        gamma_lik = ExponentialFamily(Gamma)([0.5, 1.5]; phi = d_one)
+        @test FDExt._lik_dual_tag_npartials(gamma_lik) == (Tag, 1)
+        @test FDExt._lik_carries_dual_hp(gamma_lik) == true
+
+        studentt_lik = ExponentialFamily(TDist)([0.3, 0.5]; σ = d_one, ν = d_two)
+        @test FDExt._lik_dual_tag_npartials(studentt_lik) == (Tag, 1)
+        @test FDExt._lik_carries_dual_hp(studentt_lik) == true
+
+        # Default fallback: arbitrary type with no Dual content.
+        @test FDExt._lik_dual_tag_npartials("not a likelihood") == (nothing, nothing)
+        @test FDExt._lik_carries_dual_hp("not a likelihood") == false
+    end
+
+    @testset "Float64 prior + Composite of Dual NormalLikelihood routes through IFT" begin
+        # Exercises the CompositeLikelihood dispatch with `_DualObsLik`
+        # components (rather than AutoDiffLikelihood). Routes through the
+        # unified IFT helper end-to-end.
+        Random.seed!(150)
+        k = 6
+        y_a = randn(k) .* 0.3
+        y_b = randn(k) .* 0.5 .+ 0.1
+        x_eval = randn(k)
+        model = AR1Model(k)
+        ws = make_workspace(model; τ = 1.0, ρ = 0.3)
+        prior = model(ws; τ = 1.0, ρ = 0.3)
+
+        m_norm = ExponentialFamily(Normal)
+        composite = CompositeObservationModel(
+            (m_norm, m_norm),
+            ((σ = :σ_a,), (σ = :σ_b,)),
+        )
+
+        function pipeline(θ)
+            obs_lik = composite(
+                CompositeObservations((y_a, y_b));
+                σ_a = exp(θ[1]), σ_b = exp(θ[2]),
+            )
+            posterior = gaussian_approximation(prior, obs_lik)
+            return logpdf(posterior, x_eval)
+        end
+
+        θ = [log(0.3), log(0.5)]
+        grad_fwd = DifferentiationInterface.gradient(pipeline, AutoForwardDiff(), θ)
+        grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
+        @test maximum(abs.(grad_fwd - grad_fd)) < 1.0e-3
+    end
+
+    @testset "Tag-mismatch error paths" begin
+        # The IFT collectors guard against partials from independent outer
+        # ForwardDiff passes silently mixing. Verify the three error
+        # surfaces: (1) prior-vs-lik mismatch, (2) composite-component
+        # mismatch, (3) "no Dual partials" sentinel inside the helper.
+        FDExt = Base.get_extension(GaussianMarkovRandomFields, :GaussianMarkovRandomFieldsForwardDiff)
+
+        TagA = ForwardDiff.Tag{Symbol("ift_TagA"), Float64}
+        TagB = ForwardDiff.Tag{Symbol("ift_TagB"), Float64}
+        ForwardDiff.tagcount(TagA); ForwardDiff.tagcount(TagB)
+
+        # (1) Prior carries TagA, lik carries TagB → error.
+        DualA = ForwardDiff.Dual{TagA, Float64, 1}
+        DualB = ForwardDiff.Dual{TagB, Float64, 1}
+
+        k = 4
+        Q_dense = SparseMatrixCSC(spdiagm(0 => 2 * ones(k)))
+        Q_dual_A = SparseMatrixCSC(
+            Q_dense.m, Q_dense.n, Q_dense.colptr, Q_dense.rowval,
+            [DualA(Q_dense.nzval[i], ForwardDiff.Partials{1, Float64}((1.0,))) for i in eachindex(Q_dense.nzval)],
+        )
+        μ_A = [DualA(0.0, ForwardDiff.Partials{1, Float64}((0.0,))) for _ in 1:k]
+        ws_A = GMRFWorkspace(Q_dense)
+        prior_A = WorkspaceGMRF(μ_A, Q_dual_A, ws_A)
+
+        function lik_loglik(x; y, σ)
+            return -0.5 * sum((y .- x) .^ 2) / σ^2
+        end
+        obs_model = AutoDiffObservationModel(
+            lik_loglik;
+            n_latent = k, hyperparams = (:σ,),
+            grad_backend = AutoForwardDiff(), hessian_backend = AutoForwardDiff(),
+        )
+        σ_B = DualB(1.0, ForwardDiff.Partials{1, Float64}((1.0,)))
+        lik_B = obs_model(zeros(k); σ = σ_B)
+        @test_throws ErrorException gaussian_approximation(prior_A, lik_B)
+
+        # (2) Composite components carry mismatched tags → error.
+        m1 = AutoDiffObservationModel(
+            lik_loglik; n_latent = k, hyperparams = (:σ,),
+            grad_backend = AutoForwardDiff(), hessian_backend = AutoForwardDiff(),
+        )
+        m2 = AutoDiffObservationModel(
+            lik_loglik; n_latent = k, hyperparams = (:σ,),
+            grad_backend = AutoForwardDiff(), hessian_backend = AutoForwardDiff(),
+        )
+        comp_model = CompositeObservationModel(
+            (m1, m2), ((σ = :σ_a,), (σ = :σ_b,))
+        )
+        σ_a_A = DualA(1.0, ForwardDiff.Partials{1, Float64}((1.0,)))
+        comp_lik_mismatched = comp_model(
+            CompositeObservations((zeros(k), zeros(k)));
+            σ_a = σ_a_A, σ_b = σ_B,
+        )
+        @test_throws ErrorException FDExt._lik_dual_tag_npartials(comp_lik_mismatched)
+
+        # (3) No-Duals sentinel: helper called directly with a Float64
+        # prior + Float64-hp lik should error before doing IFT work.
+        prior_float = WorkspaceGMRF(zeros(3), spdiagm(0 => ones(3)))
+        lik_primal = obs_model(zeros(k); σ = 1.0)
+        @test_throws ErrorException FDExt._workspace_dualhp_ift(prior_float, lik_primal)
     end
 end
