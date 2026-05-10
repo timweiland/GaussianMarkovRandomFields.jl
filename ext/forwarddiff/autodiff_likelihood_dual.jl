@@ -82,3 +82,10 @@ _primal_obs_lik(lik::GMRFs.AutoDiffLikelihood) =
 function _primal_obs_lik(lik::GMRFs.CompositeLikelihood)
     return GMRFs.CompositeLikelihood(map(_primal_obs_lik, lik.components))
 end
+
+function _primal_obs_lik(lik::GMRFs.LinearlyTransformedLikelihood)
+    return GMRFs.LinearlyTransformedLikelihood(
+        _primal_obs_lik(lik.base_likelihood),
+        lik.design_matrix,
+    )
+end

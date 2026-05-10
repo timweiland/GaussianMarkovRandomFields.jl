@@ -484,6 +484,53 @@ using FiniteDiff, ForwardDiff
         @test maximum(abs.(grad_fwd - grad_fd)) < 1.0e-3
     end
 
+    @testset "Float64 prior + Composite of LTL-wrapped Dual NormalLikelihood (issue #110)" begin
+        # The unified IFT helpers must recurse through `LinearlyTransformedLikelihood`.
+        # Each composite component is `LTL(NormalLikelihood{Dual})`; without LTL
+        # recursion in `_lik_carries_dual_hp` / `_primal_obs_lik` the dispatch
+        # falls back to the primal Newton path and dies on a Dual Hessian
+        # `setindex!` into the Float64 workspace.
+        Random.seed!(160)
+        n_latent = 3
+        k_phys, k_data = 8, 5
+        A_phys = sparse(randn(k_phys, n_latent))
+        A_data = sparse(randn(k_data, n_latent))
+        y_phys = randn(k_phys)
+        y_data = randn(k_data)
+        x_eval = randn(n_latent)
+
+        # Prior Q must have a sparsity pattern that subsumes the LTL-induced
+        # `A' diag(...) A` Hessian (dense `n_latent × n_latent`). A diagonal
+        # prior would trip the `_sparse_hessian_map` pattern check before the
+        # IFT recursion ever runs.
+        Q_prior = sparse(2.0I + 0.1 * (ones(n_latent, n_latent) - I))
+        ws = GMRFWorkspace(Q_prior)
+        prior = WorkspaceGMRF(zeros(n_latent), Q_prior, ws)
+
+        m_norm = ExponentialFamily(Normal)
+        components = (
+            LinearlyTransformedObservationModel(m_norm, A_phys),
+            LinearlyTransformedObservationModel(m_norm, A_data),
+        )
+        composite = CompositeObservationModel(
+            components,
+            ((σ = :σ_phys,), (σ = :σ_data,)),
+        )
+        y_composite = CompositeObservations((y_phys, y_data))
+
+        function pipeline(θ)
+            obs_lik = composite(y_composite; σ_phys = exp(θ[1]), σ_data = exp(θ[2]))
+            posterior = gaussian_approximation(prior, obs_lik)
+            return logpdf(posterior, x_eval)
+        end
+
+        θ = [log(0.3), log(1.2)]
+        grad_fwd = DifferentiationInterface.gradient(pipeline, AutoForwardDiff(), θ)
+        grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
+        @test all(isfinite, grad_fwd)
+        @test maximum(abs.(grad_fwd - grad_fd)) < 1.0e-3
+    end
+
     @testset "Tag-mismatch error paths" begin
         # The IFT collectors guard against partials from independent outer
         # ForwardDiff passes silently mixing. Verify the three error

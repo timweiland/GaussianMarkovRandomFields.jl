@@ -50,6 +50,8 @@ _lik_carries_dual_hp(lik::GMRFs.AutoDiffLikelihood) = _is_dual_autodifflik(lik)
 _lik_carries_dual_hp(::_DualObsLik) = true
 _lik_carries_dual_hp(lik::GMRFs.CompositeLikelihood) =
     any(_lik_carries_dual_hp, lik.components)
+_lik_carries_dual_hp(lik::GMRFs.LinearlyTransformedLikelihood) =
+    _lik_carries_dual_hp(lik.base_likelihood)
 
 # ----------------------------------------------------------------------------
 # DI.hessian returns a dense Matrix even when the underlying Hessian is
@@ -64,6 +66,10 @@ _lik_carries_dual_hp(lik::GMRFs.CompositeLikelihood) =
 
 _maybe_downcast_diagonal(H::Diagonal) = H
 _maybe_downcast_diagonal(H::SparseMatrixCSC) = H
+# `LinearlyTransformedLikelihood.loghessian` returns `Symmetric(A' * hess_η * A)`,
+# whose underlying matrix is fully populated by the multiplication. Unwrap so the
+# downstream sparse-vs-dense dispatch sees the real storage type.
+_maybe_downcast_diagonal(H::Symmetric) = _maybe_downcast_diagonal(parent(H))
 function _maybe_downcast_diagonal(H::AbstractMatrix)
     n = size(H, 1)
     n == size(H, 2) || return H
@@ -232,6 +238,9 @@ function _lik_dual_tag_npartials(lik::_DualObsLik)
     D = _dual_type_from_obs_lik(lik)
     return ForwardDiff.tagtype(D), ForwardDiff.npartials(D)
 end
+
+_lik_dual_tag_npartials(lik::GMRFs.LinearlyTransformedLikelihood) =
+    _lik_dual_tag_npartials(lik.base_likelihood)
 
 function _lik_dual_tag_npartials(lik::GMRFs.CompositeLikelihood)
     Tag, N = nothing, nothing
