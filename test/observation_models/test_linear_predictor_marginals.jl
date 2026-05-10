@@ -28,6 +28,7 @@ using Random
         @test μ ≈ mean(prior)
         @test v ≈ var(prior)
         @test inner === lik
+        @test loglik(μ, inner) ≈ loglik(mean(prior), lik)
     end
 
     @testset "ExponentialFamilyLikelihood (direct, with indices)" begin
@@ -40,7 +41,8 @@ using Random
         @test μ ≈ mean(prior)[idx]
         @test v ≈ var(prior)[idx]
         @test length(μ) == length(idx)
-        @test inner === lik
+        @test inner.indices === nothing
+        @test loglik(μ, inner) ≈ loglik(mean(prior), lik)
     end
 
     @testset "LinearlyTransformedLikelihood: μ_η = A μ, v_η = diag(A Σ Aᵀ)" begin
@@ -55,6 +57,7 @@ using Random
         @test v_η ≈ diag(A * Σ_ref * A')
         @test inner === lik.base_likelihood
         @test inner isa GaussianMarkovRandomFields.NormalLikelihood
+        @test loglik(μ_η, inner) ≈ loglik(mean(prior), lik)
     end
 
     @testset "LinearlyTransformedLikelihood on WorkspaceGMRF" begin
@@ -82,7 +85,11 @@ using Random
         μ, v, inner = linear_predictor_marginals(prior, lik)
         @test μ ≈ vcat(mean(prior)[idx1], mean(prior)[idx2])
         @test v ≈ vcat(var(prior)[idx1], var(prior)[idx2])
-        @test inner === lik
+        @test inner isa CompositeLikelihood
+        @test length(inner.components) == 2
+        @test inner.components[1].indices == 1:length(idx1)
+        @test inner.components[2].indices == (length(idx1) + 1):(length(idx1) + length(idx2))
+        @test loglik(μ, inner) ≈ loglik(mean(prior), lik)
     end
 
     @testset "Composite of LinearlyTransformedLikelihoods" begin
@@ -101,7 +108,10 @@ using Random
         μ, v, inner = linear_predictor_marginals(prior, lik)
         @test μ ≈ vcat(A1 * mean(prior), A2 * mean(prior))
         @test v ≈ vcat(diag(A1 * Σ_ref * A1'), diag(A2 * Σ_ref * A2'))
-        @test inner === lik
+        @test inner isa CompositeLikelihood
+        @test inner.components[1].indices == 1:k1
+        @test inner.components[2].indices == (k1 + 1):(k1 + k2)
+        @test loglik(μ, inner) ≈ loglik(mean(prior), lik)
     end
 
     @testset "ConstrainedGMRF: direct EF uses constrained mean / variance" begin

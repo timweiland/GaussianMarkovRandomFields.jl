@@ -6,37 +6,43 @@ export linear_predictor_marginals
 Posterior marginals of the per-observation linear predictor `η_i` under a
 Gaussian approximation `ga` to the latent posterior.
 
-For each observation `i` returns `(μ_η[i], v_η[i])` — the mean and variance of
-the scalar predictor `η_i` that `obs_lik` consumes. The third return value is
-the observation likelihood with any wrapping that mediates between `x` and `η`
-stripped away, so consumers can evaluate `p(y | η)` directly without going
-back through the design matrix.
+For each observation `i` the result contains `(μ_η[i], v_η[i])` — the mean and
+variance of the scalar predictor `η_i` that `obs_lik` consumes. The third
+return value is an observation likelihood whose own indexing matches `μ_η`'s
+layout: feeding `μ_η` directly into `loglik`, `pointwise_loglik`, `loggrad`,
+or `loghessian` yields per-observation outputs in the same order as `μ_η`.
 
 The dispatch recurses on the observation likelihood structure:
 
 - `ExponentialFamilyLikelihood`: `η_i = x[indices[i]]` (or `η_i = x_i` when
-  `indices === nothing`), so the result is `(mean(ga)[idx], var(ga)[idx], lik)`.
-- `LinearlyTransformedLikelihood`: `η = A x`, giving
-  `μ_η = A · mean(ga)` and `v_η = diag(A · Σ · Aᵀ)` where `Σ` comes from the
-  posterior's selected-inversion output. The third return is the stripped
-  `lik.base_likelihood`.
-- `CompositeLikelihood`: per-component results concatenated. The third return
-  is the original composite likelihood — consumers wanting per-observation
-  `p(y_i | η_i)` evaluation should slice `(μ_η, v_η)` per component.
+  `indices === nothing`). `μ_η` and `v_η` are the corresponding slices of
+  `mean(ga)` / `var(ga)`; `eta_likelihood` is the same likelihood with
+  `indices === nothing` so it consumes the returned (smaller) `μ_η` directly.
+- `LinearlyTransformedLikelihood`: `η = A x`, giving `μ_η = A · mean(ga)` and
+  `v_η = diag(A · Σ · Aᵀ)` from the posterior's selected-inversion output.
+  `eta_likelihood = lik.base_likelihood`. Assumes the base's own `indices`
+  field is `nothing` (the standard wrapping pattern); an indexed base is
+  unusual and not specially handled.
+- `CompositeLikelihood`: per-component results concatenated. `eta_likelihood`
+  is a fresh `CompositeLikelihood` whose components are the per-component
+  stripped likelihoods with `indices` re-assigned to their slice of the
+  concatenated `η`, so the result can be evaluated against `μ_η` directly.
+  Composite-of-composite is not specially handled — flatten upstream.
 
 # Hard constraints
 
-If `ga` carries a hard linear constraint `A_c x = e` (either a `ConstrainedGMRF`
-or a `WorkspaceGMRF` with constraint info), `v_η` includes the constraint
-correction `diag(A · A_tilde_T · L_c⁻ᵀ · L_c⁻¹ · A_tilde_Tᵀ · Aᵀ)` subtracted
-from the unconstrained `diag(A · Σ · Aᵀ)`, using the cached `A_tilde_T =
-Σ A_cᵀ` and `L_c = chol(A_c Σ A_cᵀ)`. The mean is the constrained mean
-returned by `mean(ga)`.
+If `ga` carries a hard linear constraint `A_c x = e` (either a
+`ConstrainedGMRF` or a `WorkspaceGMRF` with constraint info populated), `v_η`
+subtracts the standard correction
+`diag(A · A_tilde_T · L_c⁻ᵀ · L_c⁻¹ · A_tilde_Tᵀ · Aᵀ)` from the unconstrained
+`diag(A · Σ · Aᵀ)`, reusing the cached `A_tilde_T = Σ A_cᵀ` and
+`L_c = chol(A_c Σ A_cᵀ)`. The mean is the constrained mean returned by
+`mean(ga)`.
 
 # Sparse-pattern assumption
 
 For `LinearlyTransformedLikelihood`, the variance computation reads `Σ` from
-the posterior's selected inversion, which fills only entries at the Cholesky
+the posterior's selected inversion, which only fills entries at the Cholesky
 factor pattern of the precision matrix `Q`. When `Q`'s pattern subsumes that
 of `Aᵀ A` — automatic when the posterior comes out of `gaussian_approximation`
 with a `LinearlyTransformedObservationModel` obs side — every entry `Σ[j, k]`
@@ -54,7 +60,11 @@ function linear_predictor_marginals(ga::AbstractGMRF, lik::ExponentialFamilyLike
     if idx === nothing
         return (Vector{Float64}(μ_full), Vector{Float64}(v_full), lik)
     end
-    return (Vector{Float64}(μ_full[idx]), Vector{Float64}(v_full[idx]), lik)
+    return (
+        Vector{Float64}(μ_full[idx]),
+        Vector{Float64}(v_full[idx]),
+        _with_indices(lik, nothing),
+    )
 end
 
 function linear_predictor_marginals(ga::AbstractGMRF, lik::LinearlyTransformedLikelihood)
@@ -69,18 +79,53 @@ function linear_predictor_marginals(ga::AbstractGMRF, lik::CompositeLikelihood)
     parts = map(c -> linear_predictor_marginals(ga, c), lik.components)
     μ_η = reduce(vcat, getindex.(parts, 1))
     v_η = reduce(vcat, getindex.(parts, 2))
-    return (Vector{Float64}(μ_η), Vector{Float64}(v_η), lik)
+
+    offsets = cumsum([length(p[1]) for p in parts])
+    reindexed = ntuple(length(parts)) do i
+        lo = i == 1 ? 1 : offsets[i - 1] + 1
+        hi = offsets[i]
+        _with_indices(parts[i][3], lo:hi)
+    end
+    return (Vector{Float64}(μ_η), Vector{Float64}(v_η), CompositeLikelihood(reindexed))
 end
+
+# Rebuild a materialised ExponentialFamilyLikelihood with a different `indices`
+# field. Kept narrow to the seven concrete subtypes — only the post-fit
+# primitive needs this seam, so promoting it to a package-wide trait would be
+# premature.
+_with_indices(lik::NormalLikelihood, idx) =
+    NormalLikelihood(lik.link, lik.y, lik.σ, lik.inv_σ², lik.log_σ, idx)
+_with_indices(lik::PoissonLikelihood, idx) =
+    PoissonLikelihood(lik.link, lik.y, idx, lik.logexposure)
+_with_indices(lik::BernoulliLikelihood, idx) =
+    BernoulliLikelihood(lik.link, lik.y, idx)
+_with_indices(lik::BinomialLikelihood, idx) =
+    BinomialLikelihood(lik.link, lik.y, lik.n, idx)
+_with_indices(lik::NegBinLikelihood, idx) =
+    NegBinLikelihood(lik.link, lik.y, lik.r, idx, lik.logexposure)
+_with_indices(lik::GammaLikelihood, idx) =
+    GammaLikelihood(lik.link, lik.y, lik.phi, idx)
+_with_indices(lik::StudentTLikelihood, idx) =
+    StudentTLikelihood(lik.link, lik.y, lik.σ, lik.ν, lik.w, lik.νp1, lik.σ_eff, idx)
 
 _posterior_cov_sparse(ga::WorkspaceGMRF) = selinv(ga.workspace)
 _posterior_cov_sparse(ga::GMRF) = selinv(ga.linsolve_cache)
 _posterior_cov_sparse(ga::ConstrainedGMRF) = _posterior_cov_sparse(ga.base_gmrf)
 
-# `_row_diag_AΣAt` reads the *unconstrained* selinv. The constraint correction
-# below subtracts diag(A · Σ A_c' · (A_c Σ A_c')⁻¹ · A_c Σ · Aᵀ), reusing the
-# cached `A_tilde_T = Σ A_c'` and `L_c = chol(A_c Σ A_c')` on the constraint
-# info. Mirrors what `var(::WorkspaceGMRF)` / `var(::ConstrainedGMRF)` do for
-# the per-coordinate diagonal, generalised to the A-row contraction.
+# v[i] = sum_{j,k} A[i,j] · A[i,k] · Σ[j,k] = (AΣ * Aᵀ)[i, i]. Sparse arithmetic
+# handles the pattern intersection; entries of Σ outside its stored pattern
+# contribute zero, which is exact when the pattern assumption in the docstring
+# holds.
+function _row_diag_AΣAt(A::AbstractMatrix, ga::AbstractGMRF)
+    Σ = _posterior_cov_sparse(ga)
+    AΣ = A * Σ
+    return Vector{Float64}(vec(sum(AΣ .* A, dims = 2)))
+end
+
+# `_row_diag_AΣAt` reads the *unconstrained* selinv; subtract the constraint
+# correction here, reusing the cached `A_tilde_T` / `L_c`. Mirrors what
+# `var(::WorkspaceGMRF)` / `var(::ConstrainedGMRF)` do for the per-coordinate
+# diagonal, generalised to the A-row contraction.
 _apply_lpm_constraint_correction!(v_η, A, ga::GMRF) = v_η
 function _apply_lpm_constraint_correction!(v_η, A, ga::WorkspaceGMRF{T}) where {T}
     ci = ga.constraints
@@ -97,16 +142,4 @@ function _subtract_constraint_correction!(v_η, A, A_tilde_T, L_c, ::Type{T}) wh
     v_η .-= vec(sum(abs2, B_T, dims = 1))
     v_η .= max.(v_η, zero(T))
     return v_η
-end
-
-# v[i] = sum_{j,k} A[i,j] · A[i,k] · Σ[j,k]
-#      = (AΣ * Aᵀ)[i, i]
-#      = elementwise dot of row i of A and row i of AΣ.
-# Sparse arithmetic handles the pattern intersection; entries of Σ outside its
-# stored pattern contribute zero, which is exact when the pattern assumption
-# in the docstring holds.
-function _row_diag_AΣAt(A::AbstractMatrix, ga::AbstractGMRF)
-    Σ = _posterior_cov_sparse(ga)
-    AΣ = A * Σ
-    return Vector{Float64}(vec(sum(AΣ .* A, dims = 2)))
 end
