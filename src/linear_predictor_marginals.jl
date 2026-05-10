@@ -24,6 +24,15 @@ The dispatch recurses on the observation likelihood structure:
   is the original composite likelihood — consumers wanting per-observation
   `p(y_i | η_i)` evaluation should slice `(μ_η, v_η)` per component.
 
+# Hard constraints
+
+If `ga` carries a hard linear constraint `A_c x = e` (either a `ConstrainedGMRF`
+or a `WorkspaceGMRF` with constraint info), `v_η` includes the constraint
+correction `diag(A · A_tilde_T · L_c⁻ᵀ · L_c⁻¹ · A_tilde_Tᵀ · Aᵀ)` subtracted
+from the unconstrained `diag(A · Σ · Aᵀ)`, using the cached `A_tilde_T =
+Σ A_cᵀ` and `L_c = chol(A_c Σ A_cᵀ)`. The mean is the constrained mean
+returned by `mean(ga)`.
+
 # Sparse-pattern assumption
 
 For `LinearlyTransformedLikelihood`, the variance computation reads `Σ` from
@@ -52,6 +61,7 @@ function linear_predictor_marginals(ga::AbstractGMRF, lik::LinearlyTransformedLi
     A = lik.design_matrix
     μ_η = A * mean(ga)
     v_η = _row_diag_AΣAt(A, ga)
+    _apply_lpm_constraint_correction!(v_η, A, ga)
     return (Vector{Float64}(μ_η), v_η, lik.base_likelihood)
 end
 
@@ -64,6 +74,30 @@ end
 
 _posterior_cov_sparse(ga::WorkspaceGMRF) = selinv(ga.workspace)
 _posterior_cov_sparse(ga::GMRF) = selinv(ga.linsolve_cache)
+_posterior_cov_sparse(ga::ConstrainedGMRF) = _posterior_cov_sparse(ga.base_gmrf)
+
+# `_row_diag_AΣAt` reads the *unconstrained* selinv. The constraint correction
+# below subtracts diag(A · Σ A_c' · (A_c Σ A_c')⁻¹ · A_c Σ · Aᵀ), reusing the
+# cached `A_tilde_T = Σ A_c'` and `L_c = chol(A_c Σ A_c')` on the constraint
+# info. Mirrors what `var(::WorkspaceGMRF)` / `var(::ConstrainedGMRF)` do for
+# the per-coordinate diagonal, generalised to the A-row contraction.
+_apply_lpm_constraint_correction!(v_η, A, ga::GMRF) = v_η
+function _apply_lpm_constraint_correction!(v_η, A, ga::WorkspaceGMRF{T}) where {T}
+    ci = ga.constraints
+    ci === nothing && return v_η
+    return _subtract_constraint_correction!(v_η, A, ci.A_tilde_T, ci.L_c, T)
+end
+function _apply_lpm_constraint_correction!(v_η, A, ga::ConstrainedGMRF{T}) where {T}
+    return _subtract_constraint_correction!(v_η, A, ga.A_tilde_T, ga.L_c, T)
+end
+
+function _subtract_constraint_correction!(v_η, A, A_tilde_T, L_c, ::Type{T}) where {T}
+    M = A * A_tilde_T                          # m × r
+    B_T = L_c.L \ M'                           # r × m
+    v_η .-= vec(sum(abs2, B_T, dims = 1))
+    v_η .= max.(v_η, zero(T))
+    return v_η
+end
 
 # v[i] = sum_{j,k} A[i,j] · A[i,k] · Σ[j,k]
 #      = (AΣ * Aᵀ)[i, i]

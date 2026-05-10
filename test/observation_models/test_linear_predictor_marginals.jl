@@ -104,6 +104,64 @@ using Random
         @test inner === lik
     end
 
+    @testset "ConstrainedGMRF: direct EF uses constrained mean / variance" begin
+        A_c = reshape(ones(n_latent), 1, n_latent)
+        e = zeros(1)
+        ga_c = ConstrainedGMRF(prior, A_c, e)
+
+        m = ExponentialFamily(Normal)
+        y = randn(n_latent)
+        lik = m(y; σ = 0.7)
+
+        μ, v, _ = linear_predictor_marginals(ga_c, lik)
+        @test μ ≈ mean(ga_c)
+        @test v ≈ var(ga_c)
+    end
+
+    @testset "ConstrainedGMRF: LTL applies constraint correction to v_η" begin
+        A_c = reshape(ones(n_latent), 1, n_latent)
+        e = zeros(1)
+        ga_c = ConstrainedGMRF(prior, A_c, e)
+
+        # Reference Σ_c = Σ - Σ A_c' (A_c Σ A_c')⁻¹ A_c Σ
+        Σ_unc = Σ_ref
+        Σ_c_ref = Σ_unc - Σ_unc * A_c' * inv(A_c * Σ_unc * A_c') * A_c * Σ_unc
+
+        k = 4
+        A = sparse(randn(k, n_latent))
+        m = LinearlyTransformedObservationModel(ExponentialFamily(Normal), A)
+        y = randn(k)
+        lik = m(y; σ = 0.3)
+
+        μ_η, v_η, inner = linear_predictor_marginals(ga_c, lik)
+        @test μ_η ≈ A * mean(ga_c)
+        @test v_η ≈ diag(A * Σ_c_ref * A')
+        @test inner === lik.base_likelihood
+        # Sanity: constraint correction strictly reduces v_η vs unconstrained.
+        v_η_unc, = linear_predictor_marginals(prior, lik)[[2]]
+        @test all(v_η .<= v_η_unc .+ 1.0e-10)
+    end
+
+    @testset "WorkspaceGMRF with constraints: LTL matches ConstrainedGMRF" begin
+        A_c = reshape(ones(n_latent), 1, n_latent)
+        e = zeros(1)
+        ws_c_prior = WorkspaceGMRF(
+            μ_prior, Q, GMRFWorkspace(Q), A_c, e,
+        )
+        ga_ref = ConstrainedGMRF(prior, A_c, e)
+
+        k = 4
+        A = sparse(randn(k, n_latent))
+        m = LinearlyTransformedObservationModel(ExponentialFamily(Normal), A)
+        y = randn(k)
+        lik = m(y; σ = 0.3)
+
+        μ_ws, v_ws, _ = linear_predictor_marginals(ws_c_prior, lik)
+        μ_ref, v_ref, _ = linear_predictor_marginals(ga_ref, lik)
+        @test μ_ws ≈ μ_ref
+        @test v_ws ≈ v_ref
+    end
+
     @testset "Output shapes and eltypes" begin
         k = 4
         A = sparse(randn(k, n_latent))
