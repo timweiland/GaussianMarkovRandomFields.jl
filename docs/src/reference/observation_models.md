@@ -470,6 +470,31 @@ A `nothing` route keeps the legacy passthrough behaviour for that component, so
 the single-arg constructor remains the right choice when component kwarg names
 are already disjoint.
 
+### Linear Predictor Marginals
+
+Downstream consumers of a Gaussian approximation (posterior predictive checks,
+calibration plots, WAIC/CPO/PSIS-LOO accumulators) need the per-observation
+*linear-predictor* marginal `η_i = aᵢᵀ x`, not the per-latent-coordinate
+marginal. [`linear_predictor_marginals`](@ref) is the primitive for this:
+
+```julia
+ga = gaussian_approximation(prior, obs_lik)
+μ_η, v_η, eta_likelihood = linear_predictor_marginals(ga, obs_lik)
+```
+
+For each observation `i`, `μ_η[i]` and `v_η[i]` are the mean and variance of
+`η_i` under `ga`, and `eta_likelihood` is the observation likelihood with any
+design-matrix wrapping stripped — ready to evaluate `p(y | η)` at candidate
+`η` values without going back through the design matrix. The dispatch recurses
+through `LinearlyTransformedLikelihood` and `CompositeLikelihood`, so a mixed
+LGM (direct channels + linearly-transformed channels in a composite) is
+handled uniformly.
+
+`v_η` for `LinearlyTransformedLikelihood` is `diag(A · Σ · Aᵀ)` computed from
+the posterior's selected-inversion output; the result is exact whenever the
+prior precision's pattern subsumes `Aᵀ A` (the standard case when the
+posterior comes out of `gaussian_approximation`).
+
 ## API Reference
 
 ### Core Types and Interface
@@ -551,4 +576,5 @@ trials
 CompositeObservations
 CompositeObservationModel
 CompositeLikelihood
+linear_predictor_marginals
 ```
