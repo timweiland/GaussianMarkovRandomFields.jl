@@ -1,13 +1,8 @@
-module GaussianMarkovRandomFieldsAutoDiff
+module GaussianMarkovRandomFieldsZygote
 
 using GaussianMarkovRandomFields
-using ForwardDiff, Zygote, LinearAlgebra, LinearMaps
+using LinearAlgebra, LinearMaps, Zygote
 import LinearMaps: _unsafe_mul!
-
-function LinearMaps._unsafe_mul!(y, J::ADJacobianMap, x::AbstractVector)
-    g(t) = J.f(J.x₀ + t * x)
-    return y .= ForwardDiff.derivative(g, 0.0)
-end
 
 function GaussianMarkovRandomFields.ADJacobianAdjointMap(
         f::Function,
