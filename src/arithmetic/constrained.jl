@@ -167,8 +167,8 @@ unnormalised log-density on the constraint manifold uses,
 
     log p(x | Ax = e) ∝ -0.5 (x - μ)' Q (x - μ)   for x with Ax = e,
 
-so generic methods like [`sqmahal`](@ref) and [`gradlogpdf`](@ref) give the
-correct values when evaluated at points that satisfy the constraint.
+so generic methods like `sqmahal` and `gradlogpdf` give the correct values
+when evaluated at points that satisfy the constraint.
 """
 precision_map(d::ConstrainedGMRF) = precision_map(d.base_gmrf)
 
