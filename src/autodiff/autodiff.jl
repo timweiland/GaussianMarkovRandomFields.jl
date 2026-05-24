@@ -22,5 +22,6 @@ include("precision_gradient.jl")  # Helper for computing precision gradients
 include("logpdf.jl")
 include("gaussian_approximation.jl")
 
-# Mooncake-specific rules for ChordalGMRF
-include("mooncake_gaussian_approximation.jl")
+# Mooncake-specific rules for ChordalGMRF live in the
+# GaussianMarkovRandomFieldsMooncake package extension (loaded automatically
+# when both Mooncake and MooncakeSparse are imported).

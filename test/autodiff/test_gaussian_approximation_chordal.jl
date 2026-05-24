@@ -6,7 +6,7 @@ using LinearAlgebra
 using Random
 
 using DifferentiationInterface
-using FiniteDiff, Mooncake
+using FiniteDiff, Mooncake, MooncakeSparse
 
 chordal_backends = Any[("Mooncake", AutoMooncake())]
 

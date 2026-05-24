@@ -1,5 +1,11 @@
+module GaussianMarkovRandomFieldsMooncake
+
+using GaussianMarkovRandomFields
+using GaussianMarkovRandomFields: ∇ₓ_neg_log_posterior, hermdiff
+using Statistics: mean
 using Mooncake
 using Mooncake: @is_primitive, @mooncake_overlay, MinimalCtx, CoDual, NoRData, NoFData, primal, tangent, fdata, zero_tangent
+using MooncakeSparse
 using SparseArrays: nonzeros, SparseMatrixCSC
 using LinearAlgebra: Hermitian
 using CliqueTrees.Multifrontal: ChordalCholesky
@@ -100,7 +106,7 @@ function Mooncake.rrule!!(
     return CoDual(posterior, fdata(zero_tangent(posterior))), pullback!!
 end
 
-@mooncake_overlay function gaussian_approximation(
+@mooncake_overlay function GaussianMarkovRandomFields.gaussian_approximation(
         prior::ChordalGMRF,
         obslik::ObservationLikelihood;
         kwargs...
@@ -114,4 +120,6 @@ end
     Q_post = hermdiff(precision_matrix(prior), loghessian(x_corrected, obslik))
 
     return ChordalGMRF(x_corrected, Q_post, posterior.F)
+end
+
 end
