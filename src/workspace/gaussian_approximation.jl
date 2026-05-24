@@ -47,8 +47,10 @@ function _sparse_hessian_map(Q::SparseMatrixCSC, H::SparseMatrixCSC)
             if q_ptr <= q_end && Q_rows[q_ptr] == h_row
                 hmap[k] = q_ptr
             else
-                error(
-                    "Hessian has nonzero at ($h_row, $col) which is outside the workspace Q sparsity pattern."
+                throw(
+                    ArgumentError(
+                        "Hessian has nonzero at ($h_row, $col) which is outside the workspace Q sparsity pattern."
+                    )
                 )
             end
         end

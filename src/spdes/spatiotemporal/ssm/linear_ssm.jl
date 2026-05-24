@@ -45,7 +45,7 @@ G(Δtₖ) x_{k+1} ∣ xₖ ∼ 𝒩(M(Δtₖ) xₖ, Σ)
 at time points given by `ts` (from which the Δtₖ are computed).
 """
 joint_ssm(x₀::GMRF, ssm_matrices::Union{Function, JointSSMMatrices}, ts::AbstractVector) =
-    error("joint_ssm not implemented for these argument types")
+    throw(MethodError(joint_ssm, (x₀, ssm_matrices, ts)))
 
 """
 function joint_ssm(x₀::GMRF, ssm_mats_fn::Function, ts::AbstractVector)

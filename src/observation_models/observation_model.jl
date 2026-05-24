@@ -114,5 +114,5 @@ y = rand(dist)  # Sample observations
 All observation models should implement this method. The default throws an error.
 """
 function conditional_distribution(obs_model::ObservationModel, x; kwargs...)
-    error("conditional_distribution not implemented for observation model type $(typeof(obs_model))")
+    throw(MethodError(conditional_distribution, (obs_model, x)))
 end

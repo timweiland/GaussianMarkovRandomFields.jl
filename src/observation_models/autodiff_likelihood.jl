@@ -149,9 +149,11 @@ const AD_PREFERRED_ORDER = (DI.AutoEnzyme(), DI.AutoMooncake(), DI.AutoZygote(),
 function default_grad_backend()
     ad_idx = findfirst(DI.check_available, AD_PREFERRED_ORDER)
     if ad_idx === nothing
-        error(
-            "None of the default AD backends are available."
-                * " Please specify your own grad_backend."
+        throw(
+            ArgumentError(
+                "None of the default AD backends are available."
+                    * " Please specify your own grad_backend."
+            )
         )
     end
     return AD_PREFERRED_ORDER[ad_idx]
@@ -389,15 +391,17 @@ autodiff_hessian_prep(obs_lik::AutoDiffLikelihood) = obs_lik.prep_cache.hess_pre
 
 function _pointwise_loglik(::ConditionallyIndependent, x, obs_lik::AutoDiffLikelihood)
     if obs_lik.pointwise_loglik_func === nothing
-        error(
-            "pointwise_loglik not available for this AutoDiffLikelihood.\n"
-                * "To enable pointwise log-likelihood computation, provide the `pointwise_loglik_func` keyword argument\n"
-                * "when constructing AutoDiffObservationModel:\n\n"
-                * "    obs_model = AutoDiffObservationModel(loglik_func;\n"
-                * "                                          n_latent=...,\n"
-                * "                                          pointwise_loglik_func=my_pointwise_func)\n\n"
-                * "The pointwise function should have signature `(x; y, hyperparam_kwargs...) -> Vector{Real}` where\n"
-                * "result[i] = log p(yᵢ | xᵢ) and sum(result) ≈ loglik_func(x; y, hyperparam_kwargs...)."
+        throw(
+            ArgumentError(
+                "pointwise_loglik not available for this AutoDiffLikelihood.\n"
+                    * "To enable pointwise log-likelihood computation, provide the `pointwise_loglik_func` keyword argument\n"
+                    * "when constructing AutoDiffObservationModel:\n\n"
+                    * "    obs_model = AutoDiffObservationModel(loglik_func;\n"
+                    * "                                          n_latent=...,\n"
+                    * "                                          pointwise_loglik_func=my_pointwise_func)\n\n"
+                    * "The pointwise function should have signature `(x; y, hyperparam_kwargs...) -> Vector{Real}` where\n"
+                    * "result[i] = log p(yᵢ | xᵢ) and sum(result) ≈ loglik_func(x; y, hyperparam_kwargs...)."
+            )
         )
     end
     return _build_pointwise_call(obs_lik)(x)

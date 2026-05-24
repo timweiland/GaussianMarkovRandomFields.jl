@@ -33,7 +33,7 @@ abstract type AbstractSpatiotemporalGMRF{T <: Real, PrecisionMap <: LinearMap{T}
 
 Return the number of time points in the spatiotemporal GMRF.
 """
-N_t(::AbstractSpatiotemporalGMRF) = error("N_t not implemented")
+N_t(d::AbstractSpatiotemporalGMRF) = throw(MethodError(N_t, (d,)))
 
 """
     time_means(::AbstractSpatiotemporalGMRF)
@@ -43,7 +43,7 @@ Return the means of the spatiotemporal GMRF at each time point.
 # Returns
 - A vector of means of length Nₜ, one for each time point.
 """
-time_means(::AbstractSpatiotemporalGMRF) = error("time_means not implemented")
+time_means(d::AbstractSpatiotemporalGMRF) = throw(MethodError(time_means, (d,)))
 
 """
     time_vars(::AbstractSpatiotemporalGMRF)
@@ -53,7 +53,7 @@ Return the marginal variances of the spatiotemporal GMRF at each time point.
 # Returns
 - A vector of marginal variances of length Nₜ, one for each time point.
 """
-time_vars(::AbstractSpatiotemporalGMRF) = error("time_vars not implemented")
+time_vars(d::AbstractSpatiotemporalGMRF) = throw(MethodError(time_vars, (d,)))
 
 """
     time_stds(::AbstractSpatiotemporalGMRF)
@@ -63,7 +63,7 @@ Return the marginal standard deviations of the spatiotemporal GMRF at each time 
 # Returns
 - A vector of marginal standard deviations of length Nₜ, one for each time point.
 """
-time_stds(::AbstractSpatiotemporalGMRF) = error("time_stds not implemented")
+time_stds(d::AbstractSpatiotemporalGMRF) = throw(MethodError(time_stds, (d,)))
 
 """
     time_rands(::AbstractSpatiotemporalGMRF, rng::AbstractRNG)
@@ -74,13 +74,13 @@ Draw samples from the spatiotemporal GMRF at each time point.
 - A vector of sample values of length Nₜ, one sample value vector
   for each time point.
 """
-time_rands(::AbstractSpatiotemporalGMRF, ::AbstractRNG) =
-    error("time_rands not implemented")
+time_rands(d::AbstractSpatiotemporalGMRF, rng::AbstractRNG) =
+    throw(MethodError(time_rands, (d, rng)))
 
 """
     discretization_at_time(::AbstractSpatiotemporalGMRF, t::Int)
 
 Return the spatial discretization at time `t`.
 """
-discretization_at_time(::AbstractSpatiotemporalGMRF, ::Int) =
-    error("discretization_at_time not implemented")
+discretization_at_time(d::AbstractSpatiotemporalGMRF, t::Int) =
+    throw(MethodError(discretization_at_time, (d, t)))

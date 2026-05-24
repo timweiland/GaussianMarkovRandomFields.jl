@@ -305,19 +305,19 @@ function _materialize(obs_model::ExponentialFamily{NegativeBinomial}, y::Negativ
 end
 
 function _materialize(obs_model::ExponentialFamily{Gamma}, y; phi, kwargs...)
-    phi > 0 || error("Gamma shape parameter phi must be positive (got $phi)")
+    phi > 0 || throw(DomainError(phi, "Gamma shape parameter phi must be positive"))
     y_f64 = Float64.(y)
     for i in eachindex(y_f64)
         if y_f64[i] <= 0
-            error("Gamma observations must be positive at index $i (got $(y_f64[i]))")
+            throw(DomainError(y_f64[i], "Gamma observations must be positive at index $i"))
         end
     end
     return GammaLikelihood(obs_model.link, y_f64, phi, obs_model.indices)
 end
 
 function _materialize(obs_model::ExponentialFamily{TDist}, y; σ, ν, kwargs...)
-    σ > 0 || error("Student-t scale parameter σ must be positive (got $σ)")
-    ν > 2 || error("Student-t degrees of freedom ν must be > 2 for finite variance (got $ν)")
+    σ > 0 || throw(DomainError(σ, "Student-t scale parameter σ must be positive"))
+    ν > 2 || throw(DomainError(ν, "Student-t degrees of freedom ν must be > 2 for finite variance"))
     T = promote_type(typeof(σ), typeof(ν))
     σ_T = convert(T, σ)
     ν_T = convert(T, ν)

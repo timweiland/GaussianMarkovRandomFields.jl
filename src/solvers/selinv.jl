@@ -65,7 +65,7 @@ Convenience function that dispatches to selinv(linsolve, linsolve.alg).
 selinv(linsolve::LinearSolve.LinearCache) = selinv(linsolve, linsolve.alg)
 
 # Implementation methods (after factorization is ensured)
-_selinv_diag_impl(linsolve, alg) = error("Selected inversion not implemented for algorithm $(typeof(alg))")
+_selinv_diag_impl(linsolve, alg) = throw(ArgumentError("Selected inversion not implemented for algorithm $(typeof(alg))"))
 
 function _selinv_diag_impl(linsolve, ::LinearSolve.CHOLMODFactorization)
     factorization = LinearSolve.@get_cacheval(linsolve, :CHOLMODFactorization)
@@ -90,7 +90,7 @@ end
 
 function _selinv_diag_impl(linsolve, ::LinearSolve.PardisoJL)
     # Pardiso selected inversion - will be implemented in extension
-    error("Pardiso selinv implementation requires the Pardiso extension")
+    throw(ArgumentError("Pardiso selinv implementation requires the Pardiso extension"))
 end
 
 # Handle DefaultLinearSolver by dispatching on the nested algorithm
@@ -100,7 +100,7 @@ function _selinv_diag_impl(linsolve, alg::LinearSolve.DefaultLinearSolver)
 end
 
 # Implementation methods for full selected inverse
-_selinv_impl(linsolve, alg) = error("Full selected inversion not implemented for algorithm $(typeof(alg))")
+_selinv_impl(linsolve, alg) = throw(ArgumentError("Full selected inversion not implemented for algorithm $(typeof(alg))"))
 
 function _selinv_impl(linsolve, ::LinearSolve.CHOLMODFactorization)
     factorization = LinearSolve.@get_cacheval(linsolve, :CHOLMODFactorization)
@@ -124,7 +124,7 @@ end
 
 function _selinv_impl(linsolve, ::LinearSolve.PardisoJL)
     # Pardiso selected inversion - will be implemented in extension
-    error("Pardiso full selinv implementation requires the Pardiso extension")
+    throw(ArgumentError("Pardiso full selinv implementation requires the Pardiso extension"))
 end
 
 # Handle DefaultLinearSolver by dispatching on the nested algorithm

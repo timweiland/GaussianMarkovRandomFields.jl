@@ -220,7 +220,7 @@ using SparseArrays
         obs_lik = obs_model(y_data)  # Pass y_data positionally
         x = randn(3)
 
-        @test_throws ErrorException pointwise_loglik(x, obs_lik)
+        @test_throws ArgumentError pointwise_loglik(x, obs_lik)
     end
 
     @testset "AutoDiffLikelihood: with pointwise_loglik_func" begin

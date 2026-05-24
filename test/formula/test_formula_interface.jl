@@ -282,7 +282,7 @@ end
         e_wrong = [0.0]
         iid_wrong = IID(constraint = (A_wrong, e_wrong))
 
-        @test_throws ErrorException build_formula_components(@formula(y ~ 0 + iid_wrong(group)), data; family = Normal)
+        @test_throws DimensionMismatch build_formula_components(@formula(y ~ 0 + iid_wrong(group)), data; family = Normal)
     end
 
     @testset "RW2 via formula interface" begin

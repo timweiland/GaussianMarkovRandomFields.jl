@@ -73,7 +73,7 @@ mean(s::AbstractGMRF) = s.mean
 
 Return the precision (inverse covariance) map of the GMRF.
 """
-precision_map(::AbstractGMRF) = error("precision_map not implemented for GMRF")
+precision_map(d::AbstractGMRF) = throw(MethodError(precision_map, (d,)))
 
 """
     precision_matrix(::AbstractGMRF)
@@ -87,9 +87,9 @@ length(d::AbstractGMRF) = Base.size(precision_map(d), 1)
 
 ### Generic derived methods
 invcov(d::AbstractGMRF) = Symmetric(precision_matrix(d))
-cov(::AbstractGMRF) = error("Prevented forming dense covariance matrix in memory.")
+cov(::AbstractGMRF) = throw(ArgumentError("Prevented forming dense covariance matrix in memory."))
 
-logdetcov(d::AbstractGMRF) = error("logdetcov not implemented for $(typeof(d))")
+logdetcov(d::AbstractGMRF) = throw(MethodError(logdetcov, (d,)))
 
 sqmahal(d::AbstractGMRF, x::AbstractVector) = (
     Δ = x - mean(d);
@@ -100,9 +100,9 @@ sqmahal!(r::AbstractVector, d::AbstractGMRF, x::AbstractVector) = (r .= sqmahal(
 gradlogpdf(d::AbstractGMRF, x::AbstractVector) = -precision_map(d) * (x .- mean(d))
 
 _rand!(rng::AbstractRNG, d::AbstractGMRF, x::AbstractVector) =
-    error("_rand! not implemented for $(typeof(d))")
+    throw(MethodError(_rand!, (rng, d, x)))
 
-var(d::AbstractGMRF) = error("var not implemented for $(typeof(d))")
+var(d::AbstractGMRF) = throw(MethodError(var, (d,)))
 std(d::AbstractGMRF) = sqrt.(var(d))
 
 #####################
@@ -280,7 +280,7 @@ end
 function _rand_impl!(rng::AbstractRNG, d::GMRF, x::AbstractVector, ::Val{false})
     # Fallback to Q_sqrt approach
     if d.Q_sqrt === nothing
-        error("Cannot sample from GMRF: algorithm $(typeof(d.linsolve_cache.alg)) doesn't support backward solve and Q_sqrt is nothing")
+        throw(ArgumentError("Cannot sample from GMRF: algorithm $(typeof(d.linsolve_cache.alg)) doesn't support backward solve and Q_sqrt is nothing"))
     end
     # Sample z ~ N(0,I), compute w = √Q * z, solve Q * x = w
     z = randn(rng, size(d.Q_sqrt, 2))

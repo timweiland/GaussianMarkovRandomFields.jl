@@ -15,11 +15,11 @@ Should implement the following methods:
 """
 abstract type AbstractPreconditioner{T} end;
 
-ldiv!(y, ::AbstractPreconditioner, x::AbstractVector) =
-    error("ldiv! not defined for this preconditioner type")
-ldiv!(::AbstractPreconditioner, x::AbstractVector) =
-    error("ldiv! not defined for this preconditioner type")
-\(::AbstractPreconditioner, x::AbstractVector) =
-    error("left division not defined for this preconditioner type")
+ldiv!(y, P::AbstractPreconditioner, x::AbstractVector) =
+    throw(MethodError(ldiv!, (y, P, x)))
+ldiv!(P::AbstractPreconditioner, x::AbstractVector) =
+    throw(MethodError(ldiv!, (P, x)))
+\(P::AbstractPreconditioner, x::AbstractVector) =
+    throw(MethodError(\, (P, x)))
 
-Base.size(::AbstractPreconditioner) = error("size not defined for this preconditioner type")
+Base.size(P::AbstractPreconditioner) = throw(MethodError(size, (P,)))

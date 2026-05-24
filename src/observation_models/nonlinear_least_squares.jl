@@ -49,7 +49,7 @@ function (model::NonlinearLeastSquaresModel)(y::AbstractVector; σ, kwargs...)
     # Validate σ and normalize to vector of inverse variances
     m = length(y)
     σv = _normalize_sigma(σ, m)
-    any(σv .<= 0) && error("All σ entries must be positive.")
+    any(σv .<= 0) && throw(DomainError(σ, "All σ entries must be positive."))
     inv_σ² = 1.0 ./ (σv .^ 2)
 
     # Precompute constant term: -m/2 * log(2π) - sum(log σ)
@@ -64,9 +64,11 @@ function (model::NonlinearLeastSquaresModel)(y::AbstractVector; σ, kwargs...)
         default_sparse_jacobian_backend()
     catch err
         if err isa MethodError
-            error(
-                "Sparse Jacobian backend not available.\n" *
-                    "Install/enable SparseConnectivityTracer and SparseMatrixColorings to activate the AutoSparse backend."
+            throw(
+                ArgumentError(
+                    "Sparse Jacobian backend not available.\n" *
+                        "Install/enable SparseConnectivityTracer and SparseMatrixColorings to activate the AutoSparse backend."
+                )
             )
         else
             rethrow()
@@ -110,12 +112,12 @@ end
 function conditional_distribution(model::NonlinearLeastSquaresModel, x::AbstractVector; σ, kwargs...)
     ŷ = model.f(x)
     if σ isa AbstractVector
-        length(σ) == length(ŷ) || error("Length of σ vector must match f(x)")
+        length(σ) == length(ŷ) || throw(DimensionMismatch("Length of σ vector ($(length(σ))) must match f(x) (got $(length(ŷ)))"))
         return product_distribution(Normal.(ŷ, σ))
     elseif σ isa Number
         return product_distribution(Normal.(ŷ, σ))
     else
-        error("σ must be a number or a vector")
+        throw(ArgumentError("σ must be a number or a vector"))
     end
 end
 
@@ -127,10 +129,10 @@ end
     if σ isa Number
         return fill(float(σ), m)
     elseif σ isa AbstractVector
-        length(σ) == m || error("Length of σ vector must match y (expected $m, got $(length(σ)))")
+        length(σ) == m || throw(DimensionMismatch("Length of σ vector must match y (expected $m, got $(length(σ)))"))
         return float.(σ)
     else
-        error("σ must be a number or a vector")
+        throw(ArgumentError("σ must be a number or a vector"))
     end
 end
 
