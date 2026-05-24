@@ -65,10 +65,11 @@ using Random
         end
 
         @testset "Precision map" begin
+            # The constrained precision is singular, so we deliberately return
+            # the base precision — it's what density methods need on the
+            # constraint manifold.
             Q_constrained = precision_map(constrained)
             @test size(Q_constrained) == (4, 4)
-            # For now, we return the base precision map (TODO: implement proper constrained precision)
-            # This is a placeholder implementation
             @test Q_constrained == precision_map(base_gmrf)
         end
     end
