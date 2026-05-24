@@ -1,5 +1,6 @@
 using GaussianMarkovRandomFields
 using LinearAlgebra, SparseArrays, Random, Distributions
+using Test: @test_deprecated
 
 @testset "MetaGMRF Tests" begin
     # Setup base GMRF for testing
@@ -83,19 +84,25 @@ using LinearAlgebra, SparseArrays, Random, Distributions
         @test conditioned.metadata.name == "test"
         @test conditioned.metadata.value == 42
 
-        # Test condition_on_observations preserves wrapper type
-        conditioned2 = condition_on_observations(meta_gmrf, E, Q_eps, y)
-        @test isa(conditioned2, MetaGMRF{TestMetadata})
-        @test conditioned2.metadata === metadata
-
         # Test that conditioning actually changed the mean
         @test abs(mean(conditioned)[1] - 1.0) < 0.1
         @test mean(conditioned) != mean(meta_gmrf)
 
         # Test conditioning chain preserves type
-        conditioned3 = condition_on_observations(conditioned2, E, Q_eps, [0.5])
+        conditioned3 = linear_condition(conditioned; A = E, Q_ϵ = Q_eps, y = [0.5])
         @test isa(conditioned3, MetaGMRF{TestMetadata})
         @test conditioned3.metadata === metadata
+    end
+
+    @testset "condition_on_observations deprecation" begin
+        E = sparse([1.0 0 0 zeros(1, 7)...])
+        Q_eps = 1.0e4
+        y = [1.0]
+        expected = linear_condition(meta_gmrf; A = E, Q_ϵ = Q_eps, y = y)
+        actual = @test_deprecated condition_on_observations(meta_gmrf, E, Q_eps, y)
+        @test isa(actual, MetaGMRF{TestMetadata})
+        @test actual.metadata === metadata
+        @test mean(actual) ≈ mean(expected)
     end
 
     @testset "Show Methods" begin

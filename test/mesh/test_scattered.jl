@@ -63,7 +63,7 @@ end
     Λ_obs = 10.0
     A_train = evaluation_matrix(disc, [Tensors.Vec(x...) for x in X_train])
     A_test = evaluation_matrix(disc, [Tensors.Vec(x...) for x in X_test])
-    u_cond = condition_on_observations(u_matern, A_train, Λ_obs, y_train)
+    u_cond = linear_condition(u_matern; A = A_train, Q_ϵ = Λ_obs, y = y_train)
 
     rmse = (a, b) -> sqrt(mean((a .- b) .^ 2))
     @test rmse(A_test * mean(u_cond), y_test) < 0.25

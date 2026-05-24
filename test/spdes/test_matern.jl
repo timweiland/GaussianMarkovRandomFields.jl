@@ -52,8 +52,8 @@ using LinearAlgebra
             A_eval = evaluation_matrix(disc, [Tensors.Vec(fill(0.0, d)...)])
             y = [1.0]
 
-            x_high_cond = condition_on_observations(x_high_range, A_eval, 1.0e8, y)
-            x_low_cond = condition_on_observations(x_low_range, A_eval, 1.0e8, y)
+            x_high_cond = linear_condition(x_high_range; A = A_eval, Q_ϵ = 1.0e8, y = y)
+            x_low_cond = linear_condition(x_low_range; A = A_eval, Q_ϵ = 1.0e8, y = y)
 
             A_test = evaluation_matrix(disc, [Tensors.Vec(fill(0.5, d)...)])
             @test A_test * mean(x_high_cond) > A_test * mean(x_low_cond) .+ 0.1

@@ -91,9 +91,9 @@ using SparseArrays
     get_peak_final = x_posterior -> xs[argmax(A_last * mean(x_posterior))]
 
     @testset "Advection" begin
-        x_cond_fast_right = condition_on_observations(x_prior_fast_right, A_ic, 1.0e8, ys)
-        x_cond_fast_left = condition_on_observations(x_prior_fast_left, A_ic, 1.0e8, ys)
-        x_cond_fast_static = condition_on_observations(x_prior_fast_static, A_ic, 1.0e8, ys)
+        x_cond_fast_right = linear_condition(x_prior_fast_right; A = A_ic, Q_ϵ = 1.0e8, y = ys)
+        x_cond_fast_left = linear_condition(x_prior_fast_left; A = A_ic, Q_ϵ = 1.0e8, y = ys)
+        x_cond_fast_static = linear_condition(x_prior_fast_static; A = A_ic, Q_ϵ = 1.0e8, y = ys)
 
         peak_right_initial = get_peak_initial(x_cond_fast_right)
         peak_right_final = get_peak_final(x_cond_fast_right)
@@ -110,8 +110,8 @@ using SparseArrays
     end
 
     @testset "Diffusion" begin
-        x_cond_slow_static = condition_on_observations(x_prior_slow_static, A_ic, 1.0e8, ys)
-        x_cond_fast_static = condition_on_observations(x_prior_fast_static, A_ic, 1.0e8, ys)
+        x_cond_slow_static = linear_condition(x_prior_slow_static; A = A_ic, Q_ϵ = 1.0e8, y = ys)
+        x_cond_fast_static = linear_condition(x_prior_fast_static; A = A_ic, Q_ϵ = 1.0e8, y = ys)
 
         final_vals_slow = A_last * mean(x_cond_slow_static)
         final_vals_fast = A_last * mean(x_cond_fast_static)
@@ -123,12 +123,12 @@ using SparseArrays
         x_prior_fast_right_periodic =
             GaussianMarkovRandomFields.discretize(spde_fast_right, disc_periodic, ts; streamline_diffusion = sd)
         x_cond_fast_right_periodic =
-            condition_on_observations(x_prior_fast_right_periodic, A_ic, 1.0e8, ys)
+            linear_condition(x_prior_fast_right_periodic; A = A_ic, Q_ϵ = 1.0e8, y = ys)
 
         x_prior_fast_right_dirichlet =
             GaussianMarkovRandomFields.discretize(spde_fast_right, disc_dirichlet, ts; streamline_diffusion = sd)
         x_cond_fast_right_dirichlet =
-            condition_on_observations(x_prior_fast_right_dirichlet, A_ic, 1.0e8, ys)
+            linear_condition(x_prior_fast_right_dirichlet; A = A_ic, Q_ϵ = 1.0e8, y = ys)
 
         N_samples = 3
         samples_periodic = [time_rands(x_cond_fast_right_periodic, rng) for _ in 1:N_samples]
