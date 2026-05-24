@@ -108,7 +108,7 @@ x_adv_diff_periodic = discretize(spde, disc_periodic, ts)
 # initial condition to see how it propagates over time.
 xs_ic = -0.99:0.01:0.99
 ys_ic = exp.(-xs_ic .^ 2 / 0.2^2)
-A_ic = evaluation_matrix(disc, [Tensors.Vec(x) for x in xs_ic])
+A_ic = evaluation_matrix(disc, [Vec(x) for x in xs_ic])
 A_ic = spatial_to_spatiotemporal(A_ic, 1, N_t)
 
 x_adv_diff_dirichlet = linear_condition(x_adv_diff_dirichlet; A = A_ic, Q_ϵ = 1.0e8, y = ys_ic)

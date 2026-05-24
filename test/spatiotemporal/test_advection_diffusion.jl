@@ -83,7 +83,7 @@ using SparseArrays
     ic_fn = x -> exp(-x^2 / (2 * spread^2))
     ys = ic_fn.(xs)
 
-    A_ic = evaluation_matrix(disc, [Tensors.Vec(x) for x in xs])
+    A_ic = evaluation_matrix(disc, [Vec(x) for x in xs])
     A_last = spatial_to_spatiotemporal(A_ic, length(ts), length(ts))
     A_ic = spatial_to_spatiotemporal(A_ic, 1, length(ts))
 

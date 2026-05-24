@@ -13,7 +13,7 @@
 const _FEM_DEPS_HINT = """
 Load the FEM dependencies first, e.g.:
 
-    using Ferrite, FerriteGmsh, Gmsh, LibGEOS, GeometryBasics, Tensors, GeoInterface
+    using Ferrite, FerriteGmsh, Gmsh, LibGEOS
 
 This activates the `GaussianMarkovRandomFieldsFEM` package extension which
 provides FEM discretizations, mesh generation, Matérn SPDEs and related

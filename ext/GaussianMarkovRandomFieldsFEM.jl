@@ -49,10 +49,10 @@ using NearestNeighbors
 using Ferrite
 using Ferrite: Grid, Interpolation, QuadratureRule, DofHandler, ConstraintHandler,
     CellValues, CellIterator, CellCache, PointEvalHandler,
-    Lagrange, RefLine, RefTriangle,
+    Lagrange, RefLine, RefTriangle, Vec, ⊗,
     add!, close!, dof_range, celldofs, getcoordinates, getnbasefunctions,
     getnquadpoints, getdetJdV, shape_value, shape_gradient,
-    reference_shape_value, reference_shape_gradient, hessian,
+    reference_shape_value, reference_shape_gradient, gradient, hessian,
     start_assemble, assemble!, apply!, allocate_matrix,
     generate_grid
 using FerriteGmsh
@@ -60,10 +60,6 @@ using FerriteGmsh: tonodes, toelements, tocellsets, toboundary, tofacetsets
 using Gmsh
 using Gmsh: gmsh
 using LibGEOS
-using GeoInterface
-using GeometryBasics
-using Tensors
-using Tensors: ⊗
 
 include("GaussianMarkovRandomFieldsFEM/fem_discretization.jl")
 include("GaussianMarkovRandomFieldsFEM/fem_derivatives.jl")

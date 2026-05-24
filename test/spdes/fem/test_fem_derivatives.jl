@@ -1,4 +1,4 @@
-using GaussianMarkovRandomFields, Ferrite, SparseArrays, Tensors
+using GaussianMarkovRandomFields, Ferrite, SparseArrays
 
 const _FEMExt = Base.get_extension(GaussianMarkovRandomFields, :GaussianMarkovRandomFieldsFEM)
 
@@ -12,7 +12,7 @@ const _FEMExt = Base.get_extension(GaussianMarkovRandomFields, :GaussianMarkovRa
         qr = QuadratureRule{RefTriangle}(3)
         f = FEMDiscretization(grid, ip, qr)
 
-        X = [Tensors.Vec(0.5, 0.45), Tensors.Vec(0.67, 0.55)]
+        X = [Vec(0.5, 0.45), Vec(0.67, 0.55)]
         peh = PointEvalHandler(f.grid, X)
         cc = CellCache(f.dof_handler)
 

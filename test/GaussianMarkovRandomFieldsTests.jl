@@ -3,9 +3,7 @@ module GaussianMarkovRandomFieldsTests
 using GaussianMarkovRandomFields
 # Load FEM weakdeps so the GaussianMarkovRandomFieldsFEM extension and the
 # GaussianMarkovRandomFieldsLibGEOS extension are active during testing.
-# Use `import` (not `using`) to avoid name conflicts at module scope; individual
-# test files use `using ...` to bring symbols into their own scope.
-import Ferrite, FerriteGmsh, Gmsh, LibGEOS, GeometryBasics, Tensors, GeoInterface
+import Ferrite, FerriteGmsh, Gmsh, LibGEOS
 using ReTest
 using Aqua
 

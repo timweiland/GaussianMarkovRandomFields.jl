@@ -11,7 +11,7 @@ using GaussianMarkovRandomFields, Ferrite, SparseArrays
     @test ndim(f) == 2
     @test ndofs(f) == (N_xy + 1)^2
 
-    X = [Tensors.Vec(0.5, 0.45), Tensors.Vec(0.67, 0.55)]
+    X = [Vec(0.5, 0.45), Vec(0.67, 0.55)]
     A = evaluation_matrix(f, X)
 
     @test size(A) == (length(X), ndofs(f))

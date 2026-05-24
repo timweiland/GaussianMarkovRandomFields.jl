@@ -48,7 +48,7 @@ N_obs_all = length(ys_all)
 using GaussianMarkovRandomFields
 using Ferrite
 
-grid = generate_grid(Line, (Nₓ - 1,), Tensors.Vec(x_left), Tensors.Vec(x_right))
+grid = generate_grid(Line, (Nₓ - 1,), Vec(x_left), Vec(x_right))
 interpolation = Lagrange{RefLine, 1}()
 quadrature_rule = QuadratureRule{RefLine}(2)
 disc = FEMDiscretization(grid, interpolation, quadrature_rule)
@@ -64,7 +64,7 @@ spde_time = MaternSPDE{1}(range = 0.5, smoothness = 1)
 x_space = discretize(spde_space, disc)
 Q_s = precision_map(x_space)
 
-grid_time = generate_grid(Line, (Nₜ - 1,), Tensors.Vec(t_start), Tensors.Vec(t_stop))
+grid_time = generate_grid(Line, (Nₜ - 1,), Vec(t_start), Vec(t_stop))
 disc_time = FEMDiscretization(grid_time, interpolation, quadrature_rule)
 x_time = discretize(spde_time, disc_time)
 Q_t = precision_map(x_time)
@@ -75,10 +75,10 @@ x_st_kron = kronecker_product_spatiotemporal_model(Q_t, Q_s, disc)
 # Great! Now let's condition on the observations.
 # To do this, we construct a "spatial" observation matrix and transform it into
 # a "spatiotemporal" observation matrix:
-A_initial = evaluation_matrix(disc, [Tensors.Vec(x) for x in xs_initial])
+A_initial = evaluation_matrix(disc, [Vec(x) for x in xs_initial])
 t_initial_idx = 1 # Observe at first time point
 A_initial = spatial_to_spatiotemporal(A_initial, t_initial_idx, Nₜ)
-A_later = evaluation_matrix(disc, [Tensors.Vec(x_later)])
+A_later = evaluation_matrix(disc, [Vec(x_later)])
 t_later_idx = 2 * Nₜ ÷ 3
 A_later = spatial_to_spatiotemporal(A_later, t_later_idx, Nₜ)
 

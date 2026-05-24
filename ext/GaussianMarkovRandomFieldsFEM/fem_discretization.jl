@@ -109,7 +109,7 @@ at the i-th point in X.
 
 # Arguments
 - `f::FEMDiscretization`: The finite element discretization
-- `X`: Evaluation points, either a Vector of Tensors.Vec or an AbstractMatrix where each row is a point
+- `X`: Evaluation points, either a Vector of Vec or an AbstractMatrix where each row is a point
 - `field`: Field name (default: first field in dof_handler)
 
 # Matrix format
@@ -143,15 +143,15 @@ end
     evaluation_matrix(f::FEMDiscretization, X::AbstractMatrix; field = :default)
 
 Convenience method that accepts a matrix where each row is a point.
-Converts the matrix to a Vector of Tensors.Vec and delegates to the vector method.
+Converts the matrix to a Vector of Vec and delegates to the vector method.
 """
 function evaluation_matrix(f::FEMDiscretization, X::AbstractMatrix; field = :default)
     # Validate matrix dimensions
     D = ndim(f)
     size(X, 2) == D || throw(ArgumentError("Matrix must have $D columns for $(D)D discretization, got $(size(X, 2))"))
 
-    # Convert matrix to Vector of Tensors.Vec
-    X_vec = [Tensors.Vec(Tuple(X[i, :])) for i in 1:size(X, 1)]
+    # Convert matrix to Vector of Vec
+    X_vec = [Vec(Tuple(X[i, :])) for i in 1:size(X, 1)]
 
     # Delegate to existing implementation
     return evaluation_matrix(f, X_vec; field = field)
