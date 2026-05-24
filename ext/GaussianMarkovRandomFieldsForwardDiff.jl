@@ -5,14 +5,20 @@
 module GaussianMarkovRandomFieldsForwardDiff
 
 import GaussianMarkovRandomFields as GMRFs
-import GaussianMarkovRandomFields: GMRF
+import GaussianMarkovRandomFields: GMRF, ADJacobianMap
 import Distributions: logdetcov
 
 using ForwardDiff
 using LinearAlgebra
 using LinearMaps
+import LinearMaps: _unsafe_mul!
 using LinearSolve
 using SparseArrays
+
+function LinearMaps._unsafe_mul!(y, J::ADJacobianMap, x::AbstractVector)
+    g(t) = J.f(J.x₀ + t * x)
+    return y .= ForwardDiff.derivative(g, 0.0)
+end
 
 include("forwarddiff/common.jl")
 include("forwarddiff/gmrf_constructors.jl")
