@@ -1,80 +1,20 @@
-using Distributions
-using Ferrite
-using LinearSolve
-
-export MaternModel
-
-"""
-    MaternModel{F<:FEMDiscretization,S<:Integer,Alg,C,P}(...)
-
-A Matérn latent model for constructing spatial GMRFs from discretized Matérn SPDEs.
-
-The MaternModel provides a structured way to define Matérn Gaussian Markov Random Fields
-by discretizing the Matérn SPDE using finite element methods. The model stores the
-discretization and smoothness parameter, while the range parameter is provided at
-GMRF construction time.
-
-# Mathematical Description
-
-The Matérn SPDE is given by:
-(κ² - Δ)^(α/2) u(x) = W(x), where α = ν + d/2
-
-This leads to a Matérn covariance function with range and smoothness parameters.
-
-# Two Construction Modes
-
-1. **Direct construction**: Pass a pre-built `FEMDiscretization`
-2. **Automatic construction**: Pass points, automatically creates convex hull mesh
-
-# Hyperparameters
-- `range`: Range parameter (range > 0) - controls spatial correlation distance
-
-# Fields
-- `discretization::F`: The finite element discretization
-- `smoothness::S`: The smoothness parameter (Integer, controls differentiability)
-- `alg::Alg`: LinearSolve algorithm for solving linear systems
-- `constraint::C`: Optional constraint specification
-- `observation_points::P`: N×D matrix of observation coordinates, or `nothing`
-
-# Examples
-```julia
-# Direct construction
-disc = FEMDiscretization(grid, interpolation, quadrature)
-model = MaternModel(disc; smoothness = 2)
-gmrf = model(τ=1.0, range=2.0)
-
-# Automatic construction from points (stores observation_points)
-points = [0.0 0.0; 1.0 0.0; 0.5 1.0]  # N×2 matrix
-model = MaternModel(points; smoothness = 1, element_order = 1)
-gmrf = model(τ=1.0, range=2.0)
-
-# Convenience: evaluation matrix from stored points
-A = evaluation_matrix(model)
-
-# With custom algorithm
-model = MaternModel(disc; smoothness = 2, alg = LDLtFactorization())
-gmrf = model(τ=1.0, range=2.0)
-```
-"""
-struct MaternModel{F <: FEMDiscretization, S <: Integer, Alg, C, P} <: LatentModel
-    discretization::F
-    smoothness::S
-    alg::Alg
-    constraint::C
-    observation_points::P
-
-    function MaternModel{F, S, Alg, C, P}(discretization::F, smoothness::S, alg::Alg, constraint::C, observation_points::P) where {F <: FEMDiscretization, S <: Integer, Alg, C, P}
-        smoothness >= 0 || throw(ArgumentError("Smoothness must be non-negative, got smoothness=$smoothness"))
-        return new{F, S, Alg, C, P}(discretization, smoothness, alg, constraint, observation_points)
-    end
-end
-
 """
     MaternModel(discretization::F; smoothness::S, alg=CHOLMODFactorization(), constraint=nothing, observation_points=nothing) where {F<:FEMDiscretization, S<:Integer}
 
-Direct construction with a pre-built FEMDiscretization.
+Direct construction of a Matérn latent model with a pre-built FEMDiscretization.
+
+The MaternModel provides a structured way to define Matérn Gaussian Markov
+Random Fields by discretizing the Matérn SPDE using finite element methods.
+
+# Examples
+```julia
+disc = FEMDiscretization(grid, interpolation, quadrature)
+model = MaternModel(disc; smoothness = 2)
+gmrf = model(τ=1.0, range=2.0)
+```
 """
 function MaternModel(discretization::F; smoothness::S, alg = CHOLMODFactorization(), constraint = nothing, observation_points = nothing) where {F <: FEMDiscretization, S <: Integer}
+    smoothness >= 0 || throw(ArgumentError("Smoothness must be non-negative, got smoothness=$smoothness"))
     n = ndofs(discretization)
     processed_constraint = _process_constraint(constraint, n)
     return MaternModel{F, S, typeof(alg), typeof(processed_constraint), typeof(observation_points)}(discretization, smoothness, alg, processed_constraint, observation_points)
@@ -245,4 +185,23 @@ obs_test = PointEvaluationObsModel(model, test_points, Normal)
 """
 function PointEvaluationObsModel(model::MaternModel, points::AbstractMatrix, family::Type{<:Distribution})
     return PointEvaluationObsModel(model.discretization, points, family)
+end
+
+"""
+    Matern(discretization::FEMDiscretization; smoothness = 1, alg = CHOLMODFactorization(), constraint = nothing)
+
+Construct a `Matern` formula functor from a pre-built `FEMDiscretization`.
+
+Only available when the `GaussianMarkovRandomFieldsFEM` extension is loaded.
+"""
+function GaussianMarkovRandomFields.Matern(
+        discretization::FEMDiscretization;
+        smoothness::Integer = 1,
+        alg = CHOLMODFactorization(),
+        constraint = nothing,
+    )
+    smoothness >= 0 || throw(ArgumentError("Smoothness must be non-negative, got smoothness=$smoothness"))
+    return GaussianMarkovRandomFields.Matern{
+        typeof(discretization), typeof(smoothness), typeof(alg), typeof(constraint),
+    }(discretization, smoothness, 1, alg, constraint)
 end

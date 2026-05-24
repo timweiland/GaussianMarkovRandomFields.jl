@@ -2,6 +2,9 @@
 module GaussianMarkovRandomFieldsMakie
 
 using GaussianMarkovRandomFields
+using GaussianMarkovRandomFields:
+    AbstractGMRF, FEMDiscretization, ConstantMeshSTGMRF,
+    evaluation_matrix, discretization_at_time, time_means, time_stds, time_rands
 using Makie, Random
 using Distributions, Tensors
 

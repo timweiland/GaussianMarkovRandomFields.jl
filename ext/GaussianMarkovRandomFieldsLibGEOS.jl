@@ -1,7 +1,9 @@
+module GaussianMarkovRandomFieldsLibGEOS
+
+using GaussianMarkovRandomFields
+import GaussianMarkovRandomFields: contiguity_adjacency
 using SparseArrays
 using LibGEOS
-
-export contiguity_adjacency
 
 """
     contiguity_adjacency(geoms; rule = :queen)
@@ -63,4 +65,6 @@ member geometries via `LibGEOS.getGeometries(gc)` and delegating to
 function contiguity_adjacency(gc::LibGEOS.GeometryCollection; rule::Symbol = :queen)
     geoms = LibGEOS.getGeometries(gc)
     return contiguity_adjacency(geoms; rule = rule)
+end
+
 end

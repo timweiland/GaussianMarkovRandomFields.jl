@@ -1,10 +1,3 @@
-using Gmsh, FerriteGmsh, Ferrite
-using LibGEOS, GeoInterface
-import GeometryBasics
-using NearestNeighbors
-
-export generate_mesh
-
 """
     auto_size_params(points; k::Int=6, α::Real=0.8, β::Real=3.0, γ::Real=3.0)
 

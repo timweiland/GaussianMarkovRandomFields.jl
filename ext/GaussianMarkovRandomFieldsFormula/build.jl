@@ -194,7 +194,7 @@ function GaussianMarkovRandomFields.predict_cols(term::BYM2Term, model::Gaussian
     return StatsModels.modelcols(term, data)
 end
 
-function GaussianMarkovRandomFields.predict_cols(term::MaternTerm, model::GaussianMarkovRandomFields.MaternModel, data)
+function GaussianMarkovRandomFields.predict_cols(term::MaternTerm, model, data)
     x = _getcolumn(data, term.coord_variables[1])
     y = _getcolumn(data, term.coord_variables[2])
     points = hcat(Float64.(x), Float64.(y))

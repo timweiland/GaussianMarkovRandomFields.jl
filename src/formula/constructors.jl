@@ -360,31 +360,21 @@ struct Matern{F, S <: Integer, Alg, C}
     element_order::Int
     alg::Alg
     constraint::C
+end
 
-    function Matern(
-            discretization::FEMDiscretization;
-            smoothness::Integer = 1,
-            alg = CHOLMODFactorization(),
-            constraint = nothing,
-        )
-        smoothness >= 0 || throw(ArgumentError("Smoothness must be non-negative, got smoothness=$smoothness"))
-        return new{typeof(discretization), typeof(smoothness), typeof(alg), typeof(constraint)}(
-            discretization, smoothness, 1, alg, constraint
-        )
-    end
+# Pre-built FEMDiscretization constructor lives in the FEM package extension.
 
-    function Matern(;
-            smoothness::Integer = 1,
-            element_order::Int = 1,
-            alg = CHOLMODFactorization(),
-            constraint = nothing,
-        )
-        smoothness >= 0 || throw(ArgumentError("Smoothness must be non-negative, got smoothness=$smoothness"))
-        element_order >= 1 || throw(ArgumentError("Element order must be >= 1, got element_order=$element_order"))
-        return new{Nothing, typeof(smoothness), typeof(alg), typeof(constraint)}(
-            nothing, smoothness, element_order, alg, constraint
-        )
-    end
+function Matern(;
+        smoothness::Integer = 1,
+        element_order::Int = 1,
+        alg = CHOLMODFactorization(),
+        constraint = nothing,
+    )
+    smoothness >= 0 || throw(ArgumentError("Smoothness must be non-negative, got smoothness=$smoothness"))
+    element_order >= 1 || throw(ArgumentError("Element order must be >= 1, got element_order=$element_order"))
+    return Matern{Nothing, typeof(smoothness), typeof(alg), typeof(constraint)}(
+        nothing, smoothness, element_order, alg, constraint
+    )
 end
 
 (::Matern)(args...) = error("Matern(...) functor is only intended for use inside @formula; not callable directly.")

@@ -1,7 +1,4 @@
-using Ferrite
 import Ferrite: ndofs
-
-export FEMDiscretization, ndim, evaluation_matrix, node_selection_matrix
 
 """
     FEMDiscretization(
@@ -12,8 +9,7 @@ export FEMDiscretization, ndim, evaluation_matrix, node_selection_matrix
         boundary_conditions = (),
     )
 
-A struct that contains all the information needed to discretize
-an (S)PDE using the Finite Element Method.
+Construct a `FEMDiscretization` from Ferrite primitives.
 
 # Arguments
 - `grid::Ferrite.Grid`: The grid on which the discretization is defined.
@@ -28,102 +24,75 @@ an (S)PDE using the Finite Element Method.
         The (soft) boundary conditions. Each tuple contains the boundary
         condition and the noise standard deviation.
 """
-struct FEMDiscretization{
-        D,
-        S,
-        G <: Grid{D},
-        I <: Interpolation{S},
-        Q <: QuadratureRule{S},
-        GI <: Interpolation{S},
-        H <: DofHandler{D, G},
-        CH <: Union{ConstraintHandler{H}, Nothing},
-    }
-    grid::G
-    interpolation::I
-    quadrature_rule::Q
-    geom_interpolation::GI
-    dof_handler::H
-    constraint_handler::CH
-    constraint_noise::Vector{Float64} # Noise std
-
-    function FEMDiscretization(
-            grid::G,
-            interpolation::I,
-            quadrature_rule::Q,
-            fields = ((:u, nothing),),
-            boundary_conditions = (),
-        ) where {D, S, G <: Grid{D}, I <: Interpolation{S}, Q <: QuadratureRule{S}}
-        default_geom_interpolation = interpolation
-        dh = DofHandler(grid)
-        for (field, geom_interpolation) in fields
-            if geom_interpolation === nothing
-                geom_interpolation = default_geom_interpolation
-            end
-            add!(dh, field, geom_interpolation)
+function FEMDiscretization(
+        grid::G,
+        interpolation::I,
+        quadrature_rule::Q,
+        fields = ((:u, nothing),),
+        boundary_conditions = (),
+    ) where {D, S, G <: Grid{D}, I <: Interpolation{S}, Q <: QuadratureRule{S}}
+    default_geom_interpolation = interpolation
+    dh = DofHandler(grid)
+    for (field, geom_interpolation) in fields
+        if geom_interpolation === nothing
+            geom_interpolation = default_geom_interpolation
         end
-        close!(dh)
+        add!(dh, field, geom_interpolation)
+    end
+    close!(dh)
 
-        constraint_noise = Float64[]
-        ch = ConstraintHandler(dh)
-        for (bc, noise) in boundary_conditions
-            # Hack to get exactly the DOFs prescribed by this BC
-            ch_tmp = ConstraintHandler(dh)
-            add!(ch_tmp, bc)
-            close!(ch_tmp)
-            constrained_dofs = ch_tmp.prescribed_dofs
+    constraint_noise = Float64[]
+    ch = ConstraintHandler(dh)
+    for (bc, noise) in boundary_conditions
+        # Hack to get exactly the DOFs prescribed by this BC
+        ch_tmp = ConstraintHandler(dh)
+        add!(ch_tmp, bc)
+        close!(ch_tmp)
+        constrained_dofs = ch_tmp.prescribed_dofs
 
-            # Save noise for each constrained dof
-            for dof in constrained_dofs
-                i = get(ch.dofmapping, dof, 0)
-                if i != 0
-                    # Already prescribed previously, update noise
-                    constraint_noise[i] = noise
-                else
-                    push!(constraint_noise, noise)
-                end
+        # Save noise for each constrained dof
+        for dof in constrained_dofs
+            i = get(ch.dofmapping, dof, 0)
+            if i != 0
+                # Already prescribed previously, update noise
+                constraint_noise[i] = noise
+            else
+                push!(constraint_noise, noise)
             end
-            add!(ch, bc)
         end
-        close!(ch)
-        return new{D, S, G, I, Q, I, DofHandler{D, G}, typeof(ch)}(
-            grid,
-            interpolation,
-            quadrature_rule,
-            default_geom_interpolation,
-            dh,
-            ch,
-            constraint_noise,
-        )
+        add!(ch, bc)
     end
-
-    function FEMDiscretization(
-            grid::G,
-            interpolation::I,
-            quadrature_rule::Q,
-            geom_interpolation::GI,
-        ) where {D, S, G <: Grid{D}, I <: Interpolation{S}, Q <: QuadratureRule{S}, GI <: Interpolation{S}}
-        dh = DofHandler(grid)
-        add!(dh, :u, geom_interpolation)
-        close!(dh)
-        return new{D, S, G, I, Q, GI, DofHandler{D, G}, Nothing}(
-            grid,
-            interpolation,
-            quadrature_rule,
-            geom_interpolation,
-            dh,
-            nothing,
-            Float64[],
-        )
-    end
+    close!(ch)
+    return FEMDiscretization{D, S, G, I, Q, I, DofHandler{D, G}, typeof(ch)}(
+        grid,
+        interpolation,
+        quadrature_rule,
+        default_geom_interpolation,
+        dh,
+        ch,
+        constraint_noise,
+    )
 end
 
-"""
-    ndim(f::FEMDiscretization)
-
-Return the dimension of space in which the discretization is defined.
-Typically ndim(f) == 1, 2, or 3.
-"""
-ndim(::FEMDiscretization{D}) where {D} = D
+function FEMDiscretization(
+        grid::G,
+        interpolation::I,
+        quadrature_rule::Q,
+        geom_interpolation::GI,
+    ) where {D, S, G <: Grid{D}, I <: Interpolation{S}, Q <: QuadratureRule{S}, GI <: Interpolation{S}}
+    dh = DofHandler(grid)
+    add!(dh, :u, geom_interpolation)
+    close!(dh)
+    return FEMDiscretization{D, S, G, I, Q, GI, DofHandler{D, G}, Nothing}(
+        grid,
+        interpolation,
+        quadrature_rule,
+        geom_interpolation,
+        dh,
+        nothing,
+        Float64[],
+    )
+end
 
 """
     ndofs(f::FEMDiscretization)
@@ -227,10 +196,12 @@ function Base.show(io::IO, discretization::FEMDiscretization)
     println(io, "  grid: ", repr(MIME("text/plain"), discretization.grid))
     println(io, "  interpolation: ", discretization.interpolation)
     println(io, "  quadrature_rule: ", typeof(discretization.quadrature_rule))
-    return println(
-        io,
-        "  # constraints: ",
-        length(discretization.constraint_handler.prescribed_dofs),
-    )
+    if discretization.constraint_handler !== nothing
+        return println(
+            io,
+            "  # constraints: ",
+            length(discretization.constraint_handler.prescribed_dofs),
+        )
+    end
 end
 # COV_EXCL_STOP
