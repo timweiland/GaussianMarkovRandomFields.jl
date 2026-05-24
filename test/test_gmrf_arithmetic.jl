@@ -1,4 +1,5 @@
 using GaussianMarkovRandomFields, Ferrite, Random, LinearAlgebra, SparseArrays
+using Test: @test_deprecated
 
 @testset "GMRF arithmetic" begin
     spde = MaternSPDE{2}(κ = 1.0, ν = 1)
@@ -42,8 +43,19 @@ using GaussianMarkovRandomFields, Ferrite, Random, LinearAlgebra, SparseArrays
         y = randn(rng, 5)
         b = randn(rng, 5)
         x1 = x
-        x2 = condition_on_observations(x1, A, Q_ϵ, y, b)
+        x2 = linear_condition(x1; A = A, Q_ϵ = Q_ϵ, y = y, b = b)
         @test A * mean(x2) ≈ y - b
         @test mean(var(x2)) < mean(var(x1))
+    end
+
+    @testset "condition_on_observations deprecation" begin
+        A = sprand(rng, 5, length(x.mean), 0.3)
+        Q_ϵ = sparse(1.0e12 * I, 5, 5)
+        y = randn(rng, 5)
+        b = randn(rng, 5)
+        expected = linear_condition(x; A = A, Q_ϵ = Q_ϵ, y = y, b = b)
+        actual = @test_deprecated condition_on_observations(x, A, Q_ϵ, y, b)
+        @test mean(actual) ≈ mean(expected)
+        @test precision_matrix(actual) ≈ precision_matrix(expected)
     end
 end

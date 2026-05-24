@@ -19,7 +19,6 @@ GMRFMetadata
 
 ## Arithmetic
 ```@docs
-condition_on_observations
 linear_condition
 joint_gmrf
 ```

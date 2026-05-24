@@ -89,7 +89,7 @@ Q_noise = sparse(I, N_obs_all, N_obs_all) * noise_precision_initial
 Q_noise[end, end] = noise_precision_later
 
 # Condition on the observations:
-x_st_kron_posterior = condition_on_observations(x_st_kron, A_all, Q_noise, ys_all)
+x_st_kron_posterior = linear_condition(x_st_kron; A = A_all, Q_ϵ = Q_noise, y = ys_all)
 
 # Let's look at the dynamics of this posterior.
 using CairoMakie
@@ -136,7 +136,7 @@ adv_diff_spde = AdvectionDiffusionSPDE{1}(
 x_adv_diff = discretize(adv_diff_spde, disc, ts)
 
 # Condition on the initial observations:
-x_adv_diff_posterior = condition_on_observations(x_adv_diff, A_all, Q_noise, ys_all)
+x_adv_diff_posterior = linear_condition(x_adv_diff; A = A_all, Q_ϵ = Q_noise, y = ys_all)
 
 # Let's look at the dynamics of this posterior.
 plot(x_adv_diff_posterior, t_initial_idx)
