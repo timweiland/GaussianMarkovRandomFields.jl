@@ -63,7 +63,7 @@ const GMRF_MED_CHOLMOD = GMRF(MU_MED, sparse(Q_RW1_MED), LinearSolve.CHOLMODFact
 # Poisson observations for gaussian_approximation benchmarks.
 const POISSON_LATENT_SMALL = 0.5 .* sin.(range(0, 2π; length = N_SMALL))
 const Y_POISSON_SMALL = PoissonObservations(
-    rand(MersenneTwister(1), Poisson.(exp.(POISSON_LATENT_SMALL .+ 0.5)))
+    rand.(MersenneTwister(1), Poisson.(exp.(POISSON_LATENT_SMALL .+ 0.5)))
 )
 const OBS_LIK_POISSON_SMALL = ExponentialFamily(Poisson)(Y_POISSON_SMALL)
 const GMRF_PRIOR_SMALL = GMRF(MU_SMALL, Q_RW1_SMALL_SPARSE, LinearSolve.LDLtFactorization())
