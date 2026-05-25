@@ -32,11 +32,14 @@ end
     @testset "BinomialObservations validation" begin
         # Length mismatch
         @test_throws DimensionMismatch BinomialObservations([1, 2], [3])
-        # Successes exceeding trials (relational ArgumentError)
+        # Successes exceeding trials (relational ArgumentError) — note: this
+        # check fires before the non-negativity check, so an obs like
+        # (0, -1) hits this branch rather than the DomainError branch.
         @test_throws ArgumentError BinomialObservations([5, 2], [3, 3])
-        # Negative successes/trials (domain violation)
+        @test_throws ArgumentError BinomialObservations([0, 1], [-1, 3])
+        # Negative values where successes ≤ trials (domain violation)
         @test_throws DomainError BinomialObservations([-1, 0], [3, 3])
-        @test_throws DomainError BinomialObservations([0, 1], [-1, 3])
+        @test_throws DomainError BinomialObservations([-2, 0], [-1, 1])
     end
 
     @testset "Poisson Family" begin
