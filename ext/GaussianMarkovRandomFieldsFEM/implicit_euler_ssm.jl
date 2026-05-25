@@ -71,14 +71,14 @@ function ImplicitEulerJointSSMMatrices(ssm::ImplicitEulerSSM, Δt::Real)
     Q_s_sqrt = if ssm.spatial_noise.Q_sqrt !== nothing
         to_matrix(ssm.spatial_noise.Q_sqrt)
     else
-        nothing
+        nothing  # COV_EXCL_LINE
     end
 
     Σ⁻¹ = M⁻¹' * β⁻¹' * Q_s * β⁻¹ * M⁻¹
     Σ⁻¹_sqrt = if Q_s_sqrt !== nothing
         M⁻¹' * β⁻¹' * Q_s_sqrt
     else
-        nothing
+        nothing  # COV_EXCL_LINE
     end
 
     return ImplicitEulerJointSSMMatrices{

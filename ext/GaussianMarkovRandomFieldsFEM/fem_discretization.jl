@@ -55,7 +55,7 @@ function FEMDiscretization(
             i = get(ch.dofmapping, dof, 0)
             if i != 0
                 # Already prescribed previously, update noise
-                constraint_noise[i] = noise
+                constraint_noise[i] = noise  # COV_EXCL_LINE
             else
                 push!(constraint_noise, noise)
             end

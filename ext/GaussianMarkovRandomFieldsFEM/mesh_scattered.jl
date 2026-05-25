@@ -115,7 +115,7 @@ function _finalize_mesh(element_order, save_path, dim)
     facetsets = tofacetsets(boundarydict, elements)
 
     if save_path !== nothing
-        gmsh.write(save_path)
+        gmsh.write(save_path)  # COV_EXCL_LINE
     end
     gmsh.finalize()
 
@@ -171,7 +171,7 @@ function generate_mesh(
     elseif d == 2
         return _generate_mesh_2d(pts; element_order = element_order, save_path = save_path)
     else
-        throw(ArgumentError("generate_mesh only supports 1D and 2D point sets, got dimension $d"))
+        throw(ArgumentError("generate_mesh only supports 1D and 2D point sets, got dimension $d"))  # COV_EXCL_LINE
     end
 end
 

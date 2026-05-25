@@ -1,0 +1,10 @@
+coverage:
+  status:
+    project:
+      default:
+        # Allow small coverage drops (e.g. when refactoring shuffles a few
+        # defensive branches into different files) without failing CI.
+        threshold: 1%
+    patch:
+      default:
+        target: 85%
