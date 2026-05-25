@@ -566,7 +566,7 @@ using FiniteDiff, ForwardDiff
         )
         σ_B = DualB(1.0, ForwardDiff.Partials{1, Float64}((1.0,)))
         lik_B = obs_model(zeros(k); σ = σ_B)
-        @test_throws ErrorException gaussian_approximation(prior_A, lik_B)
+        @test_throws ArgumentError gaussian_approximation(prior_A, lik_B)
 
         # (2) Composite components carry mismatched tags → error.
         m1 = AutoDiffObservationModel(
@@ -585,12 +585,12 @@ using FiniteDiff, ForwardDiff
             CompositeObservations((zeros(k), zeros(k)));
             σ_a = σ_a_A, σ_b = σ_B,
         )
-        @test_throws ErrorException FDExt._lik_dual_tag_npartials(comp_lik_mismatched)
+        @test_throws ArgumentError FDExt._lik_dual_tag_npartials(comp_lik_mismatched)
 
         # (3) No-Duals sentinel: helper called directly with a Float64
         # prior + Float64-hp lik should error before doing IFT work.
         prior_float = WorkspaceGMRF(zeros(3), spdiagm(0 => ones(3)))
         lik_primal = obs_model(zeros(k); σ = 1.0)
-        @test_throws ErrorException FDExt._workspace_dualhp_ift(prior_float, lik_primal)
+        @test_throws ArgumentError FDExt._workspace_dualhp_ift(prior_float, lik_primal)
     end
 end

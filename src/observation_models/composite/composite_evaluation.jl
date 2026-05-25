@@ -69,10 +69,14 @@ function _pointwise_loglik(::ConditionallyIndependent, x, composite_lik::Composi
     # Check all components are conditionally independent
     for comp in composite_lik.components
         if observation_independence(comp) != ConditionallyIndependent()
-            error(
-                "CompositeLikelihood contains component with ConditionallyDependent trait.\n"
-                    * "All components must have ConditionallyIndependent observations for pointwise_loglik."
+            # COV_EXCL_START
+            throw(
+                ArgumentError(
+                    "CompositeLikelihood contains component with ConditionallyDependent trait.\n"
+                        * "All components must have ConditionallyIndependent observations for pointwise_loglik."
+                )
             )
+            # COV_EXCL_STOP
         end
     end
 
@@ -93,10 +97,14 @@ function _pointwise_loglik!(::ConditionallyIndependent, result, x, composite_lik
     # Check all components are conditionally independent
     for comp in composite_lik.components
         if observation_independence(comp) != ConditionallyIndependent()
-            error(
-                "CompositeLikelihood contains component with ConditionallyDependent trait.\n"
-                    * "All components must have ConditionallyIndependent observations for pointwise_loglik!."
+            # COV_EXCL_START
+            throw(
+                ArgumentError(
+                    "CompositeLikelihood contains component with ConditionallyDependent trait.\n"
+                        * "All components must have ConditionallyIndependent observations for pointwise_loglik!."
+                )
             )
+            # COV_EXCL_STOP
         end
     end
 

@@ -31,10 +31,10 @@ using SparseArrays
 
     @testset "Validation" begin
         ef = ExponentialFamily(TDist)
-        @test_throws ErrorException ef([1.0, 2.0]; σ = 0.0, ν = 4.0)
-        @test_throws ErrorException ef([1.0, 2.0]; σ = -1.0, ν = 4.0)
-        @test_throws ErrorException ef([1.0, 2.0]; σ = 1.0, ν = 2.0)
-        @test_throws ErrorException ef([1.0, 2.0]; σ = 1.0, ν = 1.5)
+        @test_throws DomainError ef([1.0, 2.0]; σ = 0.0, ν = 4.0)
+        @test_throws DomainError ef([1.0, 2.0]; σ = -1.0, ν = 4.0)
+        @test_throws DomainError ef([1.0, 2.0]; σ = 1.0, ν = 2.0)
+        @test_throws DomainError ef([1.0, 2.0]; σ = 1.0, ν = 1.5)
     end
 
     # ============================================================

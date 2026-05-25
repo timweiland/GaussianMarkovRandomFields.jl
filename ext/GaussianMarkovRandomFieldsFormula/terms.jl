@@ -35,7 +35,7 @@ function StatsModels.apply_schema(
     )
     var_term = only(t.args)
     order = t.f.order
-    order isa Integer || error("RandomWalk order must be an integer, got $(typeof(order))")
+    order isa Integer || throw(ArgumentError("RandomWalk order must be an integer, got $(typeof(order))"))
     return RandomWalkTerm{Int(order)}(var_term.sym, t.f.additional_constraints)
 end
 
@@ -132,7 +132,7 @@ end
 StatsModels.termvars(term::BYM2Term) = [term.variable]
 
 # Sparse mapping helpers
-_getcolumn(data, sym::Symbol) = hasproperty(data, sym) ? getproperty(data, sym) : haskey(data, sym) ? data[sym] : error("Variable $(sym) not found in data")
+_getcolumn(data, sym::Symbol) = hasproperty(data, sym) ? getproperty(data, sym) : haskey(data, sym) ? data[sym] : throw(ArgumentError("Variable $(sym) not found in data"))
 
 function _levels_and_index(vec)
     # Deterministic ordering: sorted unique
@@ -289,7 +289,7 @@ function StatsModels.apply_schema(
         ::StatsModels.Schema,
         ::Type
     )
-    length(t.args) == 2 || error("Matern formula term requires exactly 2 coordinate arguments, got $(length(t.args))")
+    length(t.args) == 2 || throw(ArgumentError("Matern formula term requires exactly 2 coordinate arguments, got $(length(t.args))"))
     x_sym = t.args[1].sym
     y_sym = t.args[2].sym
     return MaternTerm(
@@ -308,7 +308,7 @@ function StatsModels.modelcols(term::MaternTerm, data)
     x = _getcolumn(data, term.coord_variables[1])
     y = _getcolumn(data, term.coord_variables[2])
     n_obs = length(x)
-    length(y) == n_obs || error("Coordinate columns must have equal length")
+    length(y) == n_obs || throw(DimensionMismatch("Coordinate columns must have equal length"))
 
     # Build observation points matrix (N×2)
     points = hcat(Float64.(x), Float64.(y))
@@ -341,7 +341,7 @@ function StatsModels.apply_schema(
 
     # Validate: length(variables) == length(component_functors)
     length(var_terms) == length(component_functors) ||
-        error("Number of variables ($(length(var_terms))) must match number of components ($(length(component_functors)))")
+        throw(DimensionMismatch("Number of variables ($(length(var_terms))) must match number of components ($(length(component_functors)))"))
 
     # For each component, create a proper FunctionTerm and apply schema to it
     # This properly leverages StatsModels' existing apply_schema methods for each functor type
@@ -363,7 +363,7 @@ StatsModels.termvars(term::SeparableTerm) = vcat([StatsModels.termvars(t) for t 
 
 # Row-wise Kronecker (Khatri-Rao) product for separable indicator mapping
 function _khatri_rao(A::AbstractMatrix, B::AbstractMatrix)
-    size(A, 1) == size(B, 1) || error("Matrices must have same number of rows")
+    size(A, 1) == size(B, 1) || throw(DimensionMismatch("Matrices must have same number of rows"))
     n = size(A, 1)
     p, q = size(A, 2), size(B, 2)
 

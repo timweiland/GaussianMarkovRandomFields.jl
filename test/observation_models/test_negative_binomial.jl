@@ -47,10 +47,10 @@ using SparseArrays
         end
 
         @testset "Validation" begin
-            @test_throws ErrorException NegativeBinomialObservations([-1, 2])
-            @test_throws ErrorException NegativeBinomialObservations([1, 2], [0.0, 1.0])
-            @test_throws ErrorException NegativeBinomialObservations([1, 2], [-1.0, 1.0])
-            @test_throws ErrorException NegativeBinomialObservations([1], [1.0, 2.0])
+            @test_throws DomainError NegativeBinomialObservations([-1, 2])
+            @test_throws DomainError NegativeBinomialObservations([1, 2], [0.0, 1.0])
+            @test_throws DomainError NegativeBinomialObservations([1, 2], [-1.0, 1.0])
+            @test_throws DimensionMismatch NegativeBinomialObservations([1], [1.0, 2.0])
         end
     end
 
