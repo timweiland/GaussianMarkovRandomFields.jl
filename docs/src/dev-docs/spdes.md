@@ -1,4 +1,4 @@
 # SPDEs
 ```@docs
-GaussianMarkovRandomFields.matern_mean_precision
+GaussianMarkovRandomFieldsFEM.matern_mean_precision
 ```

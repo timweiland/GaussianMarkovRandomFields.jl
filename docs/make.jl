@@ -1,5 +1,11 @@
 using Documenter, DocumenterVitepress, GaussianMarkovRandomFields, DocumenterCitations
-using Ferrite
+# Load the FEM weakdeps so the GaussianMarkovRandomFieldsFEM extension activates;
+# its method definitions carry the docstrings cross-referenced from the API and
+# developer docs.
+using Ferrite, FerriteGmsh, Gmsh, LibGEOS
+
+const FEMExt = Base.get_extension(GaussianMarkovRandomFields, :GaussianMarkovRandomFieldsFEM)
+const LibGEOSExt = Base.get_extension(GaussianMarkovRandomFields, :GaussianMarkovRandomFieldsLibGEOS)
 
 include("generate_literate.jl")
 
@@ -56,7 +62,7 @@ makedocs(
         devurl = "dev"
     ),
     plugins = [bib],
-    modules = [GaussianMarkovRandomFields],
+    modules = [GaussianMarkovRandomFields, FEMExt, LibGEOSExt],
     checkdocs = :exports,
 )
 

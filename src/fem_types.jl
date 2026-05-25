@@ -40,6 +40,12 @@ FEMDiscretization(args...; kwargs...) = _fem_extension_required("FEMDiscretizati
 (::Type{<:FEMDiscretization})(args...; kwargs...) = _fem_extension_required("FEMDiscretization")
 # COV_EXCL_STOP
 
+"""
+    ndim(f::FEMDiscretization)
+
+Return the dimension of space in which the discretization is defined.
+Typically `ndim(f) == 1`, `2`, or `3`.
+"""
 ndim(::FEMDiscretization{D}) where {D} = D
 
 # Generic `discretize` fallback over (::SPDE, ::FEMDiscretization). Lives here
