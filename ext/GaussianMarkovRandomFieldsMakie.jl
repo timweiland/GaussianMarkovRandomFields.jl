@@ -2,8 +2,12 @@
 module GaussianMarkovRandomFieldsMakie
 
 using GaussianMarkovRandomFields
+using GaussianMarkovRandomFields:
+    AbstractGMRF, FEMDiscretization, ConstantMeshSTGMRF,
+    evaluation_matrix, discretization_at_time, time_means, time_stds, time_rands
 using Makie, Random
-using Distributions, Tensors
+using Distributions
+using Ferrite: Vec
 
 import GaussianMarkovRandomFields: gmrf_fem_1d_plot, gmrf_fem_1d_plot!
 import GaussianMarkovRandomFields:
@@ -65,7 +69,7 @@ function Makie.plot!(
 
         eval_mat = evaluation_matrix(
             disc,
-            [Tensors.Vec(x) for x in plot_points[]];
+            [Vec(x) for x in plot_points[]];
             field = gmrf_fem_plot.field[],
         )
 
@@ -153,7 +157,7 @@ function Makie.plot!(
 
         eval_mat = evaluation_matrix(
             disc,
-            [Tensors.Vec(x) for x in plot_points[]];
+            [Vec(x) for x in plot_points[]];
             field = gmrf_fem_st_plot.field[],
         )
 

@@ -1,11 +1,3 @@
-using Ferrite
-using LinearAlgebra
-using SparseArrays
-using SpecialFunctions
-
-export MaternSPDE,
-    α, ndim, discretize, assemble_C_G_matrices, product_matern, range_to_κ, smoothness_to_ν
-
 ################################################################################
 #    Whittle-Matérn
 ################################################################################
@@ -23,13 +15,6 @@ where Δ is the Laplacian operator, $κ > 0$, $ν > 0$.
 
 The stationary solutions to this SPDE are Matérn processes.
 """
-struct MaternSPDE{D, Tv <: Real, Ti <: Integer} <: SPDE
-    κ::Tv
-    ν::Rational{Ti}
-    σ²::Tv
-    diffusion_factor::Matrix{Tv}
-end
-
 function MaternSPDE{D}(;
         κ::Union{Real, Nothing} = nothing,
         ν::Union{Integer, Rational, Nothing} = nothing,
@@ -64,7 +49,6 @@ end
 
 
 α(𝒟::MaternSPDE{D}) where {D} = 𝒟.ν + D // 2
-ndim(::MaternSPDE{D}) where {D} = D
 
 function assemble_C_G_matrices(
         cellvalues::CellValues,

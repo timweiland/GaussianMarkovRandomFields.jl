@@ -20,7 +20,7 @@
 #
 # ## Spatial example: Matern SPDE
 # We start by specifying a mesh over the interval [-1, 1].
-using GaussianMarkovRandomFields, Ferrite
+using GaussianMarkovRandomFields, Ferrite, FerriteGmsh, Gmsh, LibGEOS
 grid = generate_grid(Line, (50,))
 interpolation = Lagrange{RefLine, 1}()
 quadrature_rule = QuadratureRule{RefLine}(2)
@@ -108,7 +108,7 @@ x_adv_diff_periodic = discretize(spde, disc_periodic, ts)
 # initial condition to see how it propagates over time.
 xs_ic = -0.99:0.01:0.99
 ys_ic = exp.(-xs_ic .^ 2 / 0.2^2)
-A_ic = evaluation_matrix(disc, [Tensors.Vec(x) for x in xs_ic])
+A_ic = evaluation_matrix(disc, [Ferrite.Vec(x) for x in xs_ic])
 A_ic = spatial_to_spatiotemporal(A_ic, 1, N_t)
 
 x_adv_diff_dirichlet = linear_condition(x_adv_diff_dirichlet; A = A_ic, Q_ϵ = 1.0e8, y = ys_ic)

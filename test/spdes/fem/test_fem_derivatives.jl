@@ -1,4 +1,6 @@
-using GaussianMarkovRandomFields, Ferrite, SparseArrays, Tensors
+using GaussianMarkovRandomFields, Ferrite, SparseArrays
+
+const _FEMExt = Base.get_extension(GaussianMarkovRandomFields, :GaussianMarkovRandomFieldsFEM)
 
 @testset "FEM Derivatives" begin
     N_xy = 20
@@ -10,15 +12,15 @@ using GaussianMarkovRandomFields, Ferrite, SparseArrays, Tensors
         qr = QuadratureRule{RefTriangle}(3)
         f = FEMDiscretization(grid, ip, qr)
 
-        X = [Tensors.Vec(0.5, 0.45), Tensors.Vec(0.67, 0.55)]
+        X = [Vec(0.5, 0.45), Vec(0.67, 0.55)]
         peh = PointEvalHandler(f.grid, X)
         cc = CellCache(f.dof_handler)
 
         @testset "Local shape function derivatives" begin
             for i in 1:getnbasefunctions(ip), j in 1:length(X)
                 ξ = peh.local_coords[j]
-                ∇ϕᵢ = GaussianMarkovRandomFields.shape_gradient_local(f, i, ξ)
-                Hϕᵢ = GaussianMarkovRandomFields.shape_hessian_local(f, i, ξ)
+                ∇ϕᵢ = _FEMExt.shape_gradient_local(f, i, ξ)
+                Hϕᵢ = _FEMExt.shape_hessian_local(f, i, ξ)
                 @test size(∇ϕᵢ) == (ndim(f),)
                 @test size(Hϕᵢ) == (ndim(f), ndim(f))
                 if d == 1
@@ -32,8 +34,8 @@ using GaussianMarkovRandomFields, Ferrite, SparseArrays, Tensors
                 Ferrite.reinit!(cc, peh.cells[j])
                 ξ = peh.local_coords[j]
                 dof_coords = getcoordinates(cc)
-                ∇ϕᵢ = GaussianMarkovRandomFields.shape_gradient_global(f, dof_coords, i, ξ)
-                Hϕᵢ = GaussianMarkovRandomFields.shape_hessian_global(f, dof_coords, i, ξ)
+                ∇ϕᵢ = _FEMExt.shape_gradient_global(f, dof_coords, i, ξ)
+                Hϕᵢ = _FEMExt.shape_hessian_global(f, dof_coords, i, ξ)
                 @test size(∇ϕᵢ) == (ndim(f),)
                 @test size(Hϕᵢ) == (ndim(f), ndim(f))
                 if d == 1

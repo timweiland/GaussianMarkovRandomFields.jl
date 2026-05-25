@@ -62,6 +62,9 @@ size(X_train, 1), size(X_test, 1)
 # Once we have the latent model, we need to instantiate it for a concrete range parameter.
 # This architecture makes it easy to construct the same GMRF structure many times for different hyperparameter values.
 using GaussianMarkovRandomFields
+# Loading the FEM weakdeps activates the `GaussianMarkovRandomFieldsFEM`
+# extension which provides `MaternModel` and the underlying SPDE machinery.
+using Ferrite, FerriteGmsh, Gmsh, LibGEOS
 latent_model = MaternModel(X; smoothness = 1)
 u_matern = latent_model(τ = 1.0, range = 400.0)
 

@@ -1,7 +1,3 @@
-using Ferrite, LinearAlgebra, SparseArrays, LinearMaps
-
-export AdvectionDiffusionSPDE, discretize
-
 @doc raw"""
     AdvectionDiffusionSPDE{D}(κ::Real, α::Rational, H::AbstractMatrix,
     γ::AbstractVector, c::Real, τ::Real) where {D}
@@ -15,33 +11,22 @@ Spatiotemporal advection-diffusion SPDE as proposed in [Clarotto2024](@cite):
 
 where Z(t, s) is spatiotemporal noise which may be colored.
 """
-struct AdvectionDiffusionSPDE{D} <: SPDE
-    κ::Real
-    α::Rational
-    H::AbstractMatrix
-    γ::AbstractVector
-    c::Real
-    τ::Real
-    spatial_spde::SPDE
-    initial_spde::SPDE
-
-    function AdvectionDiffusionSPDE{D}(;
-            κ::Real = 1.0,
-            α::Rational = 1 // 1,
-            H::AbstractMatrix = sparse(I, (D, D)),
-            γ::AbstractVector,
-            c::Real = 1.0,
-            τ::Real = 1.0,
-            spatial_spde = MaternSPDE{D}(κ = κ, smoothness = 1, diffusion_factor = H),
-            initial_spde = MaternSPDE{D}(κ = κ, smoothness = 2, diffusion_factor = H),
-        ) where {D}
-        κ >= 0 || throw(ArgumentError("κ must be non-negative"))
-        α >= 0 || throw(ArgumentError("α must be non-negative"))
-        τ > 0 || throw(ArgumentError("τ must be positive"))
-        # νₛ > 0 || throw(ArgumentError("νₛ must be positive"))
-        (D >= 1 && isinteger(D)) || throw(ArgumentError("D must be a positive integer"))
-        return new{D}(κ, α, H, γ, c, τ, spatial_spde, initial_spde)
-    end
+function AdvectionDiffusionSPDE{D}(;
+        κ::Real = 1.0,
+        α::Rational = 1 // 1,
+        H::AbstractMatrix = sparse(I, (D, D)),
+        γ::AbstractVector,
+        c::Real = 1.0,
+        τ::Real = 1.0,
+        spatial_spde = MaternSPDE{D}(κ = κ, smoothness = 1, diffusion_factor = H),
+        initial_spde = MaternSPDE{D}(κ = κ, smoothness = 2, diffusion_factor = H),
+    ) where {D}
+    κ >= 0 || throw(ArgumentError("κ must be non-negative"))
+    α >= 0 || throw(ArgumentError("α must be non-negative"))
+    τ > 0 || throw(ArgumentError("τ must be positive"))
+    # νₛ > 0 || throw(ArgumentError("νₛ must be positive"))
+    (D >= 1 && isinteger(D)) || throw(ArgumentError("D must be a positive integer"))
+    return AdvectionDiffusionSPDE{D}(κ, α, H, γ, c, τ, spatial_spde, initial_spde)
 end
 
 function assemble_M_G_B_matrices(

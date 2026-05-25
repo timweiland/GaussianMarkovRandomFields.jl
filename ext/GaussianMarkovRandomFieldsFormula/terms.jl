@@ -275,6 +275,11 @@ function StatsModels.modelcols(term::BYM2Term, data)
 end
 
 # Matern(x_coord, y_coord)
+#
+# The methods below reference `GaussianMarkovRandomFields.MaternModel` and
+# `GaussianMarkovRandomFields.evaluation_matrix` which are stubs unless the
+# `GaussianMarkovRandomFieldsFEM` extension is loaded. The stubs throw a
+# helpful error at call time.
 struct MaternTerm{F, S <: Integer, Alg, C} <: FormulaRandomEffectTerm
     coord_variables::Tuple{Symbol, Symbol}
     discretization::F            # FEMDiscretization or Nothing (auto-build)
