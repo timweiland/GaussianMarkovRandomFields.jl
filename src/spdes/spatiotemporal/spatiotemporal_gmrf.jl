@@ -74,17 +74,11 @@ Draw samples from the spatiotemporal GMRF at each time point.
 - A vector of sample values of length Nₜ, one sample value vector
   for each time point.
 """
-# COV_EXCL_START
-time_rands(d::AbstractSpatiotemporalGMRF, rng::AbstractRNG) =
-    throw(MethodError(time_rands, (d, rng)))
-# COV_EXCL_STOP
+time_rands(d::AbstractSpatiotemporalGMRF, rng::AbstractRNG) = throw(MethodError(time_rands, (d, rng))) # COV_EXCL_LINE
 
 """
     discretization_at_time(::AbstractSpatiotemporalGMRF, t::Int)
 
 Return the spatial discretization at time `t`.
 """
-# COV_EXCL_START
-discretization_at_time(d::AbstractSpatiotemporalGMRF, t::Int) =
-    throw(MethodError(discretization_at_time, (d, t)))
-# COV_EXCL_STOP
+discretization_at_time(d::AbstractSpatiotemporalGMRF, t::Int) = throw(MethodError(discretization_at_time, (d, t))) # COV_EXCL_LINE
