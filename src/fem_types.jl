@@ -42,6 +42,11 @@ FEMDiscretization(args...; kwargs...) = _fem_extension_required("FEMDiscretizati
 
 ndim(::FEMDiscretization{D}) where {D} = D
 
+# Generic `discretize` fallback over (::SPDE, ::FEMDiscretization). Lives here
+# rather than next to the SPDE abstract type because it references
+# `FEMDiscretization`, which is only defined after `spdes/spde.jl` runs.
+discretize(s::SPDE, d::FEMDiscretization) = throw(MethodError(discretize, (s, d))) # COV_EXCL_LINE
+
 # --- SPDEs -------------------------------------------------------------------
 """
     MaternSPDE{D, Tv, Ti}

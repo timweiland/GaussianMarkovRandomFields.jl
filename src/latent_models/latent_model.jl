@@ -48,7 +48,7 @@ Return the size/dimension of the latent process.
 An integer representing the number of latent variables in the model.
 """
 function Base.length(model::LatentModel)
-    error("length not implemented for $(typeof(model))")
+    throw(MethodError(length, (model,)))
 end
 
 """
@@ -60,7 +60,7 @@ Return a NamedTuple describing the hyperparameters and their types for the model
 A NamedTuple where keys are parameter names and values are their expected types.
 """
 function hyperparameters(model::LatentModel)
-    error("hyperparameters not implemented for $(typeof(model))")
+    throw(MethodError(hyperparameters, (model,)))
 end
 
 """
@@ -76,7 +76,7 @@ Construct the precision matrix for the model given hyperparameter values.
 A precision matrix (AbstractMatrix or LinearMap) for use in GMRF construction.
 """
 function precision_matrix(model::LatentModel; kwargs...)
-    error("precision_matrix not implemented for $(typeof(model))")
+    throw(MethodError(precision_matrix, (model,)))
 end
 
 """
@@ -92,7 +92,7 @@ Construct the mean vector for the model given hyperparameter values.
 A mean vector (AbstractVector) for use in GMRF construction.
 """
 function mean(model::LatentModel; kwargs...)
-    error("mean not implemented for $(typeof(model))")
+    throw(MethodError(mean, (model,)))
 end
 
 """
@@ -109,7 +109,7 @@ Either `nothing` if no constraints, or a tuple `(A, e)` where `A` is the
 constraint matrix and `e` is the constraint vector such that `Ax = e`.
 """
 function constraints(model::LatentModel; kwargs...)
-    error("constraints not implemented for $(typeof(model))")
+    throw(MethodError(constraints, (model,)))
 end
 
 """
@@ -124,7 +124,7 @@ For example, if two models both have a τ parameter, they become τ_ar1, τ_besa
 A Symbol that will be used as the suffix in parameter names.
 """
 function model_name(model::LatentModel)
-    error("model_name not implemented for $(typeof(model))")
+    throw(MethodError(model_name, (model,)))
 end
 
 """

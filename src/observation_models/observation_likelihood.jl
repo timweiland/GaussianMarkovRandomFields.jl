@@ -35,7 +35,7 @@ abstract type ObservationLikelihood end
 # Default trait implementation: all likelihoods are conditionally independent unless overridden
 observation_independence(::ObservationLikelihood) = ConditionallyIndependent()
 
-loglik(x, obs_lik::ObservationLikelihood) = error("loglik is not implemented for $(typeof(obs_lik)).")
+loglik(x, obs_lik::ObservationLikelihood) = throw(MethodError(loglik, (x, obs_lik)))
 (obs_lik::ObservationLikelihood)(x) = loglik(x, obs_lik)
 
 autodiff_gradient_backend(::ObservationLikelihood) = nothing
@@ -60,11 +60,15 @@ function loggrad(x, obs_lik::ObservationLikelihood)
             return DI.gradient(obs_lik, backend, x)
         end
     else
+        # COV_EXCL_START
         obs_lik_type = typeof(obs_lik)
-        error(
-            "loggrad not implemented for $(obs_lik_type).\n"
-                * "Try implementing `autodiff_gradient_backend(::$(obs_lik_type))`."
+        throw(
+            ArgumentError(
+                "loggrad not implemented for $(obs_lik_type).\n"
+                    * "Try implementing `autodiff_gradient_backend(::$(obs_lik_type))`."
+            )
         )
+        # COV_EXCL_STOP
     end
 end
 
@@ -86,11 +90,15 @@ function loghessian(x, obs_lik::ObservationLikelihood)
             return DI.hessian(obs_lik, backend, x)
         end
     else
+        # COV_EXCL_START
         obs_lik_type = typeof(obs_lik)
-        error(
-            "loghessian not implemented for $(obs_lik_type).\n"
-                * "Try implementing `autodiff_hessian_backend(::$(obs_lik_type))`."
+        throw(
+            ArgumentError(
+                "loghessian not implemented for $(obs_lik_type).\n"
+                    * "Try implementing `autodiff_hessian_backend(::$(obs_lik_type))`."
+            )
         )
+        # COV_EXCL_STOP
     end
 end
 
@@ -235,22 +243,22 @@ function _pointwise_loglik(::ConditionallyIndependent, x, obs_lik::MyLikelihood)
 end
 ```
 """
+# COV_EXCL_START
 function _pointwise_loglik(::ConditionallyDependent, x, obs_lik::ObservationLikelihood)
     obs_lik_type = typeof(obs_lik)
-    error(
-        "pointwise_loglik not supported for observation model with correlated observations.\n"
-            * "$(obs_lik_type) has trait ConditionallyDependent().\n"
-            * "Pointwise log-likelihoods are only well-defined for conditionally independent observations."
+    throw(
+        ArgumentError(
+            "pointwise_loglik not supported for observation model with correlated observations.\n"
+                * "$(obs_lik_type) has trait ConditionallyDependent().\n"
+                * "Pointwise log-likelihoods are only well-defined for conditionally independent observations."
+        )
     )
 end
 
 function _pointwise_loglik(::ConditionallyIndependent, x, obs_lik::ObservationLikelihood)
-    obs_lik_type = typeof(obs_lik)
-    error(
-        "pointwise_loglik not implemented for $(obs_lik_type).\n"
-            * "Implement `_pointwise_loglik(::ConditionallyIndependent, x, ::$(obs_lik_type))`."
-    )
+    throw(MethodError(_pointwise_loglik, (ConditionallyIndependent(), x, obs_lik)))
 end
+# COV_EXCL_STOP
 
 """
     _pointwise_loglik!(independence_trait, result, x, obs_lik)
@@ -265,19 +273,19 @@ function _pointwise_loglik!(::ConditionallyIndependent, result, x, obs_lik::MyLi
 end
 ```
 """
+# COV_EXCL_START
 function _pointwise_loglik!(::ConditionallyDependent, result, x, obs_lik::ObservationLikelihood)
     obs_lik_type = typeof(obs_lik)
-    error(
-        "pointwise_loglik! not supported for observation model with correlated observations.\n"
-            * "$(obs_lik_type) has trait ConditionallyDependent().\n"
-            * "Pointwise log-likelihoods are only well-defined for conditionally independent observations."
+    throw(
+        ArgumentError(
+            "pointwise_loglik! not supported for observation model with correlated observations.\n"
+                * "$(obs_lik_type) has trait ConditionallyDependent().\n"
+                * "Pointwise log-likelihoods are only well-defined for conditionally independent observations."
+        )
     )
 end
 
 function _pointwise_loglik!(::ConditionallyIndependent, result, x, obs_lik::ObservationLikelihood)
-    obs_lik_type = typeof(obs_lik)
-    error(
-        "pointwise_loglik! not implemented for $(obs_lik_type).\n"
-            * "Implement `_pointwise_loglik!(::ConditionallyIndependent, result, x, ::$(obs_lik_type))`."
-    )
+    throw(MethodError(_pointwise_loglik!, (ConditionallyIndependent(), result, x, obs_lik)))
 end
+# COV_EXCL_STOP

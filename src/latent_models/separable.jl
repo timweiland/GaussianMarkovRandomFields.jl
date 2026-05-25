@@ -52,7 +52,7 @@ end
 # Constructor
 function SeparableModel(components::LatentModel...; alg = nothing)
     length(components) >= 2 ||
-        error("SeparableModel requires at least 2 components, got $(length(components))")
+        throw(ArgumentError("SeparableModel requires at least 2 components, got $(length(components))"))
     return SeparableModel(components, alg)
 end
 

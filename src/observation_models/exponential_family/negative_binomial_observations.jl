@@ -40,16 +40,16 @@ struct NegativeBinomialObservations <: AbstractVector{Tuple{Int, Float64}}
         exposure_f64 = Float64.(exposure)
 
         if length(counts_int) != length(exposure_f64)
-            error("Length of counts ($(length(counts_int))) must match length of exposure ($(length(exposure_f64)))")
+            throw(DimensionMismatch("Length of counts ($(length(counts_int))) must match length of exposure ($(length(exposure_f64)))"))
         end
 
         logexposure = similar(exposure_f64)
         for i in eachindex(counts_int)
             if counts_int[i] < 0
-                error("Counts must be non-negative at index $i (got $(counts_int[i]))")
+                throw(DomainError(counts_int[i], "Counts must be non-negative at index $i"))
             end
             if exposure_f64[i] <= 0
-                error("Exposure must be positive at index $i (got $(exposure_f64[i]))")
+                throw(DomainError(exposure_f64[i], "Exposure must be positive at index $i"))
             end
             logexposure[i] = log(exposure_f64[i])
         end
@@ -62,7 +62,7 @@ struct NegativeBinomialObservations <: AbstractVector{Tuple{Int, Float64}}
         logexposure = zeros(Float64, length(counts_int))
         for i in eachindex(counts_int)
             if counts_int[i] < 0
-                error("Counts must be non-negative at index $i (got $(counts_int[i]))")
+                throw(DomainError(counts_int[i], "Counts must be non-negative at index $i"))
             end
         end
         return new(counts_int, logexposure)

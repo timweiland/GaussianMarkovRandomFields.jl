@@ -10,4 +10,6 @@ abstract type SPDE end
 function ndim end
 function discretize end
 
-ndim(::SPDE) = error("dim not implemented for SPDE")  # COV_EXCL_LINE
+ndim(s::SPDE) = throw(MethodError(ndim, (s,))) # COV_EXCL_LINE
+# `discretize(::SPDE, ::FEMDiscretization)` fallback lives in `src/fem_types.jl`,
+# which is loaded after the `FEMDiscretization` type definition.

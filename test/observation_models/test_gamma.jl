@@ -30,10 +30,10 @@ using SparseArrays
 
     @testset "Validation" begin
         ef = ExponentialFamily(Gamma)
-        @test_throws ErrorException ef([1.0, -0.5, 2.0]; phi = 1.0)
-        @test_throws ErrorException ef([1.0, 0.0, 2.0]; phi = 1.0)
-        @test_throws ErrorException ef([1.0, 2.0]; phi = 0.0)
-        @test_throws ErrorException ef([1.0, 2.0]; phi = -1.0)
+        @test_throws DomainError ef([1.0, -0.5, 2.0]; phi = 1.0)
+        @test_throws DomainError ef([1.0, 0.0, 2.0]; phi = 1.0)
+        @test_throws DomainError ef([1.0, 2.0]; phi = 0.0)
+        @test_throws DomainError ef([1.0, 2.0]; phi = -1.0)
     end
 
     # ============================================================

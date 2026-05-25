@@ -257,7 +257,7 @@ using FiniteDiff, ForwardDiff
         β_d = ForwardDiff.Dual{TagB, Float64, 1}(0.3, ForwardDiff.Partials{1, Float64}((1.0,)))
         obs_lik = obs_model(y; α = α_d, β = β_d)
         prior = WorkspaceGMRF(zeros(3), spdiagm(0 => ones(3)))
-        @test_throws ErrorException gaussian_approximation(prior, obs_lik)
+        @test_throws ArgumentError gaussian_approximation(prior, obs_lik)
     end
 
     @testset "_assemble_q_post_dual: sparse, dense-error, pattern-violation" begin

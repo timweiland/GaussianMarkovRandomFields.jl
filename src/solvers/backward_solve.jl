@@ -45,7 +45,7 @@ Convenience function that dispatches to backward_solve(linsolve, x, linsolve.alg
 backward_solve(linsolve, x) = backward_solve(linsolve, x, linsolve.alg)
 
 # Implementation methods (after factorization is ensured)
-_backward_solve_impl(linsolve, x, alg) = error("Backward solve not implemented for algorithm $(typeof(alg))")
+_backward_solve_impl(linsolve, x, alg) = throw(ArgumentError("Backward solve not implemented for algorithm $(typeof(alg))")) # COV_EXCL_LINE
 
 function _backward_solve_impl(linsolve, x, ::LinearSolve.CHOLMODFactorization)
     factorization = LinearSolve.@get_cacheval(linsolve, :CHOLMODFactorization)
@@ -68,10 +68,12 @@ function _backward_solve_impl(linsolve, x, ::LinearSolve.LDLtFactorization)
     return factorization.Lt \ (sqrt.(factorization.D) \ x)
 end
 
+# COV_EXCL_START
 function _backward_solve_impl(linsolve, x, ::LinearSolve.PardisoJL)
     # Pardiso backward solve - will be implemented in extension
-    error("Pardiso backward solve implementation requires the Pardiso extension")
+    throw(ArgumentError("Pardiso backward solve implementation requires the Pardiso extension"))
 end
+# COV_EXCL_STOP
 
 # Handle DefaultLinearSolver by dispatching on the nested algorithm
 function _backward_solve_impl(linsolve, x, alg::LinearSolve.DefaultLinearSolver)

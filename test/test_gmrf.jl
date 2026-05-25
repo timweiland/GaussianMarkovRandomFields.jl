@@ -30,8 +30,8 @@ using Random
         @test invcov(d_diag) == Q_diag
     end
 
-    @test_throws ErrorException cov(d_standard)
-    @test_throws ErrorException cov(d_diag)
+    @test_throws ArgumentError cov(d_standard)
+    @test_throws ArgumentError cov(d_diag)
 
     @test logdetcov(d_standard) ≈ -logdet(Q_standard)
     @test logdetcov(d_diag) ≈ -logdet(Q_diag)
@@ -145,10 +145,10 @@ using Random
         d_no_qsqrt = GMRF(μ, Q, LinearSolve.KrylovJL_GMRES())
 
         # Should error when trying to sample without Q_sqrt
-        @test_throws ErrorException rand(rng, d_no_qsqrt)
+        @test_throws ArgumentError rand(rng, d_no_qsqrt)
 
         # Should also error when trying to compute variance
-        @test_throws ErrorException var(d_no_qsqrt)
+        @test_throws ArgumentError var(d_no_qsqrt)
     end
 
     @testset "LDLtFactorization cache update" begin

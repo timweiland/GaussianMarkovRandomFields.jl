@@ -158,6 +158,6 @@ import DifferentiationInterface as DI
         lik = IncompleteLikelihood(y)
         x = [1.0]
 
-        @test_throws ErrorException loglik(x, lik)
+        @test_throws MethodError loglik(x, lik)
     end
 end

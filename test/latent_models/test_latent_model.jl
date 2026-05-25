@@ -15,12 +15,12 @@ ConstrainedTestModel(n::Int; alg = nothing) = ConstrainedTestModel{typeof(alg)}(
     struct DummyLatentModel <: LatentModel end
     dummy = DummyLatentModel()
 
-    @test_throws ErrorException hyperparameters(dummy)
-    @test_throws ErrorException precision_matrix(dummy; τ = 1.0)
-    @test_throws ErrorException mean(dummy; τ = 1.0)
-    @test_throws ErrorException constraints(dummy; τ = 1.0)
-    @test_throws ErrorException model_name(dummy)
-    @test_throws ErrorException Base.length(dummy)
+    @test_throws MethodError hyperparameters(dummy)
+    @test_throws MethodError precision_matrix(dummy; τ = 1.0)
+    @test_throws MethodError mean(dummy; τ = 1.0)
+    @test_throws MethodError constraints(dummy; τ = 1.0)
+    @test_throws MethodError model_name(dummy)
+    @test_throws MethodError Base.length(dummy)
 end
 
 @testset "LatentModel Call Interface" begin

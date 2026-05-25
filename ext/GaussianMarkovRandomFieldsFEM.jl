@@ -64,7 +64,6 @@ using LibGEOS
 include("GaussianMarkovRandomFieldsFEM/fem_discretization.jl")
 include("GaussianMarkovRandomFieldsFEM/fem_derivatives.jl")
 include("GaussianMarkovRandomFieldsFEM/fem_utils.jl")
-include("GaussianMarkovRandomFieldsFEM/spde.jl")
 include("GaussianMarkovRandomFieldsFEM/linear_ssm.jl")
 include("GaussianMarkovRandomFieldsFEM/implicit_euler_ssm.jl")
 include("GaussianMarkovRandomFieldsFEM/constant_mesh.jl")

@@ -250,11 +250,13 @@ function _lik_dual_tag_npartials(lik::GMRFs.CompositeLikelihood)
         if Tag === nothing
             Tag, N = T_c, N_c
         elseif T_c !== Tag || N_c != N
-            error(
-                "CompositeLikelihood components carry Duals from different " *
-                    "outer-AD passes (component $i has Tag=$T_c / N=$N_c, " *
-                    "expected Tag=$Tag / N=$N). All Dual hyperparams must come " *
-                    "from a single outer ForwardDiff pass."
+            throw(
+                ArgumentError(
+                    "CompositeLikelihood components carry Duals from different " *
+                        "outer-AD passes (component $i has Tag=$T_c / N=$N_c, " *
+                        "expected Tag=$Tag / N=$N). All Dual hyperparams must come " *
+                        "from a single outer ForwardDiff pass."
+                )
             )
         end
     end
@@ -274,16 +276,18 @@ function _ift_outer_tag_and_npartials(prior, lik)
         if Tag === nothing
             Tag, N = Tag2, N2
         elseif Tag !== Tag2 || N != N2
-            error(
-                "WorkspaceGMRF prior and observation likelihood carry Duals " *
-                    "from different outer-AD passes (prior: Tag=$Tag / N=$N, " *
-                    "lik: Tag=$Tag2 / N=$N2). All Dual partials threaded " *
-                    "through the IFT must come from a single outer ForwardDiff pass."
+            throw(
+                ArgumentError(
+                    "WorkspaceGMRF prior and observation likelihood carry Duals " *
+                        "from different outer-AD passes (prior: Tag=$Tag / N=$N, " *
+                        "lik: Tag=$Tag2 / N=$N2). All Dual partials threaded " *
+                        "through the IFT must come from a single outer ForwardDiff pass."
+                )
             )
         end
     end
     Tag === nothing &&
-        error("IFT path invoked with no Dual partials in either prior or likelihood")
+        throw(ArgumentError("IFT path invoked with no Dual partials in either prior or likelihood"))
     return Tag, N
 end
 

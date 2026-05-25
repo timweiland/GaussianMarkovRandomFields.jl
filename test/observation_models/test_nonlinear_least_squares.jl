@@ -97,4 +97,27 @@ using Distributions
         manual = sum(logpdf.(Normal.(yhat, σ), y_sample))
         @test logpdf(d, y_sample) ≈ manual atol = 1.0e-10
     end
+
+    @testset "σ validation" begin
+        model = NonlinearLeastSquaresModel(f, 2)
+        y = [1.0, 0.5, 2.0]
+        x = [0.2, -0.1]
+
+        # Materialization: σ must be positive
+        @test_throws DomainError model(y; σ = 0.0)
+        @test_throws DomainError model(y; σ = -0.1)
+        @test_throws DomainError model(y; σ = [0.3, -0.1, 0.5])
+
+        # Materialization: σ-vector length must match y length
+        @test_throws DimensionMismatch model(y; σ = [0.3, 0.4])
+
+        # Materialization: σ must be a number or a vector
+        @test_throws ArgumentError model(y; σ = "0.3")
+
+        # conditional_distribution: σ-vector length must match f(x)
+        @test_throws DimensionMismatch conditional_distribution(model, x; σ = [0.3, 0.4])
+
+        # conditional_distribution: σ must be a number or a vector
+        @test_throws ArgumentError conditional_distribution(model, x; σ = "0.3")
+    end
 end
