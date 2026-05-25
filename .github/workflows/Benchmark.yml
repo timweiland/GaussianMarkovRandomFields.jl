@@ -38,10 +38,26 @@ jobs:
       - name: Run benchmarks on PR HEAD
         run: julia --project=benchmarks benchmarks/run_regression.jl pr.json
 
+      # Stash the PR's benchmark scripts so we can run the *same* suite against
+      # the baseline source. This matters for first-time PRs where the baseline
+      # branch doesn't have the benchmark suite yet.
+      - name: Stash PR benchmark scripts
+        run: |
+          mkdir -p /tmp/bench
+          cp benchmarks/benchmarks.jl /tmp/bench/
+          cp benchmarks/run_regression.jl /tmp/bench/
+          cp benchmarks/compare_results.jl /tmp/bench/
+          cp benchmarks/Project.toml /tmp/bench/
+
       - name: Checkout baseline (${{ github.base_ref || 'main' }})
         run: |
           git fetch origin ${{ github.base_ref || 'main' }}:_baseline
           git checkout _baseline
+          mkdir -p benchmarks
+          cp /tmp/bench/benchmarks.jl benchmarks/
+          cp /tmp/bench/run_regression.jl benchmarks/
+          cp /tmp/bench/compare_results.jl benchmarks/
+          cp /tmp/bench/Project.toml benchmarks/
 
       - name: Re-instantiate baseline environment
         run: julia --project=benchmarks -e 'using Pkg; Pkg.develop(path="."); Pkg.instantiate()'
@@ -50,7 +66,12 @@ jobs:
         run: julia --project=benchmarks benchmarks/run_regression.jl baseline.json
 
       - name: Restore PR worktree for comparison script
-        run: git checkout -
+        run: |
+          # Remove the bench scripts we copied in so they don't block the
+          # switch back to the PR branch (where they're tracked).
+          rm -f benchmarks/benchmarks.jl benchmarks/run_regression.jl \
+                benchmarks/compare_results.jl benchmarks/Project.toml
+          git checkout -
 
       - name: Compare PR vs baseline
         id: compare
