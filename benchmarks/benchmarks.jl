@@ -47,8 +47,10 @@ const N_MED = 1000    # GMRF core operations
 const N_AD = 100      # Autodiff pipeline (matches existing autodiff bench)
 
 # Pre-built precision matrices used by several groups.
+# RW1Model returns SymTridiagonal, which is what LDLtFactorization expects.
+# Convert to sparse only when feeding CHOLMOD.
 const Q_RW1_MED = precision_matrix(RW1Model(N_MED); τ = 1.0)
-const Q_RW1_SMALL_SPARSE = sparse(precision_matrix(RW1Model(N_SMALL); τ = 1.0))
+const Q_RW1_SMALL = precision_matrix(RW1Model(N_SMALL); τ = 1.0)
 
 # Mean / evaluation vectors.
 const MU_MED = zeros(N_MED)
@@ -66,7 +68,7 @@ const Y_POISSON_SMALL = PoissonObservations(
     rand.(MersenneTwister(1), Poisson.(exp.(POISSON_LATENT_SMALL .+ 0.5)))
 )
 const OBS_LIK_POISSON_SMALL = ExponentialFamily(Poisson)(Y_POISSON_SMALL)
-const GMRF_PRIOR_SMALL = GMRF(MU_SMALL, Q_RW1_SMALL_SPARSE, LinearSolve.LDLtFactorization())
+const GMRF_PRIOR_SMALL = GMRF(MU_SMALL, Q_RW1_SMALL, LinearSolve.LDLtFactorization())
 
 # Adjacency matrix for a small 2D grid (Besag spatial model).
 function _grid_adjacency(nx::Int, ny::Int)

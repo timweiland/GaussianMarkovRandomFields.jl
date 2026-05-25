@@ -30,8 +30,8 @@ const IMPROVEMENT_TOLERANCE = 0.2 # 20% speedup highlighted as improvement
 
 judgement = judge(median(pr), median(baseline); time_tolerance = REGRESSION_TOLERANCE)
 
-regressions_list = leaves(regressions(judgement))
-improvements_list = leaves(improvements(judgement))
+regressions_list = BenchmarkTools.leaves(regressions(judgement))
+improvements_list = BenchmarkTools.leaves(improvements(judgement))
 
 function fmt_time(ns)
     return BenchmarkTools.prettytime(ns)
@@ -99,7 +99,7 @@ println(io, "<summary>Full results</summary>")
 println(io)
 println(io, "| Benchmark | Baseline | PR | Ratio |")
 println(io, "|---|---:|---:|---:|")
-for (keys, trial) in leaves(pr)
+for (keys, trial) in BenchmarkTools.leaves(pr)
     name = join(keys, " / ")
     p_time = time(median(trial))
     baseline_trial = _safe_get(baseline, keys)
