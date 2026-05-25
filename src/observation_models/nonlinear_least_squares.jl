@@ -63,6 +63,7 @@ function (model::NonlinearLeastSquaresModel)(y::AbstractVector; σ, kwargs...)
     jac_backend = try
         default_sparse_jacobian_backend()
     catch err
+        # COV_EXCL_START
         if err isa MethodError
             throw(
                 ArgumentError(
@@ -73,6 +74,7 @@ function (model::NonlinearLeastSquaresModel)(y::AbstractVector; σ, kwargs...)
         else
             rethrow()
         end
+        # COV_EXCL_STOP
     end
     return NonlinearLeastSquaresLikelihood{typeof(model.f), T, typeof(jac_backend)}(
         model.f, y_vec, convert.(T, inv_σ²), convert(T, log_const), jac_backend,

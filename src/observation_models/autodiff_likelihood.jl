@@ -149,12 +149,14 @@ const AD_PREFERRED_ORDER = (DI.AutoEnzyme(), DI.AutoMooncake(), DI.AutoZygote(),
 function default_grad_backend()
     ad_idx = findfirst(DI.check_available, AD_PREFERRED_ORDER)
     if ad_idx === nothing
+        # COV_EXCL_START
         throw(
             ArgumentError(
                 "None of the default AD backends are available."
                     * " Please specify your own grad_backend."
             )
         )
+        # COV_EXCL_STOP
     end
     return AD_PREFERRED_ORDER[ad_idx]
 end

@@ -73,7 +73,7 @@ mean(s::AbstractGMRF) = s.mean
 
 Return the precision (inverse covariance) map of the GMRF.
 """
-precision_map(d::AbstractGMRF) = throw(MethodError(precision_map, (d,)))
+precision_map(d::AbstractGMRF) = throw(MethodError(precision_map, (d,))) # COV_EXCL_LINE
 
 """
     precision_matrix(::AbstractGMRF)
@@ -89,7 +89,7 @@ length(d::AbstractGMRF) = Base.size(precision_map(d), 1)
 invcov(d::AbstractGMRF) = Symmetric(precision_matrix(d))
 cov(::AbstractGMRF) = throw(ArgumentError("Prevented forming dense covariance matrix in memory."))
 
-logdetcov(d::AbstractGMRF) = throw(MethodError(logdetcov, (d,)))
+logdetcov(d::AbstractGMRF) = throw(MethodError(logdetcov, (d,))) # COV_EXCL_LINE
 
 sqmahal(d::AbstractGMRF, x::AbstractVector) = (
     Δ = x - mean(d);
@@ -100,9 +100,9 @@ sqmahal!(r::AbstractVector, d::AbstractGMRF, x::AbstractVector) = (r .= sqmahal(
 gradlogpdf(d::AbstractGMRF, x::AbstractVector) = -precision_map(d) * (x .- mean(d))
 
 _rand!(rng::AbstractRNG, d::AbstractGMRF, x::AbstractVector) =
-    throw(MethodError(_rand!, (rng, d, x)))
+    throw(MethodError(_rand!, (rng, d, x))) # COV_EXCL_LINE
 
-var(d::AbstractGMRF) = throw(MethodError(var, (d,)))
+var(d::AbstractGMRF) = throw(MethodError(var, (d,))) # COV_EXCL_LINE
 std(d::AbstractGMRF) = sqrt.(var(d))
 
 #####################

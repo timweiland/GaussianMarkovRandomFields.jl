@@ -30,6 +30,7 @@ function _outer_tag_and_npartials(hp::NamedTuple)
         if Tag === nothing
             Tag, N = T_v, N_v
         elseif T_v !== Tag || N_v != N
+            # COV_EXCL_START
             throw(
                 ArgumentError(
                     "AutoDiffLikelihood IFT path: hyperparams carry Duals from " *
@@ -38,9 +39,10 @@ function _outer_tag_and_npartials(hp::NamedTuple)
                         "from a single outer ForwardDiff pass."
                 )
             )
+            # COV_EXCL_STOP
         end
     end
-    Tag === nothing && throw(ArgumentError("no Dual hyperparam in $(keys(hp))"))
+    Tag === nothing && throw(ArgumentError("no Dual hyperparam in $(keys(hp))")) # COV_EXCL_LINE
     return Tag, N
 end
 

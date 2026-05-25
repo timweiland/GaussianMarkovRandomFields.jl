@@ -60,6 +60,7 @@ function loggrad(x, obs_lik::ObservationLikelihood)
             return DI.gradient(obs_lik, backend, x)
         end
     else
+        # COV_EXCL_START
         obs_lik_type = typeof(obs_lik)
         throw(
             ArgumentError(
@@ -67,6 +68,7 @@ function loggrad(x, obs_lik::ObservationLikelihood)
                     * "Try implementing `autodiff_gradient_backend(::$(obs_lik_type))`."
             )
         )
+        # COV_EXCL_STOP
     end
 end
 
@@ -88,6 +90,7 @@ function loghessian(x, obs_lik::ObservationLikelihood)
             return DI.hessian(obs_lik, backend, x)
         end
     else
+        # COV_EXCL_START
         obs_lik_type = typeof(obs_lik)
         throw(
             ArgumentError(
@@ -95,6 +98,7 @@ function loghessian(x, obs_lik::ObservationLikelihood)
                     * "Try implementing `autodiff_hessian_backend(::$(obs_lik_type))`."
             )
         )
+        # COV_EXCL_STOP
     end
 end
 
@@ -239,6 +243,7 @@ function _pointwise_loglik(::ConditionallyIndependent, x, obs_lik::MyLikelihood)
 end
 ```
 """
+# COV_EXCL_START
 function _pointwise_loglik(::ConditionallyDependent, x, obs_lik::ObservationLikelihood)
     obs_lik_type = typeof(obs_lik)
     throw(
@@ -253,6 +258,7 @@ end
 function _pointwise_loglik(::ConditionallyIndependent, x, obs_lik::ObservationLikelihood)
     throw(MethodError(_pointwise_loglik, (ConditionallyIndependent(), x, obs_lik)))
 end
+# COV_EXCL_STOP
 
 """
     _pointwise_loglik!(independence_trait, result, x, obs_lik)
@@ -267,6 +273,7 @@ function _pointwise_loglik!(::ConditionallyIndependent, result, x, obs_lik::MyLi
 end
 ```
 """
+# COV_EXCL_START
 function _pointwise_loglik!(::ConditionallyDependent, result, x, obs_lik::ObservationLikelihood)
     obs_lik_type = typeof(obs_lik)
     throw(
@@ -281,3 +288,4 @@ end
 function _pointwise_loglik!(::ConditionallyIndependent, result, x, obs_lik::ObservationLikelihood)
     throw(MethodError(_pointwise_loglik!, (ConditionallyIndependent(), result, x, obs_lik)))
 end
+# COV_EXCL_STOP

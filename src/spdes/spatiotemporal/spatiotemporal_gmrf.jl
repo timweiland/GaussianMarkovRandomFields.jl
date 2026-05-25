@@ -33,7 +33,7 @@ abstract type AbstractSpatiotemporalGMRF{T <: Real, PrecisionMap <: LinearMap{T}
 
 Return the number of time points in the spatiotemporal GMRF.
 """
-N_t(d::AbstractSpatiotemporalGMRF) = throw(MethodError(N_t, (d,)))
+N_t(d::AbstractSpatiotemporalGMRF) = throw(MethodError(N_t, (d,))) # COV_EXCL_LINE
 
 """
     time_means(::AbstractSpatiotemporalGMRF)
@@ -43,7 +43,7 @@ Return the means of the spatiotemporal GMRF at each time point.
 # Returns
 - A vector of means of length Nₜ, one for each time point.
 """
-time_means(d::AbstractSpatiotemporalGMRF) = throw(MethodError(time_means, (d,)))
+time_means(d::AbstractSpatiotemporalGMRF) = throw(MethodError(time_means, (d,))) # COV_EXCL_LINE
 
 """
     time_vars(::AbstractSpatiotemporalGMRF)
@@ -53,7 +53,7 @@ Return the marginal variances of the spatiotemporal GMRF at each time point.
 # Returns
 - A vector of marginal variances of length Nₜ, one for each time point.
 """
-time_vars(d::AbstractSpatiotemporalGMRF) = throw(MethodError(time_vars, (d,)))
+time_vars(d::AbstractSpatiotemporalGMRF) = throw(MethodError(time_vars, (d,))) # COV_EXCL_LINE
 
 """
     time_stds(::AbstractSpatiotemporalGMRF)
@@ -63,7 +63,7 @@ Return the marginal standard deviations of the spatiotemporal GMRF at each time 
 # Returns
 - A vector of marginal standard deviations of length Nₜ, one for each time point.
 """
-time_stds(d::AbstractSpatiotemporalGMRF) = throw(MethodError(time_stds, (d,)))
+time_stds(d::AbstractSpatiotemporalGMRF) = throw(MethodError(time_stds, (d,))) # COV_EXCL_LINE
 
 """
     time_rands(::AbstractSpatiotemporalGMRF, rng::AbstractRNG)
@@ -74,13 +74,17 @@ Draw samples from the spatiotemporal GMRF at each time point.
 - A vector of sample values of length Nₜ, one sample value vector
   for each time point.
 """
+# COV_EXCL_START
 time_rands(d::AbstractSpatiotemporalGMRF, rng::AbstractRNG) =
     throw(MethodError(time_rands, (d, rng)))
+# COV_EXCL_STOP
 
 """
     discretization_at_time(::AbstractSpatiotemporalGMRF, t::Int)
 
 Return the spatial discretization at time `t`.
 """
+# COV_EXCL_START
 discretization_at_time(d::AbstractSpatiotemporalGMRF, t::Int) =
     throw(MethodError(discretization_at_time, (d, t)))
+# COV_EXCL_STOP

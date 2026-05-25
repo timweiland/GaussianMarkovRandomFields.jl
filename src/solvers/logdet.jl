@@ -22,7 +22,7 @@ Convenience function that dispatches to logdet_cov(linsolve, linsolve.alg).
 logdet_cov(linsolve) = logdet_cov(linsolve, linsolve.alg)
 
 # Implementation methods (after factorization is ensured)
-_logdet_cov_impl(linsolve, alg) = throw(ArgumentError("Log determinant of covariance not implemented for algorithm $(typeof(alg))"))
+_logdet_cov_impl(linsolve, alg) = throw(ArgumentError("Log determinant of covariance not implemented for algorithm $(typeof(alg))")) # COV_EXCL_LINE
 
 function _logdet_cov_impl(linsolve, ::LinearSolve.CHOLMODFactorization)
     factorization = LinearSolve.@get_cacheval(linsolve, :CHOLMODFactorization)
@@ -48,10 +48,12 @@ function _logdet_cov_impl(linsolve, ::LinearSolve.LDLtFactorization)
     return -logdet(factorization)
 end
 
+# COV_EXCL_START
 function _logdet_cov_impl(linsolve, ::LinearSolve.PardisoJL)
     # Pardiso logdet - will be implemented in extension
     throw(ArgumentError("Pardiso logdet implementation requires the Pardiso extension"))
 end
+# COV_EXCL_STOP
 
 # Handle DefaultLinearSolver by dispatching on the nested algorithm
 function _logdet_cov_impl(linsolve, alg::LinearSolve.DefaultLinearSolver)

@@ -15,6 +15,7 @@ Should implement the following methods:
 """
 abstract type AbstractPreconditioner{T} end;
 
+# COV_EXCL_START
 ldiv!(y, P::AbstractPreconditioner, x::AbstractVector) =
     throw(MethodError(ldiv!, (y, P, x)))
 ldiv!(P::AbstractPreconditioner, x::AbstractVector) =
@@ -23,3 +24,4 @@ ldiv!(P::AbstractPreconditioner, x::AbstractVector) =
     throw(MethodError(\, (P, x)))
 
 Base.size(P::AbstractPreconditioner) = throw(MethodError(size, (P,)))
+# COV_EXCL_STOP

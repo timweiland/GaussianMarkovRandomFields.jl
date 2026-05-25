@@ -64,12 +64,14 @@ struct LinearlyTransformedObservationModel{M <: ObservationModel, A} <: Observat
 
     function LinearlyTransformedObservationModel(base_model::M, design_matrix::A) where {M <: ObservationModel, A}
         # Validate that design matrix is appropriate
+        # COV_EXCL_START
         if size(design_matrix, 1) == 0
             throw(ArgumentError("Design matrix must have at least one row (observation)"))
         end
         if size(design_matrix, 2) == 0
             throw(ArgumentError("Design matrix must have at least one column (latent component)"))
         end
+        # COV_EXCL_STOP
         if design_matrix isa Matrix
             @warn "Received a dense design matrix. This can lead to major performance bottlenecks!"
         end
