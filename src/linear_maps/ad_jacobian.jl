@@ -56,6 +56,19 @@ struct ADJacobianAdjointMap{T} <: LinearMaps.LinearMap{T}
     f_pullback::Function
 end
 
+# Fallback for the 3-arg `(f, x₀, N_outputs)` constructor, which is implemented in the
+# Zygote extension. Vararg{Any} keeps the fallback strictly less specific than the
+# extension's concrete signature (no method overwriting). The error tells the user
+# what to load; JET sees a matching method so no false "no matching method" report.
+function ADJacobianAdjointMap(args::Vararg{Any})
+    return throw(
+        ArgumentError(
+            "Building an ADJacobianAdjointMap from (f, x₀, N_outputs) requires the " *
+                "Zygote extension. Load Zygote to enable reverse-mode AD adjoints of ADJacobianMap."
+        )
+    )
+end
+
 function LinearMaps.size(J::ADJacobianAdjointMap)
     return (length(J.x₀), J.N_outputs)
 end
