@@ -3,7 +3,7 @@
 #   Stubs for FEM-related functionality.
 #
 #   The implementations live in `ext/GaussianMarkovRandomFieldsFEM/`. The bare
-#   type definitions live in `src/fem_types.jl` (so that other code in the main
+#   type definitions live in `src/fem/types.jl` (so that other code in the main
 #   package and other extensions can reference these types without loading the
 #   FEM packages). The stubs declared below produce a helpful error if a user
 #   tries to call a FEM helper without the extension active.
