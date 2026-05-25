@@ -18,6 +18,9 @@
 
 using DataFrames
 using GaussianMarkovRandomFields
+# Loading the FEM weakdeps activates the `GaussianMarkovRandomFieldsFEM`
+# extension which provides `MaternModel` and the underlying SPDE machinery.
+using Ferrite, FerriteGmsh, Gmsh, LibGEOS
 using LinearAlgebra, Random
 using Plots
 

@@ -10,4 +10,4 @@ abstract type SPDE end
 function ndim end
 function discretize end
 
-ndim(::SPDE) = error("dim not implemented for SPDE")
+ndim(::SPDE) = error("dim not implemented for SPDE")  # COV_EXCL_LINE

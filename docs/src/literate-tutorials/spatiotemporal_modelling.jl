@@ -46,7 +46,7 @@ N_obs_all = length(ys_all)
 #
 # Let's start by setting up our discretizations:
 using GaussianMarkovRandomFields
-using Ferrite
+using Ferrite, FerriteGmsh, Gmsh, LibGEOS
 
 grid = generate_grid(Line, (Nₓ - 1,), Vec(x_left), Vec(x_right))
 interpolation = Lagrange{RefLine, 1}()

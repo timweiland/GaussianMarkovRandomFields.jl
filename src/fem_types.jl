@@ -35,8 +35,10 @@ struct FEMDiscretization{D, S, G, I, Q, GI, H, CH}
     constraint_noise::Vector{Float64}
 end
 
+# COV_EXCL_START
 FEMDiscretization(args...; kwargs...) = _fem_extension_required("FEMDiscretization")
 (::Type{<:FEMDiscretization})(args...; kwargs...) = _fem_extension_required("FEMDiscretization")
+# COV_EXCL_STOP
 
 ndim(::FEMDiscretization{D}) where {D} = D
 
@@ -54,8 +56,10 @@ struct MaternSPDE{D, Tv <: Real, Ti <: Integer} <: SPDE
     diffusion_factor::Matrix{Tv}
 end
 
+# COV_EXCL_START
 MaternSPDE(args...; kwargs...) = _fem_extension_required("MaternSPDE")
 (::Type{<:MaternSPDE})(args...; kwargs...) = _fem_extension_required("MaternSPDE")
+# COV_EXCL_STOP
 
 ndim(::MaternSPDE{D}) where {D} = D
 
@@ -76,8 +80,10 @@ struct AdvectionDiffusionSPDE{D} <: SPDE
     initial_spde::SPDE
 end
 
+# COV_EXCL_START
 AdvectionDiffusionSPDE(args...; kwargs...) = _fem_extension_required("AdvectionDiffusionSPDE")
 (::Type{<:AdvectionDiffusionSPDE})(args...; kwargs...) = _fem_extension_required("AdvectionDiffusionSPDE")
+# COV_EXCL_STOP
 
 # --- State-space models ------------------------------------------------------
 """
@@ -108,7 +114,9 @@ struct ImplicitEulerSSM{X, S, GF, MF, MIF, BF, BIF, TS, C, V}
     constraint_noise::V
 end
 
+# COV_EXCL_START
 ImplicitEulerSSM(args...; kwargs...) = _fem_extension_required("ImplicitEulerSSM")
+# COV_EXCL_STOP
 
 """
     ImplicitEulerJointSSMMatrices
@@ -125,8 +133,10 @@ struct ImplicitEulerJointSSMMatrices{T, GM, MM, SM, SQRT, C, V} <: JointSSMMatri
     constraint_noise::V
 end
 
+# COV_EXCL_START
 ImplicitEulerJointSSMMatrices(args...; kwargs...) =
     _fem_extension_required("ImplicitEulerJointSSMMatrices")
+# COV_EXCL_STOP
 
 # --- Spatiotemporal constant-mesh metadata ----------------------------------
 """
@@ -173,10 +183,12 @@ const ConcreteConstantMeshSTGMRF{D, T, P, G} =
 const ConstantMeshSTGMRF{D} =
     Union{ImplicitEulerConstantMeshSTGMRF{D}, ConcreteConstantMeshSTGMRF}
 
+# COV_EXCL_START
 ImplicitEulerConstantMeshSTGMRF(args...; kwargs...) =
     _fem_extension_required("ImplicitEulerConstantMeshSTGMRF")
 ConcreteConstantMeshSTGMRF(args...; kwargs...) =
     _fem_extension_required("ConcreteConstantMeshSTGMRF")
+# COV_EXCL_STOP
 
 # --- Matérn latent model -----------------------------------------------------
 """
@@ -194,5 +206,7 @@ struct MaternModel{F, S <: Integer, Alg, C, P} <: LatentModel
     observation_points::P
 end
 
+# COV_EXCL_START
 MaternModel(args...; kwargs...) = _fem_extension_required("MaternModel")
 (::Type{<:MaternModel})(args...; kwargs...) = _fem_extension_required("MaternModel")
+# COV_EXCL_STOP

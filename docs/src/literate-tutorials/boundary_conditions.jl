@@ -20,7 +20,7 @@
 #
 # ## Spatial example: Matern SPDE
 # We start by specifying a mesh over the interval [-1, 1].
-using GaussianMarkovRandomFields, Ferrite
+using GaussianMarkovRandomFields, Ferrite, FerriteGmsh, Gmsh, LibGEOS
 grid = generate_grid(Line, (50,))
 interpolation = Lagrange{RefLine, 1}()
 quadrature_rule = QuadratureRule{RefLine}(2)
