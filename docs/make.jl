@@ -4,8 +4,10 @@ using Documenter, DocumenterVitepress, GaussianMarkovRandomFields, DocumenterCit
 # developer docs.
 using Ferrite, FerriteGmsh, Gmsh, LibGEOS
 
-const FEMExt = Base.get_extension(GaussianMarkovRandomFields, :GaussianMarkovRandomFieldsFEM)
-const LibGEOSExt = Base.get_extension(GaussianMarkovRandomFields, :GaussianMarkovRandomFieldsLibGEOS)
+const GaussianMarkovRandomFieldsFEM =
+    Base.get_extension(GaussianMarkovRandomFields, :GaussianMarkovRandomFieldsFEM)
+const GaussianMarkovRandomFieldsLibGEOS =
+    Base.get_extension(GaussianMarkovRandomFields, :GaussianMarkovRandomFieldsLibGEOS)
 
 include("generate_literate.jl")
 
@@ -62,7 +64,11 @@ makedocs(
         devurl = "dev"
     ),
     plugins = [bib],
-    modules = [GaussianMarkovRandomFields, FEMExt, LibGEOSExt],
+    modules = [
+        GaussianMarkovRandomFields,
+        GaussianMarkovRandomFieldsFEM,
+        GaussianMarkovRandomFieldsLibGEOS,
+    ],
     checkdocs = :exports,
 )
 

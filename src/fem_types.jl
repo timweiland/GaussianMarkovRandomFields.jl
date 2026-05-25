@@ -150,11 +150,8 @@ ImplicitEulerJointSSMMatrices(args...; kwargs...) =
 # COV_EXCL_STOP
 
 # --- Spatiotemporal constant-mesh metadata ----------------------------------
-"""
-    ImplicitEulerMetadata{D, SSM} <: GMRFMetadata
-
-Metadata for implicit Euler spatiotemporal GMRFs with constant spatial mesh.
-"""
+# Internal metadata wrappers for the implicit-Euler and concrete spatiotemporal
+# `MetaGMRF`s. Not part of the user-facing API.
 struct ImplicitEulerMetadata{D, SSM} <: GMRFMetadata
     discretization::FEMDiscretization{D}
     ssm::SSM
@@ -162,11 +159,6 @@ struct ImplicitEulerMetadata{D, SSM} <: GMRFMetadata
     N_t::Int
 end
 
-"""
-    ConcreteSTMetadata{D} <: GMRFMetadata
-
-Metadata for concrete spatiotemporal GMRFs with constant spatial mesh.
-"""
 struct ConcreteSTMetadata{D} <: GMRFMetadata
     discretization::FEMDiscretization{D}
     N_spatial::Int
