@@ -59,23 +59,9 @@ function (model::NonlinearLeastSquaresModel)(y::AbstractVector; σ, kwargs...)
     y_vec = collect(Float64, y)
     T = promote_type(eltype(y_vec), eltype(inv_σ²))
 
-    # Prepare sparse Jacobian backend via extension
-    jac_backend = try
-        default_sparse_jacobian_backend()
-    catch err
-        # COV_EXCL_START
-        if err isa MethodError
-            throw(
-                ArgumentError(
-                    "Sparse Jacobian backend not available.\n" *
-                        "Install/enable SparseConnectivityTracer and SparseMatrixColorings to activate the AutoSparse backend."
-                )
-            )
-        else
-            rethrow()
-        end
-        # COV_EXCL_STOP
-    end
+    # Prepare sparse Jacobian backend via extension; the stub throws a clear
+    # ArgumentError if SparseConnectivityTracer / SparseMatrixColorings aren't loaded.
+    jac_backend = default_sparse_jacobian_backend()
     return NonlinearLeastSquaresLikelihood{typeof(model.f), T, typeof(jac_backend)}(
         model.f, y_vec, convert.(T, inv_σ²), convert(T, log_const), jac_backend,
     )

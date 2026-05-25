@@ -41,11 +41,12 @@ function to_matrix(L::OuterProductMap)
     end
     A_mat = to_matrix(L.A)
 
-    if L.Q isa LinearMaps.UniformScalingMap
-        L.to_mat_cache = Symmetric(L.Q.λ * A_mat' * A_mat)
+    Q = L.Q
+    if Q isa LinearMaps.UniformScalingMap
+        L.to_mat_cache = Symmetric(Q.λ * A_mat' * A_mat)
         return L.to_mat_cache
     end
-    Q_mat = to_matrix(L.Q)
+    Q_mat = to_matrix(Q)
     L.to_mat_cache = A_mat' * Q_mat * A_mat
     if issymmetric(Q_mat)
         L.to_mat_cache = Symmetric(L.to_mat_cache)
@@ -58,8 +59,9 @@ function linmap_sqrt(OP::OuterProductMap)
         throw(ArgumentError("Map is not symmetric"))
     end
 
-    if OP.Q isa LinearMaps.UniformScalingMap
-        return sqrt(OP.Q.λ) * OP.A'
+    Q = OP.Q
+    if Q isa LinearMaps.UniformScalingMap
+        return sqrt(Q.λ) * OP.A'
     end
-    return OP.A' * linmap_sqrt(OP.Q)
+    return OP.A' * linmap_sqrt(Q)
 end

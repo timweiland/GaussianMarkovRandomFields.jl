@@ -50,4 +50,6 @@ include("workspace/runtests.jl")
     @test length(Test.detect_ambiguities(GaussianMarkovRandomFields)) == 0
 end
 
+include("test_jet.jl")
+
 end

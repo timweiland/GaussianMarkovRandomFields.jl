@@ -99,7 +99,10 @@ function _ga_make_posterior(x, Q, solver, prior::Union{GMRF, ConstrainedGMRF}, c
     return _apply_constraints(new_gmrf, constraints)
 end
 
-function _ga_make_posterior(x, Q, solver, prior::ChordalGMRF, ::Nothing)
+function _ga_make_posterior(x, Q, solver, prior::ChordalGMRF, _)
+    # ChordalGMRF priors do not carry constraints (see _extract_constraints(::ChordalGMRF) = nothing),
+    # so the second arg is always `nothing` at runtime. The relaxed signature is just so JET
+    # can see a method for the inferred Union type of the constraints argument.
     return ChordalGMRF(x, Q, solver)
 end
 
