@@ -90,6 +90,10 @@ end
 function _primal_obs_lik(lik::GMRFs.LinearlyTransformedLikelihood)
     return GMRFs.LinearlyTransformedLikelihood(
         _primal_obs_lik(lik.base_likelihood),
-        lik.design_matrix,
+        _strip_matrix_partials(lik.design_matrix),
     )
 end
+
+# Strip Dual partials from a (possibly θ-dependent) design matrix.
+_strip_matrix_partials(A::AbstractMatrix{<:ForwardDiff.Dual}) = ForwardDiff.value.(A)
+_strip_matrix_partials(A::AbstractMatrix) = A

@@ -1,7 +1,64 @@
 using LinearAlgebra
 using SparseArrays
 
-export LinearlyTransformedObservationModel, LinearlyTransformedLikelihood
+export LinearlyTransformedObservationModel, LinearlyTransformedLikelihood, ParameterizedMatrix
+
+"""
+    ParameterizedMatrix(builder; hyperparameters::Tuple{Vararg{Symbol}}, n_latent=nothing)
+
+A hyperparameter-dependent design matrix for [`LinearlyTransformedObservationModel`](@ref).
+
+`builder` is a keyword-callable returning the concrete design matrix when invoked with
+the hyperparameters it declares: `builder(; θ...) -> AbstractMatrix`. `hyperparameters`
+lists the θ-names `builder` consumes; they are merged into the model's `hyperparameters`
+and routed to `builder` when the model is materialized. `n_latent`, if given, is the
+number of latent components (columns) of the built matrix and is reported by
+`latent_dimension`; it defaults to `nothing` (unknown until the matrix is built).
+
+The matrix is resolved once, inside `model(y; θ...)`, so the materialized
+[`LinearlyTransformedLikelihood`](@ref) and all downstream conditioning see only a
+concrete matrix — there is no per-evaluation overhead beyond the single `builder` call.
+
+# Example
+```julia
+build_A(; ρ) = sparse([1.0 ρ; 0.0 1.0])   # pattern fixed; only values depend on ρ
+ltom = LinearlyTransformedObservationModel(
+    ExponentialFamily(Normal),
+    ParameterizedMatrix(build_A; hyperparameters = (:ρ,), n_latent = 2),
+)
+ltlik = ltom(y; σ = 1.0, ρ = 0.3)          # σ → base model, ρ → build_A
+```
+
+!!! warning "θ-independent sparsity pattern"
+    The *sparsity pattern* of the returned matrix must not depend on the hyperparameters —
+    only the numeric nonzero values may. Workspace-based pipelines reuse a one-time
+    symbolic factorization fixed at the reference hyperparameters; a θ-varying pattern
+    violates that contract and will error when the pattern changes.
+
+See also: [`LinearlyTransformedObservationModel`](@ref).
+"""
+struct ParameterizedMatrix{B, H <: Tuple{Vararg{Symbol}}, N <: Union{Int, Nothing}}
+    builder::B
+    hp_names::H
+    n_latent::N
+end
+
+ParameterizedMatrix(builder; hyperparameters::Tuple{Vararg{Symbol}}, n_latent::Union{Int, Nothing} = nothing) =
+    ParameterizedMatrix(builder, hyperparameters, n_latent)
+
+# Resolve a (possibly parameterized) design matrix at materialization time.
+# The `AbstractMatrix` method is the identity, selected by dispatch so the fixed
+# path compiles to a plain field read with no runtime branch.
+@inline _resolve_design_matrix(A::AbstractMatrix, ::NamedTuple) = A
+function _resolve_design_matrix(spec::ParameterizedMatrix, θ::NamedTuple)
+    return spec.builder(; _project_hyperparameters(spec.hp_names, θ)...)
+end
+
+# Hyperparameter names / latent dimension contributed by the design matrix.
+_design_matrix_hp_names(::AbstractMatrix) = ()
+_design_matrix_hp_names(spec::ParameterizedMatrix) = spec.hp_names
+_design_matrix_latent_dim(A::AbstractMatrix) = size(A, 2)
+_design_matrix_latent_dim(spec::ParameterizedMatrix) = spec.n_latent
 
 """
     LinearlyTransformedObservationModel{M, A} <: ObservationModel
@@ -53,32 +110,39 @@ ll = loglik(x_full, obs_lik)
 ```
 
 # Hyperparameters
-All hyperparameters come from the base observation model. The design matrix 
-introduces no new hyperparameters - it's a fixed linear transformation.
+By default all hyperparameters come from the base observation model and the design
+matrix introduces none — it's a fixed linear transformation. To let the design matrix
+depend on hyperparameters, pass a [`ParameterizedMatrix`](@ref) instead of a plain
+matrix; its declared hyperparameters are merged into `hyperparameters(model)` and the
+concrete matrix is built once at materialization.
 
-See also: [`LinearlyTransformedLikelihood`](@ref), [`ExponentialFamily`](@ref), [`ObservationModel`](@ref)
+See also: [`LinearlyTransformedLikelihood`](@ref), [`ParameterizedMatrix`](@ref), [`ExponentialFamily`](@ref), [`ObservationModel`](@ref)
 """
 struct LinearlyTransformedObservationModel{M <: ObservationModel, A} <: ObservationModel
     base_model::M
     design_matrix::A
-
-    function LinearlyTransformedObservationModel(base_model::M, design_matrix::A) where {M <: ObservationModel, A}
-        # Validate that design matrix is appropriate
-        # COV_EXCL_START
-        if size(design_matrix, 1) == 0
-            throw(ArgumentError("Design matrix must have at least one row (observation)"))
-        end
-        if size(design_matrix, 2) == 0
-            throw(ArgumentError("Design matrix must have at least one column (latent component)"))
-        end
-        # COV_EXCL_STOP
-        if design_matrix isa Matrix
-            @warn "Received a dense design matrix. This can lead to major performance bottlenecks!"
-        end
-
-        return new{M, A}(base_model, design_matrix)
-    end
 end
+
+function LinearlyTransformedObservationModel(base_model::ObservationModel, design_matrix::AbstractMatrix)
+    # Validate that design matrix is appropriate
+    # COV_EXCL_START
+    if size(design_matrix, 1) == 0
+        throw(ArgumentError("Design matrix must have at least one row (observation)"))
+    end
+    if size(design_matrix, 2) == 0
+        throw(ArgumentError("Design matrix must have at least one column (latent component)"))
+    end
+    # COV_EXCL_STOP
+    if design_matrix isa Matrix
+        @warn "Received a dense design matrix. This can lead to major performance bottlenecks!"
+    end
+    return LinearlyTransformedObservationModel{typeof(base_model), typeof(design_matrix)}(base_model, design_matrix)
+end
+
+# Parameterized design matrix: no shape validation possible until the matrix is
+# built (deferred to materialization); just store the spec.
+LinearlyTransformedObservationModel(base_model::ObservationModel, design_matrix::ParameterizedMatrix) =
+    LinearlyTransformedObservationModel{typeof(base_model), typeof(design_matrix)}(base_model, design_matrix)
 
 """
     LinearlyTransformedLikelihood{L, A} <: ObservationLikelihood
@@ -115,19 +179,22 @@ end
 # =======================================================================================
 
 function (ltom::LinearlyTransformedObservationModel)(y; kwargs...)
-    # Create materialized base likelihood
+    # Create materialized base likelihood (base model picks the kwargs it needs).
     base_likelihood = ltom.base_model(y; kwargs...)
 
-    # Wrap with design matrix
-    return LinearlyTransformedLikelihood(base_likelihood, ltom.design_matrix)
+    # Resolve the design matrix at θ (identity for a plain matrix; one builder
+    # call for a ParameterizedMatrix) and wrap.
+    A = _resolve_design_matrix(ltom.design_matrix, values(kwargs))
+    return LinearlyTransformedLikelihood(base_likelihood, A)
 end
 
 # =======================================================================================
 # HYPERPARAMETER INTERFACE DELEGATION
 # =======================================================================================
 
-hyperparameters(ltom::LinearlyTransformedObservationModel) = hyperparameters(ltom.base_model)
-latent_dimension(ltom::LinearlyTransformedObservationModel, y::AbstractVector) = size(ltom.design_matrix, 2)
+hyperparameters(ltom::LinearlyTransformedObservationModel) =
+    _merge_hyperparameter_names(hyperparameters(ltom.base_model), _design_matrix_hp_names(ltom.design_matrix))
+latent_dimension(ltom::LinearlyTransformedObservationModel, y::AbstractVector) = _design_matrix_latent_dim(ltom.design_matrix)
 
 # =======================================================================================
 # CORE LIKELIHOOD EVALUATION METHODS
@@ -185,13 +252,18 @@ end
 # =======================================================================================
 
 function conditional_distribution(ltom::LinearlyTransformedObservationModel, x_full; kwargs...)
-    η = ltom.design_matrix * x_full
+    A = _resolve_design_matrix(ltom.design_matrix, values(kwargs))
+    η = A * x_full
     return conditional_distribution(ltom.base_model, η; kwargs...)
 end
 
 # COV_EXCL_START
 function Base.show(io::IO, model::LinearlyTransformedObservationModel)
     A = model.design_matrix
+    if A isa ParameterizedMatrix
+        names = isempty(A.hp_names) ? "none" : join(A.hp_names, ", ")
+        return print(io, "LinearlyTransformedObservationModel(base=$(typeof(model.base_model)), A=parameterized($(names)))")
+    end
     m, n = size(A)
     A_kind = A isa SparseArrays.AbstractSparseMatrix ? "sparse" : "dense"
     return print(io, "LinearlyTransformedObservationModel(base=$(typeof(model.base_model)), A=$(m)×$(n) $(A_kind))")

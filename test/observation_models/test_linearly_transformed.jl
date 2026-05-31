@@ -1,4 +1,5 @@
 using LinearAlgebra
+using SparseArrays
 using ForwardDiff
 using Distributions
 
@@ -74,6 +75,83 @@ using Distributions
 
         y = rand(dist)
         @test all(y .>= 0)  # Count data
+    end
+
+    @testset "Parameterized design matrix" begin
+        base = ExponentialFamily(Normal)
+        build_A(; ρ) = sparse([1.0 ρ; 0.0 1.0])
+
+        @testset "Construction, merging, latent_dimension" begin
+            spec = ParameterizedMatrix(build_A; hyperparameters = (:ρ,), n_latent = 2)
+            ltom = LinearlyTransformedObservationModel(base, spec)
+            @test ltom.design_matrix === spec
+            @test hyperparameters(ltom) == (:σ, :ρ)          # base-first union
+            @test latent_dimension(ltom, [1.0, 2.0]) == 2
+        end
+
+        @testset "n_latent defaults to nothing" begin
+            spec = ParameterizedMatrix(build_A; hyperparameters = (:ρ,))
+            ltom = LinearlyTransformedObservationModel(base, spec)
+            @test latent_dimension(ltom, [1.0, 2.0]) === nothing
+        end
+
+        @testset "Materialization resolves to concrete matrix" begin
+            ltom = LinearlyTransformedObservationModel(
+                base, ParameterizedMatrix(build_A; hyperparameters = (:ρ,))
+            )
+            ltlik = ltom([1.0, 2.0]; σ = 1.0, ρ = 0.3)
+            @test ltlik isa LinearlyTransformedLikelihood
+            @test ltlik.design_matrix == build_A(; ρ = 0.3)
+            @test ltlik.design_matrix isa SparseMatrixCSC
+        end
+
+        @testset "Parameterized == fixed at same ρ" begin
+            ρ0 = 0.4
+            ltom_fixed = LinearlyTransformedObservationModel(base, build_A(; ρ = ρ0))
+            ltom_param = LinearlyTransformedObservationModel(
+                base, ParameterizedMatrix(build_A; hyperparameters = (:ρ,))
+            )
+            y = [1.0, 2.0]
+            x = [0.5, 1.0]
+            lik_fixed = ltom_fixed(y; σ = 1.0)
+            lik_param = ltom_param(y; σ = 1.0, ρ = ρ0)
+            @test loglik(x, lik_param) ≈ loglik(x, lik_fixed)
+            @test loggrad(x, lik_param) ≈ loggrad(x, lik_fixed)
+            @test loghessian(x, lik_param) ≈ loghessian(x, lik_fixed)
+            # chain rule wrt x still holds for the parameterized likelihood
+            @test loggrad(x, lik_param) ≈ ForwardDiff.gradient(z -> loglik(z, lik_param), x)
+        end
+
+        @testset "Conjugate Normal path uses resolved matrix" begin
+            ρ0 = 0.5
+            ltom_fixed = LinearlyTransformedObservationModel(base, build_A(; ρ = ρ0))
+            ltom_param = LinearlyTransformedObservationModel(
+                base, ParameterizedMatrix(build_A; hyperparameters = (:ρ,))
+            )
+            y = [1.0, 2.0]
+            prior = GMRF(zeros(2), sparse(2.0 * I, 2, 2))
+            post_fixed = gaussian_approximation(prior, ltom_fixed(y; σ = 1.0))
+            post_param = gaussian_approximation(prior, ltom_param(y; σ = 1.0, ρ = ρ0))
+            @test mean(post_fixed) ≈ mean(post_param)
+        end
+
+        @testset "Conditional distribution with parameterized A" begin
+            ltom = LinearlyTransformedObservationModel(
+                base, ParameterizedMatrix(build_A; hyperparameters = (:ρ,))
+            )
+            x = [0.5, 1.0]
+            d = conditional_distribution(ltom, x; σ = 1.0, ρ = 0.5)
+            @test d isa Distribution
+            η = build_A(; ρ = 0.5) * x
+            @test mean(d) ≈ η
+        end
+
+        @testset "Missing hyperparameter errors clearly" begin
+            ltom = LinearlyTransformedObservationModel(
+                base, ParameterizedMatrix(build_A; hyperparameters = (:ρ,))
+            )
+            @test_throws ArgumentError ltom([1.0, 2.0]; σ = 1.0)   # ρ missing
+        end
     end
 
 end

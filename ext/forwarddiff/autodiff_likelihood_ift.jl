@@ -51,7 +51,7 @@ _lik_carries_dual_hp(::_DualObsLik) = true
 _lik_carries_dual_hp(lik::GMRFs.CompositeLikelihood) =
     any(_lik_carries_dual_hp, lik.components)
 _lik_carries_dual_hp(lik::GMRFs.LinearlyTransformedLikelihood) =
-    _lik_carries_dual_hp(lik.base_likelihood)
+    _lik_carries_dual_hp(lik.base_likelihood) || GMRFs._carries_ad_partials(lik.design_matrix)
 
 # ----------------------------------------------------------------------------
 # DI.hessian returns a dense Matrix even when the underlying Hessian is
@@ -239,8 +239,30 @@ function _lik_dual_tag_npartials(lik::_DualObsLik)
     return ForwardDiff.tagtype(D), ForwardDiff.npartials(D)
 end
 
-_lik_dual_tag_npartials(lik::GMRFs.LinearlyTransformedLikelihood) =
-    _lik_dual_tag_npartials(lik.base_likelihood)
+function _lik_dual_tag_npartials(lik::GMRFs.LinearlyTransformedLikelihood)
+    T1, N1 = _lik_dual_tag_npartials(lik.base_likelihood)
+    T2, N2 = _array_tag_npartials(lik.design_matrix)
+    return _reconcile_tag_npartials(T1, N1, T2, N2)
+end
+
+# (Tag, N) of a Dual-eltype array, or (nothing, nothing) for a plain array.
+_array_tag_npartials(A::AbstractArray{<:ForwardDiff.Dual}) =
+    (ForwardDiff.tagtype(eltype(A)), ForwardDiff.npartials(eltype(A)))
+_array_tag_npartials(::AbstractArray) = (nothing, nothing)
+
+# Combine two (Tag, N) results, erroring if both are present but disagree.
+function _reconcile_tag_npartials(T1, N1, T2, N2)
+    T1 === nothing && return (T2, N2)
+    T2 === nothing && return (T1, N1)
+    (T1 === T2 && N1 == N2) || throw(
+        ArgumentError(
+            "Observation likelihood carries Duals from different outer-AD passes " *
+                "(Tag=$T1/N=$N1 vs Tag=$T2/N=$N2). All Dual partials threaded through " *
+                "the IFT must come from a single outer ForwardDiff pass."
+        )
+    )
+    return (T1, N1)
+end
 
 function _lik_dual_tag_npartials(lik::GMRFs.CompositeLikelihood)
     Tag, N = nothing, nothing
@@ -399,7 +421,10 @@ end
 # redirect through the unified path.
 # ----------------------------------------------------------------------------
 
-const _WorkspaceDualHpIFTLik = Union{GMRFs.AutoDiffLikelihood, GMRFs.CompositeLikelihood}
+const _WorkspaceDualHpIFTLik = Union{
+    GMRFs.AutoDiffLikelihood, GMRFs.CompositeLikelihood,
+    GMRFs.LinearlyTransformedLikelihood,
+}
 
 # Float64 prior — IFT only when the lik (or one of its components) carries
 # Duals. Otherwise fall through to the primal Newton path.
