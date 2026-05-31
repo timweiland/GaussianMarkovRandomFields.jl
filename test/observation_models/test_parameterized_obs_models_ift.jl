@@ -6,6 +6,8 @@ using Random
 
 using DifferentiationInterface
 using FiniteDiff, ForwardDiff
+using Zygote
+import ChainRulesCore
 
 # ForwardDiff hyperparameter sensitivities through `gaussian_approximation` when
 # the LinearlyTransformedObservationModel's design matrix depends on θ. The
@@ -164,5 +166,19 @@ end
         g_fwd = DifferentiationInterface.gradient(pipe, AutoForwardDiff(), θ0)
         g_fd = DifferentiationInterface.gradient(pipe, fd, θ0)
         @test maximum(abs.(g_fwd - g_fd)) < 1.0e-3
+    end
+
+    @testset "Reverse-mode through NLSQ errors clearly" begin
+        n = 4
+        prior = GMRF(zeros(n), sparse(SymTridiagonal(fill(2.5, n), fill(-1.0, n - 1))))
+        nlsq = NonlinearLeastSquaresModel((x; α) -> α .* x, n; hyperparams = (:α,))
+        lik = nlsq(randn(n); σ = 0.5, α = 1.0)
+        cfg = Zygote.ZygoteRuleConfig()
+        # The reverse-mode rrule must reject NLSQ up front (rather than failing deep in
+        # AD internals) for both plain GMRF and WorkspaceGMRF priors.
+        @test_throws ArgumentError ChainRulesCore.rrule(cfg, gaussian_approximation, prior, lik)
+        ws = make_workspace(AR1Model(n); τ = 1.0, ρ = 0.3)
+        wprior = AR1Model(n)(ws; τ = 1.0, ρ = 0.3)
+        @test_throws ArgumentError ChainRulesCore.rrule(cfg, gaussian_approximation, wprior, lik)
     end
 end

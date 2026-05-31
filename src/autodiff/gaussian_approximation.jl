@@ -282,6 +282,10 @@ function ChainRulesCore.rrule(
         obs_lik::ObservationLikelihood;
         kwargs...
     )
+    # Reverse-mode AD can't differentiate the Gauss–Newton sparse Jacobian; fail with
+    # actionable guidance rather than deep in AD internals. (Forward-mode is exact.)
+    _has_gauss_newton_jacobian(obs_lik) && _reverse_mode_gauss_newton_error()
+
     # === Forward pass ===
     posterior = gaussian_approximation(prior_gmrf, obs_lik; kwargs...)
     x_star = mean(posterior)

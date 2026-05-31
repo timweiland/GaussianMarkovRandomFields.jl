@@ -47,6 +47,11 @@ hyperparameters the stored `f` is called directly, so the fixed path is unchange
     corrected by the residual-curvature term `Σₖ (W r)ₖ ∇²fₖ` — so exactness holds even
     for residuals nonlinear in `x`. The Jacobian sparsity pattern must be θ-independent
     (see the warning above).
+
+    Reverse-mode AD (Zygote, Mooncake, …) through `gaussian_approximation` is **not**
+    supported for this likelihood — it would require differentiating the sparse forward
+    Jacobian, which reverse-mode backends cannot do — and raises a clear error pointing
+    here. Use forward-mode for the hyperparameters.
 """
 struct NonlinearLeastSquaresModel{F, H <: Tuple{Vararg{Symbol}}} <: ObservationModel
     f::F
@@ -134,6 +139,32 @@ end
 # Observation model interface hooks
 hyperparameters(model::NonlinearLeastSquaresModel) = _merge_hyperparameter_names((:σ,), model.hyperparams)
 latent_dimension(model::NonlinearLeastSquaresModel, y::AbstractVector) = model.n
+
+# Whether a likelihood's score/Hessian go through a Gauss–Newton sparse Jacobian.
+# Reverse-mode AD through `gaussian_approximation` differentiates `loggrad`/`loghessian`,
+# which for these likelihoods means differentiating a sparse forward-mode Jacobian — not
+# supported by reverse-mode backends. The `gaussian_approximation` rrules check this and
+# raise `_reverse_mode_gauss_newton_error` instead of failing deep in AD internals.
+_has_gauss_newton_jacobian(::ObservationLikelihood) = false
+_has_gauss_newton_jacobian(::NonlinearLeastSquaresLikelihood) = true
+_has_gauss_newton_jacobian(lik::CompositeLikelihood) = any(_has_gauss_newton_jacobian, lik.components)
+_has_gauss_newton_jacobian(lik::LinearlyTransformedLikelihood) = _has_gauss_newton_jacobian(lik.base_likelihood)
+
+# COV_EXCL_START
+function _reverse_mode_gauss_newton_error()
+    throw(
+        ArgumentError(
+            "Reverse-mode automatic differentiation through `gaussian_approximation` is not " *
+                "supported for NonlinearLeastSquares likelihoods. The Gauss–Newton score needs the " *
+                "residual Jacobian, computed by a sparse forward-mode AD pass that reverse-mode " *
+                "backends cannot differentiate through.\n" *
+                "Use forward-mode AD (ForwardDiff) for the hyperparameters instead — it is exact and " *
+                "efficient for the typically low-dimensional residual hyperparameters. Conditioning " *
+                "through a `WorkspaceGMRF` prior reuses the symbolic factorization across hyperparameter values."
+        )
+    )
+end
+# COV_EXCL_STOP
 
 # -------------------------------------------------------------------------------------------------
 # Core likelihood API
