@@ -20,3 +20,20 @@ outer forward-mode AD pass over hyperparameters.
 Concrete method provided by the SparseConnectivityTracer + SparseMatrixColorings extension.
 """
 function known_pattern_jacobian_backend end
+
+"""
+    residual_curvature(lik::NonlinearLeastSquaresLikelihood, x_star) -> SparseMatrixCSC
+
+The residual-curvature term `C = Σ_k (W r)_k ∇²f_k(x*)` of a Gauss–Newton least-squares
+likelihood, evaluated at the primal mode `x*` (`W = Diagonal(inv_σ²)`, `r = y - f(x*)`).
+
+This is the difference between the true loglik Hessian and the Gauss–Newton Hessian
+`-JᵀWJ`. It is the Hessian of the scalar `x -> Σ_k (W r)_k f_k(x)` (with `W r` held
+fixed), so it carries no inner Jacobian and is computed as an ordinary sparse Hessian.
+The implicit-function mode sensitivity must be solved with the true Hessian
+`Q_prior + JᵀWJ - C`, so subtracting `C` from the Gauss–Newton posterior precision makes
+hyperparameter gradients exact even for residuals nonlinear in the latent field.
+
+Concrete method provided by the SparseConnectivityTracer + SparseMatrixColorings extension.
+"""
+function residual_curvature end

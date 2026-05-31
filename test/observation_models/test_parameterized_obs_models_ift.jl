@@ -90,19 +90,19 @@ end
 
 # NonlinearLeastSquares residual hyperparameters. The residual Jacobian's sparsity
 # pattern is fixed at materialization, so the Gauss–Newton loggrad/loghessian compose
-# with an outer ForwardDiff pass. These checks use residuals linear in the latent
-# field, where the Gauss–Newton Hessian equals the true Hessian and the IFT gradient
-# is exact (the residual-curvature term Σₖ (W r)ₖ ∇²fₖ vanishes).
+# with an outer ForwardDiff pass. The IFT mode-sensitivity solve uses the true Hessian
+# (Gauss–Newton precision corrected by the residual-curvature term Σₖ (W r)ₖ ∇²fₖ), so
+# gradients are exact for residuals nonlinear in the latent field too.
 @testset "Parameterized NLSQ residual — ForwardDiff IFT" begin
     fd = AutoFiniteDiff()
 
-    @testset "Dual residual hyperparameter α (workspace IFT)" begin
+    @testset "Nonlinear-in-x residual, Dual α (workspace IFT)" begin
         Random.seed!(11)
         n = 5
         model = AR1Model(n)
         y = randn(n)
         z = zeros(n)
-        f = (x; α) -> α .* x                         # linear in x ⇒ GN exact
+        f = (x; α) -> α .* x .+ 0.1 .* x .^ 2        # nonlinear in x ⇒ exercises the correction
         nlsq = NonlinearLeastSquaresModel(f, n; hyperparams = (:α,))
         ws = make_workspace(model; τ = 1.0, ρ = 0.3)
 
@@ -112,10 +112,13 @@ end
             return logpdf(gaussian_approximation(prior, lik), z)
         end
 
-        θ0 = [1.3]
+        θ0 = [1.2]
         g_fwd = DifferentiationInterface.gradient(pipe, AutoForwardDiff(), θ0)
         g_fd = DifferentiationInterface.gradient(pipe, fd, θ0)
-        @test maximum(abs.(g_fwd - g_fd)) < 1.0e-3
+        # Tolerance set by the finite-difference reference's accuracy (~1e-3). Without
+        # the residual-curvature correction the Gauss–Newton-only gradient is off by
+        # ~1e-1 here, so this firmly tests the correction.
+        @test maximum(abs.(g_fwd - g_fd)) < 5.0e-3
     end
 
     @testset "Dual σ + Dual α (workspace IFT)" begin

@@ -341,6 +341,23 @@ end
 # obs_lik whose `loggrad`/`loghessian` correctly propagate Dual hp).
 # ----------------------------------------------------------------------------
 
+# Residual-curvature correction for the IFT mode-sensitivity Hessian. `nothing` for
+# likelihoods whose posterior precision already equals the true Hessian; a sparse `C`
+# for Gauss–Newton least squares (so the true Hessian is `Q_post - C`).
+_ift_hessian_correction(::GMRFs.ObservationLikelihood, primal_lik, x_star) = nothing
+_ift_hessian_correction(::GMRFs.NonlinearLeastSquaresLikelihood, primal_lik, x_star) =
+    GMRFs.residual_curvature(primal_lik, x_star)
+
+# Solver for the mode-sensitivity system. Without a correction, reuse the workspace's
+# Gauss–Newton factorization. With a correction `C`, the true Hessian `Q_post - C` is
+# factorized once (it is positive definite at the mode) and reused for every RHS.
+_ift_sensitivity_solver(ws::GMRFs.GMRFWorkspace, ::Nothing) = rhs -> GMRFs.workspace_solve(ws, rhs)
+function _ift_sensitivity_solver(ws::GMRFs.GMRFWorkspace, C::AbstractMatrix)
+    H_true = GMRFs._snapshot_Q(ws) - C
+    F = cholesky(Symmetric(H_true))
+    return rhs -> (F \ rhs)
+end
+
 function _workspace_dualhp_ift(
         prior_gmrf::GMRFs.WorkspaceGMRF,
         obs_lik::GMRFs.ObservationLikelihood;
@@ -378,12 +395,20 @@ function _workspace_dualhp_ift(
     )
 
     # Step 3: IFT solves on the primal posterior workspace.
+    #
+    # The mode sensitivity solves `H · dx*/dθ = -∂(neg_grad)/∂θ`, where `H` is the
+    # TRUE Hessian of the neg-log-posterior at `x*`. For most likelihoods the
+    # posterior precision equals that Hessian, so the workspace's factorization is
+    # reused directly. Gauss–Newton likelihoods (NLSQ) use `JᵀWJ` for the posterior
+    # precision, which differs from the true Hessian by the residual-curvature term
+    # `C`; `_ift_sensitivity_solver` then factorizes the corrected `Q_post - C`.
     ws = posterior_primal.workspace
     constrained = posterior_primal.constraints !== nothing
     ci = constrained ? posterior_primal.constraints : nothing
+    solve_dθ = _ift_sensitivity_solver(ws, _ift_hessian_correction(obs_lik, primal_lik, x_star))
     dx = Matrix{Float64}(undef, n, N)
     for j in 1:N
-        step = GMRFs.workspace_solve(ws, rhs_dθ[j])
+        step = solve_dθ(rhs_dθ[j])
         if constrained
             A = ci.matrix
             step = step - ci.A_tilde_T * (ci.L_c \ (A * step))

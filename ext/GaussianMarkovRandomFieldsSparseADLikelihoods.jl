@@ -39,4 +39,21 @@ function GaussianMarkovRandomFields.known_pattern_jacobian_backend(f, x_probe::A
     )
 end
 
+# Residual-curvature term C = Σ_k (W r)_k ∇²f_k(x*) = ∇²[Σ_k (W r)_k f_k(x)] at x*.
+# `W r` is held constant (evaluated at x*), so this is a plain scalar Hessian with no
+# inner Jacobian — computed once, at the primal mode, via sparse forward-mode AD.
+function GaussianMarkovRandomFields.residual_curvature(
+        lik::GaussianMarkovRandomFields.NonlinearLeastSquaresLikelihood, x_star::AbstractVector
+    )
+    f = GaussianMarkovRandomFields._residual_function(lik)
+    Wr = lik.inv_σ² .* (lik.y .- f(x_star))
+    g = x -> sum(Wr .* f(x))
+    backend = DI.AutoSparse(
+        DI.AutoForwardDiff();
+        sparsity_detector = TracerSparsityDetector(),
+        coloring_algorithm = GreedyColoringAlgorithm(),
+    )
+    return sparse(DI.hessian(g, backend, x_star))
+end
+
 end # module

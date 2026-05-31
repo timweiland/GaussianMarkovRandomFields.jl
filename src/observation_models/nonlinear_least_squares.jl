@@ -41,12 +41,12 @@ hyperparameters the stored `f` is called directly, so the fixed path is unchange
 !!! note "Differentiating the hyperparameters"
     The residual Jacobian's sparsity pattern is detected once at materialization and
     reused, so `loggrad`/`loghessian` compose with an outer ForwardDiff pass.
-    Hyperparameter gradients through `gaussian_approximation` (with a `WorkspaceGMRF`
-    prior) are therefore supported, and are **exact when the residual is linear in the
-    latent field** `x`. For residuals nonlinear in `x` the gradient inherits the
-    Gauss–Newton approximation: the implicit-function mode sensitivity is solved with
-    the Gauss–Newton Hessian `JᵀWJ`, which omits the residual-curvature term
-    `Σₖ (W r)ₖ ∇²fₖ` (that term is zero exactly when `f` is linear in `x`).
+    Forward-mode (`ForwardDiff`) hyperparameter gradients through `gaussian_approximation`
+    with a `WorkspaceGMRF` prior are supported and **exact**: the implicit-function mode
+    sensitivity is solved with the true Hessian — the Gauss–Newton posterior precision
+    corrected by the residual-curvature term `Σₖ (W r)ₖ ∇²fₖ` — so exactness holds even
+    for residuals nonlinear in `x`. The Jacobian sparsity pattern must be θ-independent
+    (see the warning above).
 """
 struct NonlinearLeastSquaresModel{F, H <: Tuple{Vararg{Symbol}}} <: ObservationModel
     f::F
