@@ -72,6 +72,7 @@ ForwardDiff = "0.10, 1"
 GeoInterface = "1.4"
 Gmsh = "0.3"
 Graphs = "1"
+JET = "0.9, 0.10, 0.11"
 LibGEOS = "0.8, 0.9"
 LinearAlgebra = "<0.0.1, 1"
 LinearMaps = "3.11"
@@ -108,6 +109,7 @@ FiniteDiff = "6a86dc24-6348-571c-b903-95158fe2bd41"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 GeoInterface = "cf35fbd7-0cd7-5166-be24-54bfbe79505f"
 Gmsh = "705231aa-382f-11e9-3f0c-b7cb4346fdeb"
+JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 LibGEOS = "a90b1aa1-3769-5649-ba7e-abc5a9d163eb"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
@@ -121,4 +123,4 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [targets]
-test = ["Aqua", "Distributions", "Enzyme", "Ferrite", "FerriteGmsh", "FiniteDiff", "ForwardDiff", "GeoInterface", "Gmsh", "LibGEOS", "LinearAlgebra", "Mooncake", "MooncakeSparse", "ReTest", "SparseArrays", "SparseConnectivityTracer", "SparseMatrixColorings", "StatsModels", "Test", "Zygote"]
+test = ["Aqua", "Distributions", "Enzyme", "Ferrite", "FerriteGmsh", "FiniteDiff", "ForwardDiff", "GeoInterface", "Gmsh", "JET", "LibGEOS", "LinearAlgebra", "Mooncake", "MooncakeSparse", "ReTest", "SparseArrays", "SparseConnectivityTracer", "SparseMatrixColorings", "StatsModels", "Test", "Zygote"]

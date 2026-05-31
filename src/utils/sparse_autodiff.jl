@@ -4,9 +4,22 @@
 Stubs for sparse autodiff backends. Concrete methods are provided by package
 extensions when optional dependencies are loaded (e.g., SparseConnectivityTracer
 and SparseMatrixColorings) via DifferentiationInterface.AutoSparse.
+
+The fallbacks below use `Vararg{Any}`/`Any` so that any extension-provided method
+with a concrete signature takes precedence by Julia dispatch — no method
+overwriting occurs. The fallbacks exist so callers get a clear error (and JET
+can see a method) when the relevant extension is not loaded.
 """
 
-function default_sparse_jacobian_backend end
+function default_sparse_jacobian_backend(args::Vararg{Any}; kwargs...)
+    throw(
+        ArgumentError(
+            "Sparse Jacobian backend not available. " *
+                "Load SparseConnectivityTracer and SparseMatrixColorings " *
+                "to activate the AutoSparse backend."
+        )
+    )
+end
 
 """
     known_pattern_jacobian_backend(f, x_probe) -> AutoSparse
@@ -19,7 +32,15 @@ outer forward-mode AD pass over hyperparameters.
 
 Concrete method provided by the SparseConnectivityTracer + SparseMatrixColorings extension.
 """
-function known_pattern_jacobian_backend end
+function known_pattern_jacobian_backend(args::Vararg{Any}; kwargs...)
+    throw(
+        ArgumentError(
+            "Sparse Jacobian backend not available. " *
+                "Load SparseConnectivityTracer and SparseMatrixColorings " *
+                "to activate the AutoSparse backend."
+        )
+    )
+end
 
 """
     residual_curvature(lik::NonlinearLeastSquaresLikelihood, x_star) -> SparseMatrixCSC
@@ -36,4 +57,12 @@ hyperparameter gradients exact even for residuals nonlinear in the latent field.
 
 Concrete method provided by the SparseConnectivityTracer + SparseMatrixColorings extension.
 """
-function residual_curvature end
+function residual_curvature(args::Vararg{Any}; kwargs...)
+    throw(
+        ArgumentError(
+            "Sparse Jacobian backend not available. " *
+                "Load SparseConnectivityTracer and SparseMatrixColorings " *
+                "to activate the AutoSparse backend."
+        )
+    )
+end

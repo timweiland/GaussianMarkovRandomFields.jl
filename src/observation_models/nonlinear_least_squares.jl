@@ -2,7 +2,7 @@ using LinearAlgebra
 using SparseArrays
 using Distributions: Normal, product_distribution
 import DifferentiationInterface as DI
-import GaussianMarkovRandomFields: default_sparse_jacobian_backend
+import GaussianMarkovRandomFields: known_pattern_jacobian_backend
 
 export NonlinearLeastSquaresModel, NonlinearLeastSquaresLikelihood
 
@@ -114,22 +114,9 @@ function (model::NonlinearLeastSquaresModel)(y::AbstractVector; σ, kwargs...)
     # evaluation. The resulting backend's AutoForwardDiff inner nests cleanly under
     # an outer ForwardDiff pass, which is what makes hyperparameter gradients work.
     f_probe = _bind_residual(model.f, _strip_ad_partials_hyperparams(hp))
-    jac_backend = try
-        known_pattern_jacobian_backend(f_probe, zeros(model.n))
-    catch err
-        # COV_EXCL_START
-        if err isa MethodError
-            throw(
-                ArgumentError(
-                    "Sparse Jacobian backend not available.\n" *
-                        "Install/enable SparseConnectivityTracer and SparseMatrixColorings to activate the AutoSparse backend."
-                )
-            )
-        else
-            rethrow()
-        end
-        # COV_EXCL_STOP
-    end
+    # The stub throws a clear ArgumentError if SparseConnectivityTracer /
+    # SparseMatrixColorings aren't loaded.
+    jac_backend = known_pattern_jacobian_backend(f_probe, zeros(model.n))
     return NonlinearLeastSquaresLikelihood{typeof(model.f), T, typeof(jac_backend), typeof(hp)}(
         model.f, y_vec, convert.(T, inv_σ²), convert(T, log_const), jac_backend, hp,
     )
