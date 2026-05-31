@@ -97,3 +97,19 @@ end
 # Strip Dual partials from a (possibly θ-dependent) design matrix.
 _strip_matrix_partials(A::AbstractMatrix{<:ForwardDiff.Dual}) = ForwardDiff.value.(A)
 _strip_matrix_partials(A::AbstractMatrix) = A
+
+# NonlinearLeastSquaresLikelihood: strip the σ-derived numeric fields (Dual when σ
+# carried partials) and the stored residual hyperparameters (Dual when an `f(x; θ...)`
+# hyperparameter carried partials). `f` and `jac_backend` are unchanged; the backend
+# already holds a primal-detected sparsity pattern, so it is valid for the primal pass.
+function _primal_obs_lik(lik::GMRFs.NonlinearLeastSquaresLikelihood)
+    (GMRFs._hp_carries_ad_partials(lik.hyperparams) || GMRFs._carries_ad_partials(lik.inv_σ²)) || return lik
+    return GMRFs.NonlinearLeastSquaresLikelihood(
+        lik.f,
+        ForwardDiff.value.(lik.y),
+        ForwardDiff.value.(lik.inv_σ²),
+        ForwardDiff.value(lik.log_const),
+        lik.jac_backend,
+        GMRFs._strip_ad_partials_hyperparams(lik.hyperparams),
+    )
+end

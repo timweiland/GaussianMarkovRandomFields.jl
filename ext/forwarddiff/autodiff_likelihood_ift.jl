@@ -52,6 +52,8 @@ _lik_carries_dual_hp(lik::GMRFs.CompositeLikelihood) =
     any(_lik_carries_dual_hp, lik.components)
 _lik_carries_dual_hp(lik::GMRFs.LinearlyTransformedLikelihood) =
     _lik_carries_dual_hp(lik.base_likelihood) || GMRFs._carries_ad_partials(lik.design_matrix)
+_lik_carries_dual_hp(lik::GMRFs.NonlinearLeastSquaresLikelihood) =
+    GMRFs._hp_carries_ad_partials(lik.hyperparams) || GMRFs._carries_ad_partials(lik.inv_σ²)
 
 # ----------------------------------------------------------------------------
 # DI.hessian returns a dense Matrix even when the underlying Hessian is
@@ -245,6 +247,13 @@ function _lik_dual_tag_npartials(lik::GMRFs.LinearlyTransformedLikelihood)
     return _reconcile_tag_npartials(T1, N1, T2, N2)
 end
 
+function _lik_dual_tag_npartials(lik::GMRFs.NonlinearLeastSquaresLikelihood)
+    T1, N1 = GMRFs._hp_carries_ad_partials(lik.hyperparams) ?
+        _outer_tag_and_npartials(lik.hyperparams) : (nothing, nothing)
+    T2, N2 = _array_tag_npartials(lik.inv_σ²)
+    return _reconcile_tag_npartials(T1, N1, T2, N2)
+end
+
 # (Tag, N) of a Dual-eltype array, or (nothing, nothing) for a plain array.
 _array_tag_npartials(A::AbstractArray{<:ForwardDiff.Dual}) =
     (ForwardDiff.tagtype(eltype(A)), ForwardDiff.npartials(eltype(A)))
@@ -423,7 +432,7 @@ end
 
 const _WorkspaceDualHpIFTLik = Union{
     GMRFs.AutoDiffLikelihood, GMRFs.CompositeLikelihood,
-    GMRFs.LinearlyTransformedLikelihood,
+    GMRFs.LinearlyTransformedLikelihood, GMRFs.NonlinearLeastSquaresLikelihood,
 }
 
 # Float64 prior — IFT only when the lik (or one of its components) carries

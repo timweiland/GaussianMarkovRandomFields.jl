@@ -39,15 +39,14 @@ evaluation time (mirroring [`AutoDiffObservationModel`](@ref)); with no declared
 hyperparameters the stored `f` is called directly, so the fixed path is unchanged.
 
 !!! note "Differentiating the hyperparameters"
-    `f`'s θ enter the conditioning only through the materialized likelihood, so a
-    hyperparameter sweep (materialize at each θ, then condition) is fully supported.
-    Gradient-based optimization of the residual's θ *through* `gaussian_approximation`
-    is not supported, however: the Gauss–Newton score needs the residual Jacobian
-    `J(x)`, which is itself obtained by automatic differentiation, and that inner
-    sparse-Jacobian AD does not compose with an outer differentiation pass over θ. Use
-    a gradient-free optimizer or finite differences for the residual's hyperparameters.
-    (This is orthogonal to θ-dependence: even a fixed residual cannot be differentiated
-    this way.)
+    The residual Jacobian's sparsity pattern is detected once at materialization and
+    reused, so `loggrad`/`loghessian` compose with an outer ForwardDiff pass.
+    Hyperparameter gradients through `gaussian_approximation` (with a `WorkspaceGMRF`
+    prior) are therefore supported, and are **exact when the residual is linear in the
+    latent field** `x`. For residuals nonlinear in `x` the gradient inherits the
+    Gauss–Newton approximation: the implicit-function mode sensitivity is solved with
+    the Gauss–Newton Hessian `JᵀWJ`, which omits the residual-curvature term
+    `Σₖ (W r)ₖ ∇²fₖ` (that term is zero exactly when `f` is linear in `x`).
 """
 struct NonlinearLeastSquaresModel{F, H <: Tuple{Vararg{Symbol}}} <: ObservationModel
     f::F
@@ -75,14 +74,14 @@ struct NonlinearLeastSquaresLikelihood{F, T, JB, HP <: NamedTuple} <: Observatio
     hyperparams::HP       # θ values splatted into f(x; θ...); empty NamedTuple if none
 end
 
-# Empty θ ⇒ call the stored residual directly (zero overhead, identical to the
-# pre-θ-dependence code path). Otherwise rebuild a 1-arg closure that splats θ.
-@inline _residual_function(lik::NonlinearLeastSquaresLikelihood{<:Any, <:Any, <:Any, NamedTuple{(), Tuple{}}}) = lik.f
-@inline function _residual_function(lik::NonlinearLeastSquaresLikelihood)
-    f = lik.f
-    hp = lik.hyperparams
-    return x -> f(x; hp...)
-end
+# Bind a residual to its hyperparameters. Empty θ ⇒ the residual is used directly
+# (zero overhead, identical to the pre-θ-dependence path); otherwise a 1-arg closure
+# splats θ. Used both at materialization (for sparsity detection on a primal residual)
+# and at evaluation.
+@inline _bind_residual(f, ::NamedTuple{(), Tuple{}}) = f
+@inline _bind_residual(f, hp::NamedTuple) = x -> f(x; hp...)
+
+_residual_function(lik::NonlinearLeastSquaresLikelihood) = _bind_residual(lik.f, lik.hyperparams)
 
 # -------------------------------------------------------------------------------------------------
 # Factory pattern: make the model callable to materialize a likelihood
@@ -102,9 +101,16 @@ function (model::NonlinearLeastSquaresModel)(y::AbstractVector; σ, kwargs...)
     y_vec = collect(Float64, y)
     T = promote_type(eltype(y_vec), eltype(inv_σ²))
 
-    # Prepare sparse Jacobian backend via extension
+    # θ for the residual (empty NamedTuple when the model declares none).
+    hp = _project_hyperparameters(model.hyperparams, values(kwargs))
+
+    # Detect the Jacobian sparsity pattern once, on the *primal* residual (so
+    # detection never traces AD-tagged hyperparameters), and reuse it for every
+    # evaluation. The resulting backend's AutoForwardDiff inner nests cleanly under
+    # an outer ForwardDiff pass, which is what makes hyperparameter gradients work.
+    f_probe = _bind_residual(model.f, _strip_ad_partials_hyperparams(hp))
     jac_backend = try
-        default_sparse_jacobian_backend()
+        known_pattern_jacobian_backend(f_probe, zeros(model.n))
     catch err
         # COV_EXCL_START
         if err isa MethodError
@@ -119,8 +125,6 @@ function (model::NonlinearLeastSquaresModel)(y::AbstractVector; σ, kwargs...)
         end
         # COV_EXCL_STOP
     end
-    # θ for the residual (empty NamedTuple when the model declares none).
-    hp = _project_hyperparameters(model.hyperparams, values(kwargs))
     return NonlinearLeastSquaresLikelihood{typeof(model.f), T, typeof(jac_backend), typeof(hp)}(
         model.f, y_vec, convert.(T, inv_σ²), convert(T, log_const), jac_backend, hp,
     )

@@ -87,3 +87,79 @@ using FiniteDiff, ForwardDiff
         @test_throws Exception gaussian_approximation(prior, lik)
     end
 end
+
+# NonlinearLeastSquares residual hyperparameters. The residual Jacobian's sparsity
+# pattern is fixed at materialization, so the Gauss–Newton loggrad/loghessian compose
+# with an outer ForwardDiff pass. These checks use residuals linear in the latent
+# field, where the Gauss–Newton Hessian equals the true Hessian and the IFT gradient
+# is exact (the residual-curvature term Σₖ (W r)ₖ ∇²fₖ vanishes).
+@testset "Parameterized NLSQ residual — ForwardDiff IFT" begin
+    fd = AutoFiniteDiff()
+
+    @testset "Dual residual hyperparameter α (workspace IFT)" begin
+        Random.seed!(11)
+        n = 5
+        model = AR1Model(n)
+        y = randn(n)
+        z = zeros(n)
+        f = (x; α) -> α .* x                         # linear in x ⇒ GN exact
+        nlsq = NonlinearLeastSquaresModel(f, n; hyperparams = (:α,))
+        ws = make_workspace(model; τ = 1.0, ρ = 0.3)
+
+        function pipe(θ)
+            prior = model(ws; τ = 1.0, ρ = 0.3)
+            lik = nlsq(y; σ = 0.5, α = θ[1])
+            return logpdf(gaussian_approximation(prior, lik), z)
+        end
+
+        θ0 = [1.3]
+        g_fwd = DifferentiationInterface.gradient(pipe, AutoForwardDiff(), θ0)
+        g_fd = DifferentiationInterface.gradient(pipe, fd, θ0)
+        @test maximum(abs.(g_fwd - g_fd)) < 1.0e-3
+    end
+
+    @testset "Dual σ + Dual α (workspace IFT)" begin
+        Random.seed!(12)
+        n = 5
+        model = AR1Model(n)
+        y = randn(n)
+        z = zeros(n)
+        f = (x; α) -> α .* x
+        nlsq = NonlinearLeastSquaresModel(f, n; hyperparams = (:α,))
+        ws = make_workspace(model; τ = 1.0, ρ = 0.3)
+
+        function pipe(θ)
+            prior = model(ws; τ = 1.0, ρ = 0.3)
+            lik = nlsq(y; σ = exp(θ[1]), α = θ[2])
+            return logpdf(gaussian_approximation(prior, lik), z)
+        end
+
+        θ0 = [-0.3, 1.1]
+        g_fwd = DifferentiationInterface.gradient(pipe, AutoForwardDiff(), θ0)
+        g_fd = DifferentiationInterface.gradient(pipe, fd, θ0)
+        @test maximum(abs.(g_fwd - g_fd)) < 1.0e-3
+    end
+
+    @testset "Non-diagonal Jacobian, joint-pattern workspace" begin
+        Random.seed!(13)
+        n = 5
+        model = AR1Model(n)
+        y = randn(n - 1)
+        z = zeros(n)
+        f = (x; α) -> [α * x[i] - x[i + 1] for i in 1:(n - 1)]   # bidiagonal J, linear in x
+        nlsq = NonlinearLeastSquaresModel(f, n; hyperparams = (:α,))
+        ref = nlsq(y; σ = 0.5, α = 1.0)
+        ws = GMRFWorkspace(model, ref; τ = 1.0, ρ = 0.3)         # joint prior+Hessian pattern
+
+        function pipe(θ)
+            prior = model(ws; τ = 1.0, ρ = 0.3)
+            lik = nlsq(y; σ = 0.5, α = θ[1])
+            return logpdf(gaussian_approximation(prior, lik), z)
+        end
+
+        θ0 = [1.4]
+        g_fwd = DifferentiationInterface.gradient(pipe, AutoForwardDiff(), θ0)
+        g_fd = DifferentiationInterface.gradient(pipe, fd, θ0)
+        @test maximum(abs.(g_fwd - g_fd)) < 1.0e-3
+    end
+end
