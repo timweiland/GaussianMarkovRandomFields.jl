@@ -566,6 +566,7 @@ PointSecondDerivativeObsModel
 ```@docs
 LinearlyTransformedObservationModel
 LinearlyTransformedLikelihood
+ParameterizedMatrix
 PoissonObservations
 NegativeBinomialObservations
 counts
