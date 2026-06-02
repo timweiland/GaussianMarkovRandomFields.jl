@@ -348,14 +348,45 @@ _ift_hessian_correction(::GMRFs.ObservationLikelihood, primal_lik, x_star) = not
 _ift_hessian_correction(::GMRFs.NonlinearLeastSquaresLikelihood, primal_lik, x_star) =
     GMRFs.residual_curvature(primal_lik, x_star)
 
-# Solver for the mode-sensitivity system. Without a correction, reuse the workspace's
-# Gauss–Newton factorization. With a correction `C`, the true Hessian `Q_post - C` is
-# factorized once (it is positive definite at the mode) and reused for every RHS.
-_ift_sensitivity_solver(ws::GMRFs.GMRFWorkspace, ::Nothing) = rhs -> GMRFs.workspace_solve(ws, rhs)
-function _ift_sensitivity_solver(ws::GMRFs.GMRFWorkspace, C::AbstractMatrix)
-    H_true = GMRFs._snapshot_Q(ws) - C
-    F = cholesky(Symmetric(H_true))
-    return rhs -> (F \ rhs)
+# Solve the mode-sensitivity systems `H · dx/dθ_j = rhs_j` for every j, returning the
+# list of solutions.
+#
+# Without a correction the true Hessian IS the workspace's Gauss–Newton posterior
+# precision, so its current factorization is reused directly.
+_ift_sensitivity_solve(ws::GMRFs.GMRFWorkspace, ::Nothing, rhs_list) =
+    [GMRFs.workspace_solve(ws, rhs) for rhs in rhs_list]
+
+# With a residual-curvature correction `C`, the true Hessian is `H = Q_post - C`. Its
+# pattern is a subset of `Q_post`'s — a residual's cross-second-derivative at `(i, j)`
+# requires a first-derivative coupling there, which `JᵀWJ` already contains — so `H`
+# shares the workspace's sparsity. We therefore reuse the workspace's symbolic
+# factorization *and* its configured backend (CHOLMOD / Pardiso / CliqueTrees / …) for a
+# numeric-only refactorization, rather than a fresh CHOLMOD factorization. The workspace
+# is restored to `Q_post` afterwards (the result snapshots its own precision).
+function _ift_sensitivity_solve(ws::GMRFs.GMRFWorkspace, C::AbstractMatrix, rhs_list)
+    qpost_nzval = copy(ws.Q.nzval)
+    htrue_nzval = _qpost_minus_correction(ws.Q, C)
+    try
+        GMRFs.update_precision_values!(ws, htrue_nzval)
+        return [GMRFs.workspace_solve(ws, rhs) for rhs in rhs_list]
+    finally
+        GMRFs.update_precision_values!(ws, qpost_nzval)
+        GMRFs.ensure_numeric!(ws)
+    end
+end
+
+# `Q_post.nzval - C`, written into a copy of `Q_post`'s value array (so the result keeps
+# `Q_post`'s exact pattern, as `update_precision_values!` requires). `C`'s nonzeros must
+# lie within `Q_post`'s pattern; `_check_h_pattern_subset` errors loudly otherwise.
+function _qpost_minus_correction(Qpost::SparseMatrixCSC, C::AbstractMatrix)
+    Cs = sparse(C)
+    _check_h_pattern_subset(Cs, Qpost)
+    nzval = copy(Qpost.nzval)
+    rows = rowvals(Qpost)
+    for col in 1:size(Qpost, 2), k in nzrange(Qpost, col)
+        nzval[k] -= _sparse_lookup(Cs, rows[k], col)
+    end
+    return nzval
 end
 
 function _workspace_dualhp_ift(
@@ -400,15 +431,16 @@ function _workspace_dualhp_ift(
     # TRUE Hessian of the neg-log-posterior at `x*`. For most likelihoods the
     # posterior precision equals that Hessian, so the workspace's factorization is
     # reused directly. Gauss–Newton likelihoods (NLSQ) use `JᵀWJ` for the posterior
-    # precision, which differs from the true Hessian by the residual-curvature term
-    # `C`; `_ift_sensitivity_solver` then factorizes the corrected `Q_post - C`.
+    # precision, which differs from the true Hessian by the residual-curvature term `C`;
+    # `_ift_sensitivity_solve` then reuses the workspace's symbolic factorization and
+    # backend to factorize the corrected `Q_post - C`.
     ws = posterior_primal.workspace
     constrained = posterior_primal.constraints !== nothing
     ci = constrained ? posterior_primal.constraints : nothing
-    solve_dθ = _ift_sensitivity_solver(ws, _ift_hessian_correction(obs_lik, primal_lik, x_star))
+    sols = _ift_sensitivity_solve(ws, _ift_hessian_correction(obs_lik, primal_lik, x_star), rhs_dθ)
     dx = Matrix{Float64}(undef, n, N)
     for j in 1:N
-        step = solve_dθ(rhs_dθ[j])
+        step = sols[j]
         if constrained
             A = ci.matrix
             step = step - ci.A_tilde_T * (ci.L_c \ (A * step))
