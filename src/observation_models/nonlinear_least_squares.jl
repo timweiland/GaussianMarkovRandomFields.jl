@@ -2,9 +2,23 @@ using LinearAlgebra
 using SparseArrays
 using Distributions: Normal, product_distribution
 import DifferentiationInterface as DI
-import GaussianMarkovRandomFields: known_pattern_jacobian_backend
+import GaussianMarkovRandomFields: known_pattern_jacobian_backend, known_pattern_hessian_backend
 
 export NonlinearLeastSquaresModel, NonlinearLeastSquaresLikelihood
+
+# Per-model cache for the residual's sparse-AD backends. The Jacobian and
+# residual-curvature Hessian sparsity patterns are determined solely by the residual `f`
+# and the latent dimension `n` — they do not depend on σ, the hyperparameters θ, or the
+# linearization point — so each is detected once (on the primal residual) and reused
+# across every materialization, instead of re-detecting on each `model(y; …)` call
+# (Jacobian) or each hyperparameter-gradient evaluation (residual Hessian). The model
+# stays immutable and just holds a reference to this mutable cache (cf. `_ADPrepCache`).
+mutable struct _NLSQBackendCache
+    jacobian::Any   # AutoSparse Jacobian backend, or `nothing` until first detected
+    hessian::Any    # AutoSparse residual-Hessian backend, or `nothing` until first detected
+    lock::ReentrantLock
+end
+_NLSQBackendCache() = _NLSQBackendCache(nothing, nothing, ReentrantLock())
 
 """
     NonlinearLeastSquaresModel(f, n; hyperparams=())
@@ -38,14 +52,31 @@ The declared θ are stored on the materialized likelihood and splatted into `f` 
 evaluation time (mirroring [`AutoDiffObservationModel`](@ref)); with no declared
 hyperparameters the stored `f` is called directly, so the fixed path is unchanged.
 
+!!! warning "The residual must have a fixed sparsity pattern"
+    The residual's sparse-AD backends — its Jacobian (used by `loggrad`/`loghessian`) and
+    the residual-curvature Hessian `Σₖ (W r)ₖ ∇²fₖ` (used for exact hyperparameter
+    gradients) — are detected **once**, at a probe point, and reused for every
+    materialization and linearization point `x`. Their sparsity patterns must therefore be
+    **independent of both `x` and the hyperparameters θ**.
+
+    Residuals built from ordinary arithmetic and elementwise operations satisfy this
+    automatically. The pitfall is data-dependent control flow that changes *which* latents
+    an output couples to: `SparseConnectivityTracer` follows only the branch active at the
+    probe point — a comparison such as `x[i] > 0` is evaluated to a plain `Bool`, so neither
+    `if`/`?:` nor `ifelse` unions the alternatives — so a residual like
+    `x[1] > 0 ? x[1] * x[2] : x[1]` freezes its pattern on one branch and silently drops the
+    coupling on the others. Branches whose alternatives share the same sparsity structure
+    are fine.
+
 !!! note "Differentiating the hyperparameters"
-    The residual Jacobian's sparsity pattern is detected once at materialization and
-    reused, so `loggrad`/`loghessian` compose with an outer ForwardDiff pass.
+    The residual's Jacobian and residual-curvature Hessian sparsity patterns are detected
+    once per model (on the primal residual) and reused across all materializations, so
+    `loggrad`/`loghessian` compose with an outer ForwardDiff pass.
     Forward-mode (`ForwardDiff`) hyperparameter gradients through `gaussian_approximation`
     with a `WorkspaceGMRF` prior are supported and **exact**: the implicit-function mode
     sensitivity is solved with the true Hessian — the Gauss–Newton posterior precision
     corrected by the residual-curvature term `Σₖ (W r)ₖ ∇²fₖ` — so exactness holds even
-    for residuals nonlinear in `x`. The Jacobian sparsity pattern must be θ-independent
+    for residuals nonlinear in `x`. Both sparsity patterns must be `x`- and θ-independent
     (see the warning above).
 
     Reverse-mode AD (Zygote, Mooncake, …) through `gaussian_approximation` is **not**
@@ -57,25 +88,27 @@ struct NonlinearLeastSquaresModel{F, H <: Tuple{Vararg{Symbol}}} <: ObservationM
     f::F
     n::Int
     hyperparams::H
+    backend_cache::_NLSQBackendCache
 end
 
 NonlinearLeastSquaresModel(f, n::Int; hyperparams::Tuple{Vararg{Symbol}} = ()) =
-    NonlinearLeastSquaresModel(f, n, hyperparams)
+    NonlinearLeastSquaresModel(f, n, hyperparams, _NLSQBackendCache())
 
 """
     NonlinearLeastSquaresLikelihood <: ObservationLikelihood
 
-Materialized likelihood for NonlinearLeastSquaresModel with precomputed weights and
-cached sparse-Jacobian state. Hessian uses Gauss–Newton. `hyperparams` holds the θ
-values (if any) splatted into the residual `f(x; θ...)`; it is empty for the
-non-parameterized case.
+Materialized likelihood for NonlinearLeastSquaresModel with precomputed weights and the
+model's cached fixed-pattern sparse-AD backends (Jacobian and residual-curvature Hessian).
+Hessian uses Gauss–Newton. `hyperparams` holds the θ values (if any) splatted into the
+residual `f(x; θ...)`; it is empty for the non-parameterized case.
 """
-struct NonlinearLeastSquaresLikelihood{F, T, JB, HP <: NamedTuple} <: ObservationLikelihood
+struct NonlinearLeastSquaresLikelihood{F, T, JB, HB, HP <: NamedTuple} <: ObservationLikelihood
     f::F
     y::Vector{T}
     inv_σ²::Vector{T}
     log_const::T
-    jac_backend::JB       # DI backend for sparse Jacobian
+    jac_backend::JB       # DI backend for the sparse Jacobian (fixed pattern)
+    hess_backend::HB      # DI backend for the sparse residual-curvature Hessian (fixed pattern)
     hyperparams::HP       # θ values splatted into f(x; θ...); empty NamedTuple if none
 end
 
@@ -87,6 +120,34 @@ end
 @inline _bind_residual(f, hp::NamedTuple) = x -> f(x; hp...)
 
 _residual_function(lik::NonlinearLeastSquaresLikelihood) = _bind_residual(lik.f, lik.hyperparams)
+
+# Detect-once-then-reuse accessors for the residual's sparse-AD backends. The first
+# materialization detects the pattern on the primal probe residual `f_probe`; later
+# materializations reuse the cached backend. The cache lock makes concurrent first
+# materializations of the same model safe (duplicated detection under contention is not
+# avoided beyond serializing, matching `_ADPrepCache`).
+function _cached_jacobian_backend(model::NonlinearLeastSquaresModel, f_probe)
+    c = model.backend_cache
+    return @lock c.lock begin
+        if c.jacobian === nothing
+            c.jacobian = known_pattern_jacobian_backend(f_probe, zeros(model.n))
+        end
+        c.jacobian
+    end
+end
+
+function _cached_residual_hessian_backend(model::NonlinearLeastSquaresModel, f_probe)
+    c = model.backend_cache
+    return @lock c.lock begin
+        if c.hessian === nothing
+            # Detect the pattern of ∇²[Σ_k f_k(x)]. The runtime curvature weights `W r`
+            # only scale terms, so the unweighted sum has the same structural pattern.
+            g_probe = x -> sum(f_probe(x))
+            c.hessian = known_pattern_hessian_backend(g_probe, zeros(model.n))
+        end
+        c.hessian
+    end
+end
 
 # -------------------------------------------------------------------------------------------------
 # Factory pattern: make the model callable to materialize a likelihood
@@ -109,16 +170,20 @@ function (model::NonlinearLeastSquaresModel)(y::AbstractVector; σ, kwargs...)
     # θ for the residual (empty NamedTuple when the model declares none).
     hp = _project_hyperparameters(model.hyperparams, values(kwargs))
 
-    # Detect the Jacobian sparsity pattern once, on the *primal* residual (so
-    # detection never traces AD-tagged hyperparameters), and reuse it for every
-    # evaluation. The resulting backend's AutoForwardDiff inner nests cleanly under
-    # an outer ForwardDiff pass, which is what makes hyperparameter gradients work.
+    # Detect the sparse-AD backends once, on the *primal* residual (so detection never
+    # traces AD-tagged hyperparameters), and reuse them across materializations via the
+    # model's cache. Their AutoForwardDiff inner nests cleanly under an outer ForwardDiff
+    # pass, which is what makes hyperparameter gradients work. The cache accessors call
+    # through the extension stubs, which throw a clear ArgumentError if
+    # SparseConnectivityTracer / SparseMatrixColorings aren't loaded.
     f_probe = _bind_residual(model.f, _strip_ad_partials_hyperparams(hp))
-    # The stub throws a clear ArgumentError if SparseConnectivityTracer /
-    # SparseMatrixColorings aren't loaded.
-    jac_backend = known_pattern_jacobian_backend(f_probe, zeros(model.n))
-    return NonlinearLeastSquaresLikelihood{typeof(model.f), T, typeof(jac_backend), typeof(hp)}(
-        model.f, y_vec, convert.(T, inv_σ²), convert(T, log_const), jac_backend, hp,
+    jac_backend = _cached_jacobian_backend(model, f_probe)
+    hess_backend = _cached_residual_hessian_backend(model, f_probe)
+    return NonlinearLeastSquaresLikelihood{
+        typeof(model.f), T, typeof(jac_backend), typeof(hess_backend), typeof(hp),
+    }(
+        model.f, y_vec, convert.(T, inv_σ²), convert(T, log_const),
+        jac_backend, hess_backend, hp,
     )
 end
 

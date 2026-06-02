@@ -243,6 +243,7 @@ Key properties
   - `∇²ℓ(x) ≈ − J(x)' Diagonal(w) J(x)`
 - `σ`: accepts a scalar or vector (heteroskedastic), both interpreted as standard deviations.
 - Sparse autodiff: requires loading `SparseConnectivityTracer` and `SparseMatrixColorings` to activate the sparse Jacobian backend.
+- Fixed sparsity pattern: the residual's Jacobian and residual-curvature Hessian sparsity patterns are detected once (at a probe point) and reused, so they must be independent of both `x` and the hyperparameters `θ`. Data-dependent control flow that changes *which* latents an output couples to (e.g. `x[1] > 0 ? x[1] * x[2] : x[1]`) is unsupported: `SparseConnectivityTracer` follows only the branch active at the probe point, so the pattern is frozen on one branch and entries on the others are silently dropped.
 
 Example
 ```julia

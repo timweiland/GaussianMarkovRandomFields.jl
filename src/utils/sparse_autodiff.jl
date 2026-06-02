@@ -43,6 +43,27 @@ function known_pattern_jacobian_backend(args::Vararg{Any}; kwargs...)
 end
 
 """
+    known_pattern_hessian_backend(g, x_probe) -> AutoSparse
+
+Detect the sparsity pattern of the Hessian of the scalar function `g` at `x_probe`
+once and return a sparse `AutoSparse` backend that reuses that fixed pattern (skipping
+per-call detection). Used for the residual-curvature Hessian, whose pattern depends only
+on the residual structure — not on σ, the hyperparameters, or the linearization point —
+so it is detected once and shared across materializations.
+
+Concrete method provided by the SparseConnectivityTracer + SparseMatrixColorings extension.
+"""
+function known_pattern_hessian_backend(args::Vararg{Any}; kwargs...)
+    throw(
+        ArgumentError(
+            "Sparse Hessian backend not available. " *
+                "Load SparseConnectivityTracer and SparseMatrixColorings " *
+                "to activate the AutoSparse backend."
+        )
+    )
+end
+
+"""
     residual_curvature(lik::NonlinearLeastSquaresLikelihood, x_star) -> SparseMatrixCSC
 
 The residual-curvature term `C = Σ_k (W r)_k ∇²f_k(x*)` of a Gauss–Newton least-squares

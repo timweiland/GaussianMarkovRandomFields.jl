@@ -39,21 +39,29 @@ function GaussianMarkovRandomFields.known_pattern_jacobian_backend(f, x_probe::A
     )
 end
 
+# Hessian analogue of `known_pattern_jacobian_backend`. `g` must be scalar-valued.
+# Detection runs once here on the primal residual sum, so the pattern (which depends only
+# on the residual structure, not on σ/θ/x*) is reused across materializations.
+function GaussianMarkovRandomFields.known_pattern_hessian_backend(g, x_probe::AbstractVector)
+    pattern = sparse(DI.hessian_sparsity(g, x_probe, TracerSparsityDetector()))
+    return DI.AutoSparse(
+        DI.AutoForwardDiff();
+        sparsity_detector = DI.ADTypes.KnownHessianSparsityDetector(pattern),
+        coloring_algorithm = GreedyColoringAlgorithm(),
+    )
+end
+
 # Residual-curvature term C = Σ_k (W r)_k ∇²f_k(x*) = ∇²[Σ_k (W r)_k f_k(x)] at x*.
 # `W r` is held constant (evaluated at x*), so this is a plain scalar Hessian with no
-# inner Jacobian — computed once, at the primal mode, via sparse forward-mode AD.
+# inner Jacobian. Its sparsity pattern is θ- and x*-independent, so it is detected once
+# and cached on the model (`lik.hess_backend`); only the numeric Hessian is recomputed here.
 function GaussianMarkovRandomFields.residual_curvature(
         lik::GaussianMarkovRandomFields.NonlinearLeastSquaresLikelihood, x_star::AbstractVector
     )
     f = GaussianMarkovRandomFields._residual_function(lik)
     Wr = lik.inv_σ² .* (lik.y .- f(x_star))
     g = x -> sum(Wr .* f(x))
-    backend = DI.AutoSparse(
-        DI.AutoForwardDiff();
-        sparsity_detector = TracerSparsityDetector(),
-        coloring_algorithm = GreedyColoringAlgorithm(),
-    )
-    return sparse(DI.hessian(g, backend, x_star))
+    return sparse(DI.hessian(g, lik.hess_backend, x_star))
 end
 
 end # module
