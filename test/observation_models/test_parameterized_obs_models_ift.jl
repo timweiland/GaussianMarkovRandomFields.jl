@@ -181,6 +181,57 @@ end
         wprior = AR1Model(n)(ws; τ = 1.0, ρ = 0.3)
         @test_throws ArgumentError ChainRulesCore.rrule(cfg, gaussian_approximation, wprior, lik)
     end
+
+    # The residual's sparse-AD backends (Jacobian + residual-curvature Hessian) have
+    # θ-/x-independent patterns, so they are detected once per model and reused across
+    # materializations rather than re-detected on every `model(y; …)` call / gradient pass.
+    @testset "Sparse-AD backends detected once and cached on the model" begin
+        Random.seed!(21)
+        n = 6
+        # Residual coupling neighbouring latents ⇒ genuinely non-diagonal Hessian pattern.
+        f = (x; α) -> α .* x .^ 2 .+ vcat(x[2:n], x[1]) .* x
+        model = NonlinearLeastSquaresModel(f, n; hyperparams = (:α,))
+        y = randn(n)
+
+        # First materialization populates the cache; a second (different σ and α) reuses it.
+        @test model.backend_cache.jacobian === nothing
+        @test model.backend_cache.hessian === nothing
+        lik1 = model(y; σ = 0.5, α = 1.3)
+        @test model.backend_cache.jacobian !== nothing
+        @test model.backend_cache.hessian !== nothing
+        lik2 = model(y; σ = 0.9, α = 2.1)
+        @test lik2.jac_backend === lik1.jac_backend     # identical object ⇒ no re-detection
+        @test lik2.hess_backend === lik1.hess_backend
+
+        # The cached residual-Hessian backend yields the correct curvature: compare the
+        # sparse result to a dense ForwardDiff Hessian of x -> Σ_k (W r)_k f_k(x). Checking
+        # at two structurally different linearization points (the pattern is detected once,
+        # at zeros) guards that the cached pattern is a valid superset away from the probe —
+        # which holds because this residual's sparsity is x-independent (the documented
+        # contract; data-dependent structure-changing branches are unsupported).
+        fα = x -> f(x; α = 1.3)
+        for x_star in (randn(n), abs.(randn(n)) .+ 1.0)
+            Wr = lik1.inv_σ² .* (lik1.y .- fα(x_star))
+            C_cached = GaussianMarkovRandomFields.residual_curvature(lik1, x_star)
+            C_ref = ForwardDiff.hessian(x -> sum(Wr .* fα(x)), x_star)
+            @test Matrix(C_cached) ≈ C_ref
+        end
+
+        # End-to-end: the hyperparameter gradient through gaussian_approximation still
+        # matches finite differences (caching the pattern doesn't change the numbers).
+        prior_model = AR1Model(n)
+        ws = make_workspace(prior_model; τ = 1.0, ρ = 0.3)
+        z = zeros(n)
+        function pipe(θ)
+            prior = prior_model(ws; τ = 1.0, ρ = 0.3)
+            lik = model(y; σ = 0.5, α = θ[1])
+            return logpdf(gaussian_approximation(prior, lik), z)
+        end
+        θ0 = [1.3]
+        g_fwd = DifferentiationInterface.gradient(pipe, AutoForwardDiff(), θ0)
+        g_fd = DifferentiationInterface.gradient(pipe, AutoFiniteDiff(), θ0)
+        @test maximum(abs.(g_fwd - g_fd)) < 5.0e-3
+    end
 end
 
 # Affine offset hyperparameter sensitivities. η = A·x + b is affine in x, so the
