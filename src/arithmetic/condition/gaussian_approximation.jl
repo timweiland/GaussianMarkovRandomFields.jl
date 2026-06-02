@@ -281,16 +281,21 @@ function gaussian_approximation(prior_gmrf::GMRF, obs_lik::NormalLikelihood{Iden
     end
 end
 
+# Affine offset of a LinearlyTransformedLikelihood as a concrete vector for the
+# conjugate path: `y ~ N(A·x + b, σ²)` ⇒ `y = A·x + b + ε`, matching linear_condition's `b`.
+_offset_or_zeros(::Nothing, n::Integer) = zeros(n)
+_offset_or_zeros(b::AbstractVector, ::Integer) = b
+
 # Specialized dispatch for linearly transformed Normal observation likelihoods (also conjugate)
 function gaussian_approximation(prior_gmrf::GMRF, obs_lik::LinearlyTransformedLikelihood{<:NormalLikelihood{IdentityLink}})
-    # Linearly transformed Normal with identity link: y ~ N(A*x, σ²I) - still conjugate!
-    # This is exactly the linear conditioning setup: y = A*x + 0 + ε, where ε ~ N(0, σ²I)
+    # Linearly transformed Normal with identity link: y ~ N(A*x + b, σ²I) - still conjugate!
+    # This is exactly the linear conditioning setup: y = A*x + b + ε, where ε ~ N(0, σ²I)
 
     base_lik = obs_lik.base_likelihood
     A = obs_lik.design_matrix
     Q_ϵ = base_lik.inv_σ²  # 1/σ² (scalar gets converted to scaled identity automatically)
     y = base_lik.y
-    b = zeros(length(y))  # No offset
+    b = _offset_or_zeros(obs_lik.offset, length(y))
 
     return linear_condition(prior_gmrf; A = A, Q_ϵ = Q_ϵ, y = y, b = b)
 end
@@ -332,7 +337,7 @@ function gaussian_approximation(prior_constrained::ConstrainedGMRF, obs_lik::Lin
         A = obs_lik.design_matrix,
         Q_ϵ = base_lik.inv_σ²,
         y = base_lik.y,
-        b = zeros(length(base_lik.y))
+        b = _offset_or_zeros(obs_lik.offset, length(base_lik.y))
     )
 end
 

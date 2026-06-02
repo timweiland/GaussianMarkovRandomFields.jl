@@ -182,3 +182,107 @@ end
         @test_throws ArgumentError ChainRulesCore.rrule(cfg, gaussian_approximation, wprior, lik)
     end
 end
+
+# Affine offset hyperparameter sensitivities. η = A·x + b is affine in x, so the
+# offset enters the IFT through the (cheap) offset builder only: it shifts the mode and,
+# for non-Gaussian bases, the point at which the base Hessian is evaluated. Exactness is
+# cross-checked against finite differences for Gaussian (offset-invariant Hessian) and
+# Poisson (offset-shifted Hessian) bases.
+@testset "Parameterized offset — ForwardDiff IFT" begin
+    fd = AutoFiniteDiff()
+
+    @testset "Normal base, Dual offset (workspace IFT)" begin
+        Random.seed!(21)
+        n = 5
+        model = AR1Model(n)
+        A = sparse(1.0 * I, n, n)
+        build_b(; s) = fill(s, n)
+        ltom = LinearlyTransformedObservationModel(
+            ExponentialFamily(Normal), A;
+            offset = ParameterizedOffset(build_b; hyperparameters = (:s,))
+        )
+        y = randn(n)
+        z = zeros(n)
+        ws = make_workspace(model; τ = 1.0, ρ = 0.3)
+        function pipe(θ)
+            prior = model(ws; τ = 1.0, ρ = 0.3)
+            lik = ltom(y; σ = 1.0, s = θ[1])
+            return logpdf(gaussian_approximation(prior, lik), z)
+        end
+        gF = DifferentiationInterface.gradient(pipe, AutoForwardDiff(), [0.4])
+        gD = DifferentiationInterface.gradient(pipe, fd, [0.4])
+        @test maximum(abs.(gF - gD)) < 1.0e-3
+    end
+
+    @testset "Poisson base, Dual offset shifts the Hessian (workspace IFT)" begin
+        Random.seed!(22)
+        n = 5
+        model = AR1Model(n)
+        A = sparse(1.0 * I, n, n)
+        build_b(; s) = fill(s, n)
+        ltom = LinearlyTransformedObservationModel(
+            ExponentialFamily(Poisson), A;
+            offset = ParameterizedOffset(build_b; hyperparameters = (:s,))
+        )
+        y = PoissonObservations([2, 1, 3, 0, 4])
+        z = zeros(n)
+        ws = make_workspace(model; τ = 1.0, ρ = 0.3)
+        function pipe(θ)
+            prior = model(ws; τ = 1.0, ρ = 0.3)
+            lik = ltom(y; s = θ[1])
+            return logpdf(gaussian_approximation(prior, lik), z)
+        end
+        gF = DifferentiationInterface.gradient(pipe, AutoForwardDiff(), [0.2])
+        gD = DifferentiationInterface.gradient(pipe, fd, [0.2])
+        @test maximum(abs.(gF - gD)) < 1.0e-3
+    end
+
+    @testset "Joint Dual offset + Dual design matrix" begin
+        Random.seed!(23)
+        n = 5
+        model = AR1Model(n)
+        build_A(; κ) = sparse(Diagonal(fill(κ, n)))
+        build_b(; s) = fill(s, n)
+        ltom = LinearlyTransformedObservationModel(
+            ExponentialFamily(Normal),
+            ParameterizedMatrix(build_A; hyperparameters = (:κ,), n_latent = n);
+            offset = ParameterizedOffset(build_b; hyperparameters = (:s,))
+        )
+        @test hyperparameters(ltom) == (:σ, :κ, :s)
+        y = randn(n)
+        z = zeros(n)
+        ws = make_workspace(model; τ = 1.0, ρ = 0.3)
+        function pipe(θ)
+            prior = model(ws; τ = 1.0, ρ = 0.3)
+            lik = ltom(y; σ = 1.0, κ = θ[1], s = θ[2])
+            return logpdf(gaussian_approximation(prior, lik), z)
+        end
+        gF = DifferentiationInterface.gradient(pipe, AutoForwardDiff(), [0.8, 0.4])
+        gD = DifferentiationInterface.gradient(pipe, fd, [0.8, 0.4])
+        @test maximum(abs.(gF - gD)) < 1.0e-3
+    end
+
+    @testset "Dual offset + Dual prior (GMRF{Dual} plain path)" begin
+        Random.seed!(24)
+        n = 5
+        model = AR1Model(n)
+        A = sparse(1.0 * I, n, n)
+        build_b(; s) = fill(s, n)
+        ltom = LinearlyTransformedObservationModel(
+            ExponentialFamily(Normal), A;
+            offset = ParameterizedOffset(build_b; hyperparameters = (:s,))
+        )
+        y = randn(n)
+        z = zeros(n)
+        function pipe(θ)
+            μ = mean(model; τ = exp(θ[1]), ρ = 0.3)
+            Q = sparse(precision_matrix(model; τ = exp(θ[1]), ρ = 0.3))
+            prior = GMRF(μ, Q)
+            lik = ltom(y; σ = 1.0, s = θ[2])
+            return logpdf(gaussian_approximation(prior, lik), z)
+        end
+        gF = DifferentiationInterface.gradient(pipe, AutoForwardDiff(), [0.1, 0.4])
+        gD = DifferentiationInterface.gradient(pipe, fd, [0.1, 0.4])
+        @test maximum(abs.(gF - gD)) < 1.0e-3
+    end
+end
