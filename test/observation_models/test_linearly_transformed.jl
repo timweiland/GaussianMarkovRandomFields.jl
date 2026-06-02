@@ -154,4 +154,73 @@ using Distributions
         end
     end
 
+    @testset "Affine offset (η = A·x + b)" begin
+        base = ExponentialFamily(Normal)
+        A = sparse([1.0 0.5; 0.0 1.0])
+        y = [1.0, 2.0]
+        x = [0.5, 1.0]
+
+        @testset "No offset is backward-compatible" begin
+            ltom = LinearlyTransformedObservationModel(base, A)
+            ltlik = ltom(y; σ = 1.0)
+            @test ltlik.offset === nothing
+            @test loglik(x, ltlik) ≈ loglik(A * x, base(y; σ = 1.0))   # η = A·x
+            @test hyperparameters(ltom) == (:σ,)
+        end
+
+        @testset "Fixed offset" begin
+            b = [0.3, -0.2]
+            ltom = LinearlyTransformedObservationModel(base, A; offset = b)
+            ltlik = ltom(y; σ = 1.0)
+            @test ltlik.offset == b
+            η = A * x .+ b
+            @test loglik(x, ltlik) ≈ loglik(η, base(y; σ = 1.0))
+            @test loggrad(x, ltlik) ≈ A' * loggrad(η, base(y; σ = 1.0))
+            @test loghessian(x, ltlik) ≈ A' * loghessian(η, base(y; σ = 1.0)) * A
+            @test loggrad(x, ltlik) ≈ ForwardDiff.gradient(z -> loglik(z, ltlik), x)
+            @test hyperparameters(ltom) == (:σ,)            # fixed offset adds no names
+        end
+
+        @testset "ParameterizedOffset materialization + merging" begin
+            build_b(; s) = [s, 2s]
+            spec = ParameterizedOffset(build_b; hyperparameters = (:s,))
+            ltom = LinearlyTransformedObservationModel(base, A; offset = spec)
+            @test hyperparameters(ltom) == (:σ, :s)         # base, then offset
+            ltlik = ltom(y; σ = 1.0, s = 0.5)
+            @test ltlik.offset == build_b(; s = 0.5)
+            @test loglik(x, ltlik) ≈ loglik(A * x .+ build_b(; s = 0.5), base(y; σ = 1.0))
+        end
+
+        @testset "Parameterized offset == fixed at same θ" begin
+            build_b(; s) = [s, 2s]
+            s0 = 0.4
+            lf = LinearlyTransformedObservationModel(base, A; offset = build_b(; s = s0))(y; σ = 1.0)
+            lp = LinearlyTransformedObservationModel(
+                base, A; offset = ParameterizedOffset(build_b; hyperparameters = (:s,))
+            )(y; σ = 1.0, s = s0)
+            @test loglik(x, lp) ≈ loglik(x, lf)
+            @test loggrad(x, lp) ≈ loggrad(x, lf)
+            @test loghessian(x, lp) ≈ loghessian(x, lf)
+        end
+
+        @testset "Conjugate Normal path shifts mean by offset" begin
+            b = [0.5, -0.3]
+            prior = GMRF(zeros(2), sparse(2.0 * I, 2, 2))
+            post = gaussian_approximation(prior, LinearlyTransformedObservationModel(base, A; offset = b)(y; σ = 1.0))
+            # Equivalent: no offset, conditioning on shifted data y − b.
+            post0 = gaussian_approximation(prior, LinearlyTransformedObservationModel(base, A)(y .- b; σ = 1.0))
+            @test mean(post) ≈ mean(post0)
+        end
+
+        @testset "Errors" begin
+            build_b(; s) = [s, 2s]
+            ltom = LinearlyTransformedObservationModel(
+                base, A; offset = ParameterizedOffset(build_b; hyperparameters = (:s,))
+            )
+            @test_throws ArgumentError ltom(y; σ = 1.0)               # s missing
+            # offset length must match the number of observations
+            @test_throws DimensionMismatch LinearlyTransformedObservationModel(base, A; offset = [1.0, 2.0, 3.0])(y; σ = 1.0)
+        end
+    end
+
 end

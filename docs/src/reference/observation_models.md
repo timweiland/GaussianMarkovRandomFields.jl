@@ -567,6 +567,7 @@ PointSecondDerivativeObsModel
 LinearlyTransformedObservationModel
 LinearlyTransformedLikelihood
 ParameterizedMatrix
+ParameterizedOffset
 PoissonObservations
 NegativeBinomialObservations
 counts

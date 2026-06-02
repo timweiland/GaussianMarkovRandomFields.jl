@@ -91,12 +91,18 @@ function _primal_obs_lik(lik::GMRFs.LinearlyTransformedLikelihood)
     return GMRFs.LinearlyTransformedLikelihood(
         _primal_obs_lik(lik.base_likelihood),
         _strip_matrix_partials(lik.design_matrix),
+        _strip_offset_partials(lik.offset),
     )
 end
 
 # Strip Dual partials from a (possibly θ-dependent) design matrix.
 _strip_matrix_partials(A::AbstractMatrix{<:ForwardDiff.Dual}) = ForwardDiff.value.(A)
 _strip_matrix_partials(A::AbstractMatrix) = A
+
+# Strip Dual partials from a (possibly θ-dependent) affine offset.
+_strip_offset_partials(::Nothing) = nothing
+_strip_offset_partials(b::AbstractVector{<:ForwardDiff.Dual}) = ForwardDiff.value.(b)
+_strip_offset_partials(b::AbstractVector) = b
 
 # NonlinearLeastSquaresLikelihood: strip the σ-derived numeric fields (Dual when σ
 # carried partials) and the stored residual hyperparameters (Dual when an `f(x; θ...)`

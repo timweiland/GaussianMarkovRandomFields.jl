@@ -51,7 +51,9 @@ _lik_carries_dual_hp(::_DualObsLik) = true
 _lik_carries_dual_hp(lik::GMRFs.CompositeLikelihood) =
     any(_lik_carries_dual_hp, lik.components)
 _lik_carries_dual_hp(lik::GMRFs.LinearlyTransformedLikelihood) =
-    _lik_carries_dual_hp(lik.base_likelihood) || GMRFs._carries_ad_partials(lik.design_matrix)
+    _lik_carries_dual_hp(lik.base_likelihood) ||
+    GMRFs._carries_ad_partials(lik.design_matrix) ||
+    GMRFs._carries_ad_partials(lik.offset)
 _lik_carries_dual_hp(lik::GMRFs.NonlinearLeastSquaresLikelihood) =
     GMRFs._hp_carries_ad_partials(lik.hyperparams) || GMRFs._carries_ad_partials(lik.inv_σ²)
 
@@ -116,11 +118,12 @@ end
 _q_post_with_pattern(Q_prior::SparseMatrixCSC, nzval_dual) =
     SparseMatrixCSC(Q_prior.m, Q_prior.n, copy(Q_prior.colptr), copy(Q_prior.rowval), nzval_dual)
 
-# Diagonal H_dual — subtract H from a `DualT`-lifted copy of Q_prior's nzval.
-# Works for both Float64 and Dual Q_prior; native `Dual - Dual` arithmetic
-# composes the prior's existing partials with H's.
+# Diagonal H — subtract H from a `DualT`-lifted copy of Q_prior's nzval. The eltype
+# is `<:Real` (not just `<:Dual`): a Dual H composes its partials, while a Float64 H
+# (e.g. a Normal base whose Hessian is offset/hyperparameter-invariant) subtracts with
+# zero θ-partials — the precision genuinely doesn't depend on that hyperparameter.
 function _assemble_q_post_dual(
-        Q_prior::SparseMatrixCSC, H_dual::Diagonal{<:ForwardDiff.Dual},
+        Q_prior::SparseMatrixCSC, H_dual::Diagonal{<:Real},
         ::Type{DualT}, ::Val{N}
     ) where {DualT, N}
     n = size(Q_prior, 1)
@@ -143,7 +146,7 @@ end
 # isn't applicable for this likelihood/prior combination.
 function _assemble_q_post_dual(
         Q_prior::SparseMatrixCSC,
-        H_dual::SparseMatrixCSC{<:ForwardDiff.Dual},
+        H_dual::SparseMatrixCSC{<:Real},
         ::Type{DualT}, ::Val{N}
     ) where {DualT, N}
     _check_h_pattern_subset(H_dual, Q_prior)
@@ -197,7 +200,7 @@ end
 # a less actionable message, so we error explicitly with guidance.
 function _assemble_q_post_dual(
         Q_prior::SparseMatrixCSC,
-        H_dual::AbstractMatrix{<:ForwardDiff.Dual},
+        H_dual::AbstractMatrix{<:Real},
         ::Type{DualT}, ::Val{N}
     ) where {DualT, N}
     throw(
@@ -244,7 +247,9 @@ end
 function _lik_dual_tag_npartials(lik::GMRFs.LinearlyTransformedLikelihood)
     T1, N1 = _lik_dual_tag_npartials(lik.base_likelihood)
     T2, N2 = _array_tag_npartials(lik.design_matrix)
-    return _reconcile_tag_npartials(T1, N1, T2, N2)
+    T3, N3 = _array_tag_npartials(lik.offset)
+    Tm, Nm = _reconcile_tag_npartials(T1, N1, T2, N2)
+    return _reconcile_tag_npartials(Tm, Nm, T3, N3)
 end
 
 function _lik_dual_tag_npartials(lik::GMRFs.NonlinearLeastSquaresLikelihood)
@@ -254,10 +259,11 @@ function _lik_dual_tag_npartials(lik::GMRFs.NonlinearLeastSquaresLikelihood)
     return _reconcile_tag_npartials(T1, N1, T2, N2)
 end
 
-# (Tag, N) of a Dual-eltype array, or (nothing, nothing) for a plain array.
+# (Tag, N) of a Dual-eltype array, or (nothing, nothing) for a plain/absent array.
 _array_tag_npartials(A::AbstractArray{<:ForwardDiff.Dual}) =
     (ForwardDiff.tagtype(eltype(A)), ForwardDiff.npartials(eltype(A)))
 _array_tag_npartials(::AbstractArray) = (nothing, nothing)
+_array_tag_npartials(::Nothing) = (nothing, nothing)
 
 # Combine two (Tag, N) results, erroring if both are present but disagree.
 function _reconcile_tag_npartials(T1, N1, T2, N2)
