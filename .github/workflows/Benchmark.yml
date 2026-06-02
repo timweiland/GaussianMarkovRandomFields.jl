@@ -67,11 +67,13 @@ jobs:
 
       - name: Restore PR worktree for comparison script
         run: |
-          # Remove the bench scripts we copied in so they don't block the
-          # switch back to the PR branch (where they're tracked).
-          rm -f benchmarks/benchmarks.jl benchmarks/run_regression.jl \
-                benchmarks/compare_results.jl benchmarks/Project.toml
-          git checkout -
+          # Force-switch back to the PR worktree. The baseline checkout
+          # overwrote the tracked benchmark scripts (cp from /tmp); a plain
+          # `git checkout -` PRESERVES those local edits/deletions whenever the
+          # file is byte-identical across branches, which left compare_results.jl
+          # missing at the compare step. `-f` discards the local changes and
+          # restores the PR's tracked files (scripts + Project.toml).
+          git checkout -f "@{-1}"
 
       - name: Compare PR vs baseline
         id: compare
