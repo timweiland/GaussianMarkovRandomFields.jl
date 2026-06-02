@@ -51,7 +51,9 @@ _lik_carries_dual_hp(::_DualObsLik) = true
 _lik_carries_dual_hp(lik::GMRFs.CompositeLikelihood) =
     any(_lik_carries_dual_hp, lik.components)
 _lik_carries_dual_hp(lik::GMRFs.LinearlyTransformedLikelihood) =
-    _lik_carries_dual_hp(lik.base_likelihood)
+    _lik_carries_dual_hp(lik.base_likelihood) || GMRFs._carries_ad_partials(lik.design_matrix)
+_lik_carries_dual_hp(lik::GMRFs.NonlinearLeastSquaresLikelihood) =
+    GMRFs._hp_carries_ad_partials(lik.hyperparams) || GMRFs._carries_ad_partials(lik.inv_σ²)
 
 # ----------------------------------------------------------------------------
 # DI.hessian returns a dense Matrix even when the underlying Hessian is
@@ -239,8 +241,37 @@ function _lik_dual_tag_npartials(lik::_DualObsLik)
     return ForwardDiff.tagtype(D), ForwardDiff.npartials(D)
 end
 
-_lik_dual_tag_npartials(lik::GMRFs.LinearlyTransformedLikelihood) =
-    _lik_dual_tag_npartials(lik.base_likelihood)
+function _lik_dual_tag_npartials(lik::GMRFs.LinearlyTransformedLikelihood)
+    T1, N1 = _lik_dual_tag_npartials(lik.base_likelihood)
+    T2, N2 = _array_tag_npartials(lik.design_matrix)
+    return _reconcile_tag_npartials(T1, N1, T2, N2)
+end
+
+function _lik_dual_tag_npartials(lik::GMRFs.NonlinearLeastSquaresLikelihood)
+    T1, N1 = GMRFs._hp_carries_ad_partials(lik.hyperparams) ?
+        _outer_tag_and_npartials(lik.hyperparams) : (nothing, nothing)
+    T2, N2 = _array_tag_npartials(lik.inv_σ²)
+    return _reconcile_tag_npartials(T1, N1, T2, N2)
+end
+
+# (Tag, N) of a Dual-eltype array, or (nothing, nothing) for a plain array.
+_array_tag_npartials(A::AbstractArray{<:ForwardDiff.Dual}) =
+    (ForwardDiff.tagtype(eltype(A)), ForwardDiff.npartials(eltype(A)))
+_array_tag_npartials(::AbstractArray) = (nothing, nothing)
+
+# Combine two (Tag, N) results, erroring if both are present but disagree.
+function _reconcile_tag_npartials(T1, N1, T2, N2)
+    T1 === nothing && return (T2, N2)
+    T2 === nothing && return (T1, N1)
+    (T1 === T2 && N1 == N2) || throw(
+        ArgumentError(
+            "Observation likelihood carries Duals from different outer-AD passes " *
+                "(Tag=$T1/N=$N1 vs Tag=$T2/N=$N2). All Dual partials threaded through " *
+                "the IFT must come from a single outer ForwardDiff pass."
+        )
+    )
+    return (T1, N1)
+end
 
 function _lik_dual_tag_npartials(lik::GMRFs.CompositeLikelihood)
     Tag, N = nothing, nothing
@@ -310,6 +341,54 @@ end
 # obs_lik whose `loggrad`/`loghessian` correctly propagate Dual hp).
 # ----------------------------------------------------------------------------
 
+# Residual-curvature correction for the IFT mode-sensitivity Hessian. `nothing` for
+# likelihoods whose posterior precision already equals the true Hessian; a sparse `C`
+# for Gauss–Newton least squares (so the true Hessian is `Q_post - C`).
+_ift_hessian_correction(::GMRFs.ObservationLikelihood, primal_lik, x_star) = nothing
+_ift_hessian_correction(::GMRFs.NonlinearLeastSquaresLikelihood, primal_lik, x_star) =
+    GMRFs.residual_curvature(primal_lik, x_star)
+
+# Solve the mode-sensitivity systems `H · dx/dθ_j = rhs_j` for every j, returning the
+# list of solutions.
+#
+# Without a correction the true Hessian IS the workspace's Gauss–Newton posterior
+# precision, so its current factorization is reused directly.
+_ift_sensitivity_solve(ws::GMRFs.GMRFWorkspace, ::Nothing, rhs_list) =
+    [GMRFs.workspace_solve(ws, rhs) for rhs in rhs_list]
+
+# With a residual-curvature correction `C`, the true Hessian is `H = Q_post - C`. Its
+# pattern is a subset of `Q_post`'s — a residual's cross-second-derivative at `(i, j)`
+# requires a first-derivative coupling there, which `JᵀWJ` already contains — so `H`
+# shares the workspace's sparsity. We therefore reuse the workspace's symbolic
+# factorization *and* its configured backend (CHOLMOD / Pardiso / CliqueTrees / …) for a
+# numeric-only refactorization, rather than a fresh CHOLMOD factorization. The workspace
+# is restored to `Q_post` afterwards (the result snapshots its own precision).
+function _ift_sensitivity_solve(ws::GMRFs.GMRFWorkspace, C::AbstractMatrix, rhs_list)
+    qpost_nzval = copy(ws.Q.nzval)
+    htrue_nzval = _qpost_minus_correction(ws.Q, C)
+    try
+        GMRFs.update_precision_values!(ws, htrue_nzval)
+        return [GMRFs.workspace_solve(ws, rhs) for rhs in rhs_list]
+    finally
+        GMRFs.update_precision_values!(ws, qpost_nzval)
+        GMRFs.ensure_numeric!(ws)
+    end
+end
+
+# `Q_post.nzval - C`, written into a copy of `Q_post`'s value array (so the result keeps
+# `Q_post`'s exact pattern, as `update_precision_values!` requires). `C`'s nonzeros must
+# lie within `Q_post`'s pattern; `_check_h_pattern_subset` errors loudly otherwise.
+function _qpost_minus_correction(Qpost::SparseMatrixCSC, C::AbstractMatrix)
+    Cs = sparse(C)
+    _check_h_pattern_subset(Cs, Qpost)
+    nzval = copy(Qpost.nzval)
+    rows = rowvals(Qpost)
+    for col in 1:size(Qpost, 2), k in nzrange(Qpost, col)
+        nzval[k] -= _sparse_lookup(Cs, rows[k], col)
+    end
+    return nzval
+end
+
 function _workspace_dualhp_ift(
         prior_gmrf::GMRFs.WorkspaceGMRF,
         obs_lik::GMRFs.ObservationLikelihood;
@@ -347,12 +426,21 @@ function _workspace_dualhp_ift(
     )
 
     # Step 3: IFT solves on the primal posterior workspace.
+    #
+    # The mode sensitivity solves `H · dx*/dθ = -∂(neg_grad)/∂θ`, where `H` is the
+    # TRUE Hessian of the neg-log-posterior at `x*`. For most likelihoods the
+    # posterior precision equals that Hessian, so the workspace's factorization is
+    # reused directly. Gauss–Newton likelihoods (NLSQ) use `JᵀWJ` for the posterior
+    # precision, which differs from the true Hessian by the residual-curvature term `C`;
+    # `_ift_sensitivity_solve` then reuses the workspace's symbolic factorization and
+    # backend to factorize the corrected `Q_post - C`.
     ws = posterior_primal.workspace
     constrained = posterior_primal.constraints !== nothing
     ci = constrained ? posterior_primal.constraints : nothing
+    sols = _ift_sensitivity_solve(ws, _ift_hessian_correction(obs_lik, primal_lik, x_star), rhs_dθ)
     dx = Matrix{Float64}(undef, n, N)
     for j in 1:N
-        step = GMRFs.workspace_solve(ws, rhs_dθ[j])
+        step = sols[j]
         if constrained
             A = ci.matrix
             step = step - ci.A_tilde_T * (ci.L_c \ (A * step))
@@ -399,7 +487,10 @@ end
 # redirect through the unified path.
 # ----------------------------------------------------------------------------
 
-const _WorkspaceDualHpIFTLik = Union{GMRFs.AutoDiffLikelihood, GMRFs.CompositeLikelihood}
+const _WorkspaceDualHpIFTLik = Union{
+    GMRFs.AutoDiffLikelihood, GMRFs.CompositeLikelihood,
+    GMRFs.LinearlyTransformedLikelihood, GMRFs.NonlinearLeastSquaresLikelihood,
+}
 
 # Float64 prior — IFT only when the lik (or one of its components) carries
 # Duals. Otherwise fall through to the primal Newton path.

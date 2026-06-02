@@ -2,12 +2,12 @@ using LinearAlgebra
 using SparseArrays
 using Distributions: Normal, product_distribution
 import DifferentiationInterface as DI
-import GaussianMarkovRandomFields: default_sparse_jacobian_backend
+import GaussianMarkovRandomFields: known_pattern_jacobian_backend
 
 export NonlinearLeastSquaresModel, NonlinearLeastSquaresLikelihood
 
 """
-    NonlinearLeastSquaresModel(f, n)
+    NonlinearLeastSquaresModel(f, n; hyperparams=())
 
 Observation model for nonlinear least squares with Gaussian noise:
     y | x ~ Normal(f(x), σ)
@@ -19,27 +19,74 @@ This model uses a Gauss–Newton approximation for the Hessian:
 Notes
 - Requires the sparse-AD extension (SparseConnectivityTracer + SparseMatrixColorings) to be loaded. If missing,
   construction or evaluation will error with a clear message.
-- `f` must be out-of-place with signature `f(x)::AbstractVector` of the same length as `y`.
+- `f` must be out-of-place and return an `AbstractVector` of the same length as `y`.
 - `σ` can be a scalar or a vector matching `length(y)` (heteroskedastic case). It must be positive.
+
+# Hyperparameter-dependent residual
+By default the residual `f` has signature `f(x)::AbstractVector` and the only
+hyperparameter is `σ`. To let `f` depend on hyperparameters θ, write it with the
+signature `f(x; θ...)` and declare the names via `hyperparams`:
+
+```julia
+f(x; α) = α .* g(x) .- h(x)
+model = NonlinearLeastSquaresModel(f, n; hyperparams = (:α,))
+lik   = model(y; σ = 0.3, α = 1.5)   # σ → noise, α → f
+hyperparameters(model) == (:σ, :α)
+```
+
+The declared θ are stored on the materialized likelihood and splatted into `f` at
+evaluation time (mirroring [`AutoDiffObservationModel`](@ref)); with no declared
+hyperparameters the stored `f` is called directly, so the fixed path is unchanged.
+
+!!! note "Differentiating the hyperparameters"
+    The residual Jacobian's sparsity pattern is detected once at materialization and
+    reused, so `loggrad`/`loghessian` compose with an outer ForwardDiff pass.
+    Forward-mode (`ForwardDiff`) hyperparameter gradients through `gaussian_approximation`
+    with a `WorkspaceGMRF` prior are supported and **exact**: the implicit-function mode
+    sensitivity is solved with the true Hessian — the Gauss–Newton posterior precision
+    corrected by the residual-curvature term `Σₖ (W r)ₖ ∇²fₖ` — so exactness holds even
+    for residuals nonlinear in `x`. The Jacobian sparsity pattern must be θ-independent
+    (see the warning above).
+
+    Reverse-mode AD (Zygote, Mooncake, …) through `gaussian_approximation` is **not**
+    supported for this likelihood — it would require differentiating the sparse forward
+    Jacobian, which reverse-mode backends cannot do — and raises a clear error pointing
+    here. Use forward-mode for the hyperparameters.
 """
-struct NonlinearLeastSquaresModel{F} <: ObservationModel
+struct NonlinearLeastSquaresModel{F, H <: Tuple{Vararg{Symbol}}} <: ObservationModel
     f::F
     n::Int
+    hyperparams::H
 end
+
+NonlinearLeastSquaresModel(f, n::Int; hyperparams::Tuple{Vararg{Symbol}} = ()) =
+    NonlinearLeastSquaresModel(f, n, hyperparams)
 
 """
     NonlinearLeastSquaresLikelihood <: ObservationLikelihood
 
 Materialized likelihood for NonlinearLeastSquaresModel with precomputed weights and
-cached sparse-Jacobian state. Hessian uses Gauss–Newton.
+cached sparse-Jacobian state. Hessian uses Gauss–Newton. `hyperparams` holds the θ
+values (if any) splatted into the residual `f(x; θ...)`; it is empty for the
+non-parameterized case.
 """
-struct NonlinearLeastSquaresLikelihood{F, T, JB} <: ObservationLikelihood
+struct NonlinearLeastSquaresLikelihood{F, T, JB, HP <: NamedTuple} <: ObservationLikelihood
     f::F
     y::Vector{T}
     inv_σ²::Vector{T}
     log_const::T
     jac_backend::JB       # DI backend for sparse Jacobian
+    hyperparams::HP       # θ values splatted into f(x; θ...); empty NamedTuple if none
 end
+
+# Bind a residual to its hyperparameters. Empty θ ⇒ the residual is used directly
+# (zero overhead, identical to the pre-θ-dependence path); otherwise a 1-arg closure
+# splats θ. Used both at materialization (for sparsity detection on a primal residual)
+# and at evaluation.
+@inline _bind_residual(f, ::NamedTuple{(), Tuple{}}) = f
+@inline _bind_residual(f, hp::NamedTuple) = x -> f(x; hp...)
+
+_residual_function(lik::NonlinearLeastSquaresLikelihood) = _bind_residual(lik.f, lik.hyperparams)
 
 # -------------------------------------------------------------------------------------------------
 # Factory pattern: make the model callable to materialize a likelihood
@@ -59,46 +106,83 @@ function (model::NonlinearLeastSquaresModel)(y::AbstractVector; σ, kwargs...)
     y_vec = collect(Float64, y)
     T = promote_type(eltype(y_vec), eltype(inv_σ²))
 
-    # Prepare sparse Jacobian backend via extension; the stub throws a clear
-    # ArgumentError if SparseConnectivityTracer / SparseMatrixColorings aren't loaded.
-    jac_backend = default_sparse_jacobian_backend()
-    return NonlinearLeastSquaresLikelihood{typeof(model.f), T, typeof(jac_backend)}(
-        model.f, y_vec, convert.(T, inv_σ²), convert(T, log_const), jac_backend,
+    # θ for the residual (empty NamedTuple when the model declares none).
+    hp = _project_hyperparameters(model.hyperparams, values(kwargs))
+
+    # Detect the Jacobian sparsity pattern once, on the *primal* residual (so
+    # detection never traces AD-tagged hyperparameters), and reuse it for every
+    # evaluation. The resulting backend's AutoForwardDiff inner nests cleanly under
+    # an outer ForwardDiff pass, which is what makes hyperparameter gradients work.
+    f_probe = _bind_residual(model.f, _strip_ad_partials_hyperparams(hp))
+    # The stub throws a clear ArgumentError if SparseConnectivityTracer /
+    # SparseMatrixColorings aren't loaded.
+    jac_backend = known_pattern_jacobian_backend(f_probe, zeros(model.n))
+    return NonlinearLeastSquaresLikelihood{typeof(model.f), T, typeof(jac_backend), typeof(hp)}(
+        model.f, y_vec, convert.(T, inv_σ²), convert(T, log_const), jac_backend, hp,
     )
 end
 
 # -------------------------------------------------------------------------------------------------
 # Observation model interface hooks
-hyperparameters(::NonlinearLeastSquaresModel) = (:σ,)
+hyperparameters(model::NonlinearLeastSquaresModel) = _merge_hyperparameter_names((:σ,), model.hyperparams)
 latent_dimension(model::NonlinearLeastSquaresModel, y::AbstractVector) = model.n
+
+# Whether a likelihood's score/Hessian go through a Gauss–Newton sparse Jacobian.
+# Reverse-mode AD through `gaussian_approximation` differentiates `loggrad`/`loghessian`,
+# which for these likelihoods means differentiating a sparse forward-mode Jacobian — not
+# supported by reverse-mode backends. The `gaussian_approximation` rrules check this and
+# raise `_reverse_mode_gauss_newton_error` instead of failing deep in AD internals.
+_has_gauss_newton_jacobian(::ObservationLikelihood) = false
+_has_gauss_newton_jacobian(::NonlinearLeastSquaresLikelihood) = true
+_has_gauss_newton_jacobian(lik::CompositeLikelihood) = any(_has_gauss_newton_jacobian, lik.components)
+_has_gauss_newton_jacobian(lik::LinearlyTransformedLikelihood) = _has_gauss_newton_jacobian(lik.base_likelihood)
+
+# COV_EXCL_START
+function _reverse_mode_gauss_newton_error()
+    throw(
+        ArgumentError(
+            "Reverse-mode automatic differentiation through `gaussian_approximation` is not " *
+                "supported for NonlinearLeastSquares likelihoods. The Gauss–Newton score needs the " *
+                "residual Jacobian, computed by a sparse forward-mode AD pass that reverse-mode " *
+                "backends cannot differentiate through.\n" *
+                "Use forward-mode AD (ForwardDiff) for the hyperparameters instead — it is exact and " *
+                "efficient for the typically low-dimensional residual hyperparameters. Conditioning " *
+                "through a `WorkspaceGMRF` prior reuses the symbolic factorization across hyperparameter values."
+        )
+    )
+end
+# COV_EXCL_STOP
 
 # -------------------------------------------------------------------------------------------------
 # Core likelihood API
 # -------------------------------------------------------------------------------------------------
 
 function loglik(x::AbstractVector, lik::NonlinearLeastSquaresLikelihood)
-    yhat = lik.f(x)
+    f = _residual_function(lik)
+    yhat = f(x)
     r = lik.y .- yhat
     sse = dot(lik.inv_σ², r .^ 2)
     return lik.log_const - 0.5 * sse
 end
 
 function loggrad(x::AbstractVector, lik::NonlinearLeastSquaresLikelihood)
-    yhat = lik.f(x)
+    f = _residual_function(lik)
+    yhat = f(x)
     r = lik.y .- yhat
-    J = DI.jacobian(lik.f, lik.jac_backend, x)
+    J = DI.jacobian(f, lik.jac_backend, x)
     return J' * (lik.inv_σ² .* r)
 end
 
 function loghessian(x::AbstractVector, lik::NonlinearLeastSquaresLikelihood)
     # Gauss–Newton Hessian: -J' W J via DI sparse Jacobian
-    J = DI.jacobian(lik.f, lik.jac_backend, x)
+    f = _residual_function(lik)
+    J = DI.jacobian(f, lik.jac_backend, x)
     H = -(J' * (Diagonal(lik.inv_σ²) * J))
     return Symmetric(H)
 end
 
 function conditional_distribution(model::NonlinearLeastSquaresModel, x::AbstractVector; σ, kwargs...)
-    ŷ = model.f(x)
+    ŷ = model.f(x; _project_hyperparameters(model.hyperparams, values(kwargs))...)
     if σ isa AbstractVector
         length(σ) == length(ŷ) || throw(DimensionMismatch("Length of σ vector ($(length(σ))) must match f(x) (got $(length(ŷ)))"))
         return product_distribution(Normal.(ŷ, σ))
@@ -137,7 +221,7 @@ For Gaussian observations y | x ~ Normal(f(x), σ), the pointwise log-likelihood
     log p(yᵢ | xᵢ) = -0.5 * log(2π) - log(σᵢ) - 0.5 * inv_σ²ᵢ * (yᵢ - f(x)ᵢ)²
 """
 function _pointwise_loglik(::ConditionallyIndependent, x, lik::NonlinearLeastSquaresLikelihood)
-    ŷ = lik.f(x)
+    ŷ = _residual_function(lik)(x)
     residuals = lik.y .- ŷ
 
     # Compute element-wise log-likelihoods
@@ -156,7 +240,7 @@ end
 In-place pointwise log-likelihood for nonlinear least squares model.
 """
 function _pointwise_loglik!(::ConditionallyIndependent, result, x, lik::NonlinearLeastSquaresLikelihood)
-    ŷ = lik.f(x)
+    ŷ = _residual_function(lik)(x)
     σ = 1.0 ./ sqrt.(lik.inv_σ²)
 
     @inbounds for i in eachindex(result, ŷ, σ, lik.y)
