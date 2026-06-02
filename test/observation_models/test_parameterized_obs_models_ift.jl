@@ -188,8 +188,10 @@ end
     @testset "Sparse-AD backends detected once and cached on the model" begin
         Random.seed!(21)
         n = 6
-        # Residual coupling neighbouring latents ⇒ genuinely non-diagonal Hessian pattern.
-        f = (x; α) -> α .* x .^ 2 .+ vcat(x[2:n], x[1]) .* x
+        # Mildly nonlinear residual coupling each latent to its successor (no wrap-around):
+        # a genuinely non-diagonal but tridiagonal curvature that fits the AR1 prior's
+        # pattern, with curvature small enough that the true Hessian Q_post − C stays PD.
+        f = (x; α) -> α .* x .+ 0.1 .* x .* vcat(x[2:n], x[n])
         model = NonlinearLeastSquaresModel(f, n; hyperparams = (:α,))
         y = randn(n)
 
