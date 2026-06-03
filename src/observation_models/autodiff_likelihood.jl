@@ -8,9 +8,11 @@ export AutoDiffLikelihood, AutoDiffObservationModel
 
 Mutable, eltype-keyed cache of `DI.prepare_gradient` / `DI.prepare_hessian`
 results. A single `AutoDiffLikelihood` holds one of these so repeated calls
-with the same input eltype reuse the prep (the common case), while
-unexpected eltypes (e.g. AD-tagged scalars from a nested-AD caller) trigger
-a one-time prep on first miss instead of failing.
+with the same *compute* eltype (`eltype(x)` widened by any AD-tagged scalars
+the likelihood carries through `y`/`hyperparams`; see `_ad_compute_eltype`)
+reuse the prep (the common case), while a new eltype — e.g. `Dual`s from an
+outer AD pass arriving through `x`, `y`, or a hyperparameter — triggers a
+one-time prep on first miss instead of failing.
 
 `get!` on the underlying `Dict`s isn't safe under concurrent mutation, so
 the cache holds a `ReentrantLock`. The prep itself can be expensive; we
@@ -168,6 +170,16 @@ Construct an `AutoDiffObservationModel`.
 
 `loglik_func` should have signature `(x; y, hyperparam_kwargs...) -> Real`.
 `hyperparams` is a tuple of hyperparameter names (`Symbol`s) the model expects.
+
+## Differentiating through `y` or the hyperparameters
+
+`loggrad`/`loghessian` compose with an outer AD pass even when a `Dual` enters through `x`,
+the `y` payload, or a hyperparameter — the AD operator is prepared at the resulting compute
+eltype. The AD-carrying value must reach the likelihood as a `Number` or array of `Number`s;
+`Dual`s buried inside an opaque `y` (a `Tuple`/`NamedTuple`/struct) are not detected. For an
+outer pass that enters through `y`, use a dense or fixed-pattern
+(`KnownHessianSparsityDetector`) Hessian backend — the default `TracerSparsityDetector`
+sparse backend cannot trace a `Dual` captured through `y`.
 
 ## `diagonal_hessian_safe`
 
@@ -333,10 +345,38 @@ function loglik(x, obs_lik::AutoDiffLikelihood)
     return _build_call(obs_lik)(x)
 end
 
+# Element type at which to prepare (and run) the gradient/Hessian operator. The DI prep's
+# result buffers are sized from the *input* eltype, but the output also depends on any
+# AD-tagged scalars the likelihood carries through its `y` payload or `hyperparams`. Under
+# an outer AD pass those arrive as `Dual`s while `x` stays primal, so we widen `eltype(x)`
+# by their value eltypes; preparing (and calling) at this type gives buffers that can hold
+# the result. On the common primal path this is just `eltype(x)`, so nothing changes.
+_ad_compute_eltype(x, obs_lik::AutoDiffLikelihood) = promote_type(
+    eltype(x), _value_eltype(obs_lik.y), map(_value_eltype, values(obs_lik.hyperparams))...
+)
+
+# Value (scalar) eltype contributed by a stored payload/hyperparameter. `Union{}` is the
+# identity of `promote_type`, so `nothing` and non-numeric payloads don't widen. AD data
+# must reach the likelihood as a scalar or array of `Number`s through `x`, `y`, or a
+# `hyperparams` value to be seen here. `Dual`s hidden inside an opaque `y` (a `Tuple`,
+# `NamedTuple`, or array of structs) are NOT detected — the prep stays primal-typed and an
+# outer AD pass through such a `y` would still hit the issue-#142 buffer mismatch.
+_value_eltype(::Nothing) = Union{}
+_value_eltype(v::Number) = typeof(v)
+_value_eltype(v::AbstractArray) = eltype(v)
+_value_eltype(::Any) = Union{}
+
+# Promote `x` to element type `S` for the AD call. Identity (no allocation) on the common
+# primal path, where `x` already has eltype `S`; otherwise widen (e.g. a primal `x` lifted
+# to `Dual` so it matches an outer pass that entered through `y`/a hyperparameter).
+_as_eltype(::Type{S}, x::AbstractArray{S}) where {S} = x
+_as_eltype(::Type{S}, x::AbstractArray) where {S} = convert.(S, x)
+
 function loggrad(x, obs_lik::AutoDiffLikelihood)
     f = _build_call(obs_lik)
-    prep = _get_or_prepare_grad!(obs_lik.prep_cache, f, obs_lik.grad_backend, eltype(x))
-    return DI.gradient(f, prep, obs_lik.grad_backend, x)
+    S = _ad_compute_eltype(x, obs_lik)
+    prep = _get_or_prepare_grad!(obs_lik.prep_cache, f, obs_lik.grad_backend, S)
+    return DI.gradient(f, prep, obs_lik.grad_backend, _as_eltype(S, x))
 end
 
 function loghessian(x, obs_lik::AutoDiffLikelihood)
@@ -344,8 +384,9 @@ function loghessian(x, obs_lik::AutoDiffLikelihood)
         return _diagonal_hessian_via_pointwise(x, obs_lik)
     end
     f = _build_call(obs_lik)
-    prep = _get_or_prepare_hess!(obs_lik.prep_cache, f, obs_lik.hess_backend, eltype(x))
-    return DI.hessian(f, prep, obs_lik.hess_backend, x)
+    S = _ad_compute_eltype(x, obs_lik)
+    prep = _get_or_prepare_hess!(obs_lik.prep_cache, f, obs_lik.hess_backend, S)
+    return DI.hessian(f, prep, obs_lik.hess_backend, _as_eltype(S, x))
 end
 
 # Pointwise structured-Hessian fast path. Gated on the user's
