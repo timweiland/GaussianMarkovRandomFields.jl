@@ -150,6 +150,24 @@ using ForwardDiff
         @test sum(loghessian(x, model(y0))) ≈ -3 - 0.6 * sum(y0 .* x)
     end
 
+    @testset "Abstractly-typed y payload stays concrete" begin
+        # The compute-eltype widening must not produce a non-concrete eltype: an
+        # abstractly-typed numeric payload (e.g. Vector{Any}/Vector{Real}) holding primals
+        # must fall back to eltype(x), not attempt `zeros(Any, …)` (issue #142 follow-up).
+        x = [0.1, 0.2, 0.3]
+        loglik_func = (x; y) -> -0.5 * sum((y .- x) .^ 2)   # ∇ = y .- x
+        @testset "eltype $(eltype(yp)) payload" for yp in (Any[1.0, 2.0, 3.0], Real[1.0, 2.0, 3.0])
+            model = AutoDiffObservationModel(
+                loglik_func; n_latent = 3,
+                grad_backend = DI.AutoForwardDiff(), hessian_backend = DI.AutoForwardDiff(),
+            )
+            lik = model(yp)
+            @test eltype(loggrad(x, lik)) == Float64
+            @test eltype(loghessian(x, lik)) == Float64
+            @test loggrad(x, lik) ≈ Float64.(yp) .- x
+        end
+    end
+
     @testset "Pointwise Hessian fast path returns Diagonal" begin
         # With both `pointwise_loglik_func` set and `diagonal_hessian_safe = true`,
         # loghessian returns a `Diagonal` via per-element 1D second derivatives.

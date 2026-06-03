@@ -351,19 +351,26 @@ end
 # an outer AD pass those arrive as `Dual`s while `x` stays primal, so we widen `eltype(x)`
 # by their value eltypes; preparing (and calling) at this type gives buffers that can hold
 # the result. On the common primal path this is just `eltype(x)`, so nothing changes.
-_ad_compute_eltype(x, obs_lik::AutoDiffLikelihood) = promote_type(
-    eltype(x), _value_eltype(obs_lik.y), map(_value_eltype, values(obs_lik.hyperparams))...
-)
+function _ad_compute_eltype(x, obs_lik::AutoDiffLikelihood)
+    S = promote_type(
+        eltype(x), _value_eltype(obs_lik.y), map(_value_eltype, values(obs_lik.hyperparams))...,
+    )
+    # Widening can land on a non-concrete type (an abstractly-typed numeric payload, e.g.
+    # `y::Vector{Real}`); we can't `zeros(S, …)` then. Fall back to `eltype(x)` — the right
+    # compute type whenever such a payload actually holds primals (the common case).
+    return isconcretetype(S) ? S : eltype(x)
+end
 
 # Value (scalar) eltype contributed by a stored payload/hyperparameter. `Union{}` is the
-# identity of `promote_type`, so `nothing` and non-numeric payloads don't widen. AD data
-# must reach the likelihood as a scalar or array of `Number`s through `x`, `y`, or a
-# `hyperparams` value to be seen here. `Dual`s hidden inside an opaque `y` (a `Tuple`,
-# `NamedTuple`, or array of structs) are NOT detected — the prep stays primal-typed and an
-# outer AD pass through such a `y` would still hit the issue-#142 buffer mismatch.
+# identity of `promote_type`, so `nothing` and non-numeric payloads (incl. arrays whose
+# eltype isn't a `Number`, like `Vector{Any}`) don't widen. AD data must reach the
+# likelihood as a `Number` or array of `Number`s through `x`, `y`, or a `hyperparams` value
+# to be seen here. `Dual`s hidden inside an opaque `y` (a `Tuple`/`NamedTuple`/struct, or an
+# abstractly-typed array) are NOT detected — the prep stays primal-typed and an outer AD
+# pass through such a `y` would still hit the issue-#142 buffer mismatch.
 _value_eltype(::Nothing) = Union{}
 _value_eltype(v::Number) = typeof(v)
-_value_eltype(v::AbstractArray) = eltype(v)
+_value_eltype(v::AbstractArray{<:Number}) = eltype(v)
 _value_eltype(::Any) = Union{}
 
 # Promote `x` to element type `S` for the AD call. Identity (no allocation) on the common
