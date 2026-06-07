@@ -17,7 +17,10 @@ function MaternModel(discretization::F; smoothness::S, alg = CHOLMODFactorizatio
     smoothness >= 0 || throw(ArgumentError("Smoothness must be non-negative, got smoothness=$smoothness"))
     n = ndofs(discretization)
     processed_constraint = _process_constraint(constraint, n)
-    return MaternModel{F, S, typeof(alg), typeof(processed_constraint), typeof(observation_points)}(discretization, smoothness, alg, processed_constraint, observation_points)
+    # Assemble the κ-independent FEM matrices once; reused on every precision_matrix call.
+    C, G = assemble_matern_C_G(discretization)
+    fem_matrices = (; C, G)
+    return MaternModel{F, S, typeof(alg), typeof(processed_constraint), typeof(observation_points), typeof(fem_matrices)}(discretization, smoothness, alg, processed_constraint, observation_points, fem_matrices)
 end
 
 """
@@ -99,7 +102,8 @@ function precision_matrix(model::MaternModel{F, S}; τ::Real, range::Real, kwarg
     D = ndim(model.discretization)
     ν = smoothness_to_ν(model.smoothness, D)
     κ = range_to_κ(range, ν)
-    Q_unscaled = matern_precision_only(model.discretization, model.smoothness, κ)
+    (; C, G) = model.fem_matrices
+    Q_unscaled = matern_precision_only(model.discretization, model.smoothness, κ, C, G)
     return τ * Q_unscaled
 end
 

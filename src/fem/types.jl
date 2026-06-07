@@ -195,18 +195,23 @@ ConcreteConstantMeshSTGMRF(args...; kwargs...) =
 
 # --- Matérn latent model -----------------------------------------------------
 """
-    MaternModel{F, S, Alg, C, P} <: LatentModel
+    MaternModel{F, S, Alg, C, P, M} <: LatentModel
 
 A Matérn latent model for constructing spatial GMRFs from discretized Matérn
 SPDEs. Validated user-facing constructors live in the
 `GaussianMarkovRandomFieldsFEM` extension.
+
+The κ-independent FEM matrices (the lumped mass matrix `C` and the stiffness
+matrix `G`) are assembled once at construction and cached in `fem_matrices`, so
+that repeated `precision_matrix` calls only redo the κ-dependent work.
 """
-struct MaternModel{F, S <: Integer, Alg, C, P} <: LatentModel
+struct MaternModel{F, S <: Integer, Alg, C, P, M} <: LatentModel
     discretization::F
     smoothness::S
     alg::Alg
     constraint::C
     observation_points::P
+    fem_matrices::M
 end
 
 # COV_EXCL_START
