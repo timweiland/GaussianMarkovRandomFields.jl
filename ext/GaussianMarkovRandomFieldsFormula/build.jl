@@ -30,7 +30,7 @@ function _latent_model(term::RandomWalkTerm{Order}, data) where {Order}
         end
     end
 
-    return RWModel{Order}(n; additional_constraints = term.additional_constraints, levels = collect(levels))
+    return RWModel{Order}(n; additional_constraints = term.additional_constraints, levels = collect(levels), scale_model = term.scale_model)
 end
 
 function _latent_model(term::ARTerm{P}, data) where {P}

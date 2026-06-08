@@ -62,7 +62,7 @@ end
 (::IID)(args...) = throw(ArgumentError("IID(...) functor is only intended for use inside @formula; not callable directly.")) # COV_EXCL_LINE
 
 """
-    RandomWalk(order=1; additional_constraints = nothing)
+    RandomWalk(order=1; additional_constraints = nothing, scale_model = false)
 
 Formula functor for RandomWalk random effects of any order.
 
@@ -73,6 +73,9 @@ Formula functor for RandomWalk random effects of any order.
   Can be:
   - `nothing` (default): Only the built-in null space constraints
   - `(A, e)`: Custom additional linear constraint matrix and vector where `Ax = e`
+- `scale_model`: When `true`, apply the Sørbye–Rue (2014) variance normalization so the
+  precision parameter `τ` is interpretable and comparable across `n` and order (see
+  [`RWModel`](@ref)). Default `false`.
 
 # Usage
 ```julia
@@ -101,9 +104,10 @@ st = Separable(rw1, besag)
 struct RandomWalk
     order::Int
     additional_constraints::Union{Nothing, Tuple{AbstractMatrix, AbstractVector}}
+    scale_model::Bool
 
-    function RandomWalk(order::Integer = 1; additional_constraints = nothing)
-        return new(Int(order), additional_constraints)
+    function RandomWalk(order::Integer = 1; additional_constraints = nothing, scale_model::Bool = false)
+        return new(Int(order), additional_constraints, scale_model)
     end
 end
 
