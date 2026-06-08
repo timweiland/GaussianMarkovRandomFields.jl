@@ -37,13 +37,22 @@ function _difference_operator(n::Int, ::Val{Order}) where {Order}
 end
 
 """
-    RWModel{Order}(n::Int; regularization=1e-5, alg=<auto>, additional_constraints=nothing)
+    RWModel{Order}(n::Int; regularization=1e-5, alg=<auto>, additional_constraints=nothing, scale_model=false)
 
 A random walk latent model of arbitrary order for constructing intrinsic GMRFs.
 
 The RW model of order k represents a process where k-th order differences are
 i.i.d. Gaussian: Δᵏx[i] ~ N(0, τ⁻¹). This creates a singular precision matrix
 Q = τ * Dₖ'Dₖ with rank n-k, where Dₖ is the k-th order difference operator.
+
+# Variance scaling
+With `scale_model = true`, the intrinsic precision is normalized following Sørbye & Rue
+(2014): the precision is multiplied by a constant so the geometric mean of the marginal
+variances (of the constrained model) is 1. This makes `τ` interpretable as a precision and
+comparable across `n` and across orders, so a prior on `τ` (e.g. `PCPrior.Precision`)
+transfers between models. Unscaled (`scale_model = false`, the default) reproduces the
+previous behavior, where `τ = 1` implies an `n`- and order-dependent marginal variance.
+This is the same normalization `BesagModel`/`BYM2Model` apply.
 
 # Orders
 - **Order 1 (RW1)**: First differences x[i+1] - x[i] ~ N(0, τ⁻¹). Tridiagonal precision.
@@ -62,9 +71,10 @@ intrinsic GMRF with k constraints from the polynomial null space (degrees 0, 1, 
 
 # Fields
 - `n::Int`: Length of the process
-- `regularization::Float64`: Small value added to diagonal after scaling (default 1e-5)
+- `regularization::Float64`: Small value added to diagonal after scaling (default 1e-5). Keep it small when `scale_model = true`: the variance normalization is computed at a negligible internal regularization, so a large `regularization` would shift the realized marginal variances away from the normalized scale.
 - `alg::Alg`: LinearSolve algorithm (default: `LDLtFactorization()` for Order=1, `CHOLMODFactorization()` for Order≥2)
 - `additional_constraints::C`: Optional additional constraints beyond the required null space constraints
+- `scale_factor::Float64`: Sørbye–Rue variance-normalization factor multiplying the intrinsic precision (`1.0` when `scale_model = false`)
 
 # Example
 ```julia
@@ -87,22 +97,58 @@ struct RWModel{Order, Alg, C, L} <: LatentModel
     alg::Alg
     additional_constraints::C
     levels::L
+    scale_factor::Float64
 
-    function RWModel{Order, Alg, C, L}(n::Int, regularization::Float64, alg::Alg, additional_constraints::C, levels::L) where {Order, Alg, C, L}
+    function RWModel{Order, Alg, C, L}(n::Int, regularization::Float64, alg::Alg, additional_constraints::C, levels::L, scale_factor::Float64) where {Order, Alg, C, L}
         Order isa Int && Order >= 1 || throw(ArgumentError("Order must be a positive integer, got Order=$Order"))
         n > Order || throw(ArgumentError("RW$Order requires length n > $Order, got n=$n"))
         regularization >= 0 || throw(ArgumentError("Regularization must be non-negative, got $regularization"))
-        return new{Order, Alg, C, L}(n, regularization, alg, additional_constraints, levels)
+        scale_factor > 0 || throw(ArgumentError("scale_factor must be positive, got $scale_factor"))
+        return new{Order, Alg, C, L}(n, regularization, alg, additional_constraints, levels, scale_factor)
     end
 end
 
-function RWModel{Order}(n::Int; regularization::Float64 = 1.0e-5, alg = _default_rw_alg(Val(Order)), additional_constraints = nothing, levels = nothing) where {Order}
+function RWModel{Order}(n::Int; regularization::Float64 = 1.0e-5, alg = _default_rw_alg(Val(Order)), additional_constraints = nothing, levels = nothing, scale_model::Bool = false) where {Order}
     if additional_constraints === :sumtozero
         throw(ArgumentError("RWModel already includes null space constraints by default. Use additional_constraints for extra constraints beyond the built-in ones."))
     end
 
     processed_additional = _process_constraint(additional_constraints, n)
-    return RWModel{Order, typeof(alg), typeof(processed_additional), typeof(levels)}(n, regularization, alg, processed_additional, levels)
+    scale_factor = if scale_model
+        n > Order || throw(ArgumentError("RW$Order requires length n > $Order, got n=$n"))
+        _rw_scale_factor(Val(Order), n)
+    else
+        1.0
+    end
+    return RWModel{Order, typeof(alg), typeof(processed_additional), typeof(levels)}(n, regularization, alg, processed_additional, levels, scale_factor)
+end
+
+# Polynomial null-space constraint matrix of D_kᵀD_k: rows j^d (d = 0, …, Order-1).
+function _rw_nullspace_constraints(n::Int, ::Val{Order}) where {Order}
+    A = zeros(Order, n)
+    for d in 0:(Order - 1), j in 1:n
+        A[d + 1, j] = Float64(j)^d
+    end
+    return A
+end
+
+# Tiny fixed regularization that makes the singular `DₖᵀDₖ` factorizable for the
+# scale-factor variance solve. Decoupled from the model's own `regularization`, matching
+# `BesagModel`'s `_compute_normalization`; the null-space constraint removes the actual
+# singular directions, so this only needs to nudge the factorization.
+const _RW_SCALE_REG = 1.0e-5
+
+# Sørbye & Rue (2014) variance scaling. Returns the factor `c` such that the precision
+# `c · DₖᵀDₖ` (under the model's null-space constraints) has geometric-mean marginal
+# variance 1. That factor is the geometric mean of the marginal variances of the *unscaled*
+# constrained intrinsic model — equivalently the geomean of `diag(Q⁺)`, the Moore–Penrose
+# pseudoinverse diagonal. Computed once at construction.
+function _rw_scale_factor(::Val{Order}, n::Int) where {Order}
+    D = _difference_operator(n, Val(Order))
+    Q = sparse(D' * D) + _RW_SCALE_REG * I
+    A = _rw_nullspace_constraints(n, Val(Order))
+    x = ConstrainedGMRF(GMRF(zeros(n), Q), A, zeros(Order))
+    return _geomean(var(x))
 end
 
 """Backward-compatible alias for `RWModel{1}`."""
@@ -130,13 +176,14 @@ function precision_matrix(model::RWModel{1}; τ::Real, kwargs...)
 
     n = model.n
     T = promote_type(typeof(τ), Float64)
+    sτ = model.scale_factor * τ   # Sørbye–Rue variance scaling (factor is 1 when unscaled)
 
     main_diag = map(1:n) do i
         base_val = (i == 1 || i == n) ? T(1) : T(2)
-        base_val * τ + model.regularization
+        base_val * sτ + model.regularization
     end
 
-    off_diag = fill(-T(τ), n - 1)
+    off_diag = fill(-T(sτ), n - 1)
 
     return SymTridiagonal(main_diag, off_diag)
 end
@@ -149,7 +196,7 @@ function precision_matrix(model::RWModel{Order}; τ::Real, kwargs...) where {Ord
     T = promote_type(typeof(τ), Float64)
 
     D = _difference_operator(n, Val(Order))
-    Q = T(τ) * (D' * D) + model.regularization * sparse(T(1) * I, n, n)
+    Q = T(model.scale_factor * τ) * (D' * D) + model.regularization * sparse(T(1) * I, n, n)
 
     return Q
 end
@@ -161,14 +208,8 @@ end
 function constraints(model::RWModel{Order}; kwargs...) where {Order}
     n = model.n
 
-    # Null space of D_k'*D_k: polynomials of degree 0, 1, ..., k-1
-    # Row d+1 corresponds to j^d for j = 1, ..., n
-    A_nullspace = zeros(Order, n)
-    for d in 0:(Order - 1)
-        for j in 1:n
-            A_nullspace[d + 1, j] = Float64(j)^d
-        end
-    end
+    # Null space of D_k'*D_k: polynomials of degree 0, 1, ..., k-1 (row d+1 is j^d).
+    A_nullspace = _rw_nullspace_constraints(n, Val(Order))
     e_nullspace = zeros(Order)
 
     if model.additional_constraints === nothing
