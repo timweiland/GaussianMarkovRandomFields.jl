@@ -305,6 +305,30 @@ using Ferrite
         @test size(A_explicit, 1) == 2
     end
 
+    @testset "Cached κ-independent FEM matrices" begin
+        # Regression guard for issue #145: precision_matrix reuses the C, G
+        # matrices cached at construction and must stay bit-identical to
+        # re-assembling them from scratch on every call.
+        grid = generate_grid(Triangle, (3, 3))
+        disc = FEMDiscretization(grid, Lagrange{RefTriangle, 1}(), QuadratureRule{RefTriangle}(2))
+
+        for smoothness in [0, 1, 2]
+            model = MaternModel(disc; smoothness = smoothness)
+
+            # C and G are assembled once and stored on the model.
+            @test haskey(model.fem_matrices, :C)
+            @test haskey(model.fem_matrices, :G)
+
+            ν = smoothness_to_ν(smoothness, 2)
+            for (τ, range) in [(1.0, 0.3), (2.0, 0.7), (0.5, 1.5)]
+                κ = range_to_κ(range, ν)
+                Q_cached = precision_matrix(model; τ = τ, range = range)
+                Q_fresh = τ * GaussianMarkovRandomFields.matern_precision_only(disc, smoothness, κ)
+                @test Matrix(Q_cached) == Matrix(Q_fresh)  # bit-identical
+            end
+        end
+    end
+
     @testset "1D MaternModel" begin
         # Test 1D points - need to reshape as N×1 matrix
         points_1d = reshape(sort!(rand(100) * 10.0), :, 1)  # 100×1 matrix
