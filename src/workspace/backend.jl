@@ -13,8 +13,8 @@ Each backend must implement:
 - `refactorize!(b, Q::Symmetric)` — numeric-only refactorization reusing symbolic
 - `backend_solve(b, rhs)` — solve Q x = rhs
 - `compute_logdet(b)` — log determinant of Q
-- `compute_selinv!(b)` — compute and cache selected inverse internally
-- `get_selinv(b)` — return cached selected inverse (type is backend-specific)
+- `compute_selinv!(b)` — prepare the selected inverse caches (may be lazy)
+- `get_selinv(b)` — return the selected inverse (type is backend-specific)
 - `get_selinv_diag(b)` — return diagonal of Q⁻¹ as Vector
 - `backend_backward_solve(b, x)` — compute L^T \\ x for sampling
 """
@@ -27,7 +27,10 @@ CHOLMOD-based factorization backend. Owns a `CHOLMOD.Factor` whose symbolic
 factorization (permutation, elimination tree, supernodes) is computed once
 and reused across numeric refactorizations.
 
-Caches the selected inverse as a `SparseMatrixCSC` after `compute_selinv!`.
+Materializes the selected inverse lazily: callers needing only the diagonal
+(marginal variances) skip building the full `SparseMatrixCSC`, and the full
+matrix is built only when actually requested. Both caches are reset on
+`refactorize!`.
 """
 mutable struct CHOLMODBackend{T} <: WorkspaceBackend
     factor::SparseArrays.CHOLMOD.Factor{T}
@@ -55,16 +58,31 @@ function compute_logdet(b::CHOLMODBackend)
 end
 
 function compute_selinv!(b::CHOLMODBackend)
-    b.selinv_cache = SelectedInversion.selinv(b.factor; depermute = true).Z
-    b.selinv_diag_cache = diag(b.selinv_cache)
+    # The full sparse selected inverse and its diagonal are materialized lazily
+    # by the getters below. The `var` path needs only the diagonal while the
+    # autodiff path needs only the full matrix, so eagerly computing both here
+    # wasted work on every factorization. Caches are reset in `refactorize!`.
     return nothing
 end
 
 function get_selinv(b::CHOLMODBackend)
+    if b.selinv_cache === nothing
+        # `sparse` builds the result directly from the supernodal blocks. The
+        # generic `SparseMatrixCSC` convert would instead call supernodal
+        # `getindex` once per structural entry — orders of magnitude slower.
+        b.selinv_cache = sparse(SelectedInversion.selinv(b.factor; depermute = true).Z)
+    end
     return b.selinv_cache
 end
 
 function get_selinv_diag(b::CHOLMODBackend)
+    if b.selinv_diag_cache === nothing
+        # Reuse the full selected inverse if it is already materialized;
+        # otherwise compute just the diagonal, skipping the sparse build.
+        b.selinv_diag_cache = b.selinv_cache === nothing ?
+            SelectedInversion.selinv_diag(b.factor) :
+            diag(b.selinv_cache)
+    end
     return b.selinv_diag_cache
 end
 

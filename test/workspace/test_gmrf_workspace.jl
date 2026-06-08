@@ -148,4 +148,26 @@ end
         d2 = selinv_diag(ws)
         @test d1 === d2  # Same object (cached)
     end
+
+    @testset "Selinv lazy materialization" begin
+        # Issue #144: the CHOLMOD backend materializes the selected inverse
+        # lazily. Callers needing only the diagonal must not build the full
+        # sparse matrix, and an already-built full selinv should be reused for
+        # the diagonal rather than recomputed.
+
+        # Diagonal-only access never materializes the full sparse selected inverse.
+        ws = GMRFWorkspace(Q)
+        d = selinv_diag(ws)
+        @test d ≈ diag(Q_inv) rtol = 1.0e-8
+        @test ws.backend.selinv_cache === nothing
+
+        # When the full selinv is already built, the diagonal is taken from it.
+        ws2 = GMRFWorkspace(Q)
+        S = selinv(ws2)
+        @test ws2.backend.selinv_cache !== nothing
+        @test selinv_diag(ws2) == diag(S)
+
+        # The diagonal-only path and the full path agree bit-for-bit.
+        @test selinv_diag(GMRFWorkspace(Q)) == diag(selinv(GMRFWorkspace(Q)))
+    end
 end

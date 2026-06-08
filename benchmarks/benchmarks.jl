@@ -23,6 +23,7 @@ Usage (via PkgBenchmark):
 """
 
 using GaussianMarkovRandomFields
+using GaussianMarkovRandomFields: selinv, selinv_diag
 using BenchmarkTools
 using Distributions: Poisson, logpdf
 using SparseArrays
@@ -92,6 +93,42 @@ end
 
 const BESAG_ADJ = _grid_adjacency(20, 20)  # 400 nodes, mirrors typical spatial use cases
 
+# 3D grid graph-Laplacian precision (7-point stencil + diagonal). A 3D grid
+# produces the dense Cholesky fill that makes selected inversion non-trivial,
+# unlike the near-banded 1D/2D models above. Used for the workspace selinv
+# benchmarks below.
+function _grid_precision_3d(nx, ny, nz; c = 0.1)
+    n = nx * ny * nz
+    lin(i, j, k) = ((k - 1) * ny + (j - 1)) * nx + i
+    I = Int[]; J = Int[]; V = Float64[]
+    for k in 1:nz, j in 1:ny, i in 1:nx
+        p = lin(i, j, k)
+        deg = 0
+        for (di, dj, dk) in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1))
+            ii, jj, kk = i + di, j + dj, k + dk
+            if 1 <= ii <= nx && 1 <= jj <= ny && 1 <= kk <= nz
+                push!(I, p); push!(J, lin(ii, jj, kk)); push!(V, -1.0)
+                deg += 1
+            end
+        end
+        push!(I, p); push!(J, p); push!(V, deg + c)
+    end
+    return sparse(I, J, V, n, n)
+end
+
+const Q_GRID3D = _grid_precision_3d(12, 12, 12)  # 1728 DOF, dense Cholesky fill
+const WS_GRID3D = GMRFWorkspace(Q_GRID3D)
+
+# Reset only the selected-inverse caches so each benchmark sample re-runs the
+# selected inversion while reusing the numeric factorization. This isolates the
+# selinv cost (the subject of the benchmark) from refactorization.
+function _reset_selinv!(ws)
+    ws.selinv_valid = false
+    ws.backend.selinv_cache = nothing
+    ws.backend.selinv_diag_cache = nothing
+    return ws
+end
+
 # Autodiff pipeline data (matches the existing autodiff_comparison.jl shape).
 let
     Random.seed!(123)
@@ -153,6 +190,14 @@ SUITE["gmrf"]["logpdf_cholmod"] = @benchmarkable logpdf($GMRF_MED_CHOLMOD, $X_ME
 SUITE["gmrf"]["var_selinv"] = @benchmarkable var($GMRF_MED_CHOLMOD)
 SUITE["gmrf"]["rand_backward_solve"] =
     @benchmarkable rand(rng, $GMRF_MED_LDLT) setup = (rng = MersenneTwister(0))
+
+# Workspace selected inverse (GMRFWorkspace CHOLMOD backend). Exercises the
+# selinv conversion that compute_selinv!/get_selinv cache — the full path builds
+# the sparse matrix, the diagonal path skips it.
+SUITE["gmrf"]["workspace_selinv_full"] =
+    @benchmarkable selinv(ws) setup = (ws = _reset_selinv!($WS_GRID3D))
+SUITE["gmrf"]["workspace_selinv_diag"] =
+    @benchmarkable selinv_diag(ws) setup = (ws = _reset_selinv!($WS_GRID3D))
 
 # ---------------------------------------------------------------------------
 # 3. Gaussian approximation (Fisher scoring hot path)
