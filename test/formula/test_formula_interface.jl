@@ -307,6 +307,19 @@ end
         @test length(s) == n
     end
 
+    @testset "RandomWalk scale_model threads through the formula interface" begin
+        _gm(v) = exp(sum(log, v) / length(v))
+        rws = RandomWalk(1; scale_model = true)
+        rwu = RandomWalk(1)
+        comp_s = build_formula_components(@formula(y ~ 0 + rws(time)), data; family = Normal)
+        comp_u = build_formula_components(@formula(y ~ 0 + rwu(time)), data; family = Normal)
+        vs = var(comp_s.combined_model(τ_rw1 = 1.0))
+        vu = var(comp_u.combined_model(τ_rw1 = 1.0))
+        # Scaled: geometric-mean marginal variance ≈ 1 (Sørbye–Rue). Unscaled: n-dependent.
+        @test isapprox(_gm(vs), 1.0; rtol = 0.05)
+        @test _gm(vs) < _gm(vu)
+    end
+
     @testset "AR(2) via formula interface" begin
         ar2 = AR(2)
         comp = build_formula_components(@formula(y ~ 0 + ar2(time)), data; family = Normal)

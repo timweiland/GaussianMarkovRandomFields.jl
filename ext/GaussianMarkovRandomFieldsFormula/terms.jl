@@ -25,6 +25,7 @@ StatsModels.termvars(term::IIDTerm) = [term.variable]
 struct RandomWalkTerm{Order} <: FormulaRandomEffectTerm
     variable::Symbol
     additional_constraints::Union{Nothing, Tuple{AbstractMatrix, AbstractVector}}
+    scale_model::Bool
 end
 
 # RandomWalk instance (e.g., rw1 = RandomWalk(); @formula(y ~ rw1(time)) or rw1 = RandomWalk(1); @formula(y ~ rw1(time)))
@@ -36,7 +37,7 @@ function StatsModels.apply_schema(
     var_term = only(t.args)
     order = t.f.order
     order isa Integer || throw(ArgumentError("RandomWalk order must be an integer, got $(typeof(order))"))
-    return RandomWalkTerm{Int(order)}(var_term.sym, t.f.additional_constraints)
+    return RandomWalkTerm{Int(order)}(var_term.sym, t.f.additional_constraints, t.f.scale_model)
 end
 
 StatsModels.termvars(term::RandomWalkTerm) = [term.variable]

@@ -372,3 +372,75 @@ end
         end
     end
 end
+
+@testset "RWModel variance scaling (scale_model)" begin
+    _gm(v) = exp(sum(log, v) / length(v))   # geometric mean
+
+    @testset "default is unscaled (backward compatible)" begin
+        for k in 1:3
+            m = RWModel{k}(15)
+            @test m.scale_factor == 1.0
+            @test precision_matrix(m; τ = 2.0) ≈
+                precision_matrix(RWModel{k}(15; scale_model = false); τ = 2.0)
+        end
+    end
+
+    @testset "scale factor = geomean of pseudo-inverse marginal variances (Sørbye–Rue)" begin
+        # Independent reference: the Sørbye–Rue factor is the geometric mean of the marginal
+        # variances of the constrained intrinsic model, i.e. geomean(diag(Q⁺)) for Q = DₖᵀDₖ,
+        # computed here via the Moore–Penrose pseudoinverse (no GMRF machinery involved).
+        for (k, n) in ((1, 10), (1, 25), (2, 12), (2, 20), (3, 14))
+            m = RWModel{k}(n; scale_model = true)
+            D = _test_diff_operator(n, k)
+            ref = _gm(diag(pinv(Matrix(D' * D))))
+            @test isapprox(m.scale_factor, ref; rtol = 5.0e-3)
+            @test m.scale_factor > 1.0   # these intrinsic models have generalized variance > 1
+        end
+    end
+
+    @testset "scaled model has geomean marginal variance ≈ 1 (defining property)" begin
+        for (k, n) in ((1, 12), (2, 15), (3, 18))
+            m = RWModel{k}(n; scale_model = true)
+            @test isapprox(_gm(var(m(τ = 1.0))), 1.0; rtol = 1.0e-2)
+        end
+    end
+
+    @testset "scaling multiplies the intrinsic precision by the factor" begin
+        for k in 1:3
+            n = 16
+            ms = RWModel{k}(n; scale_model = true)
+            mu = RWModel{k}(n; scale_model = false)
+            # Scaled precision at τ equals the unscaled precision at scale_factor·τ.
+            @test Matrix(precision_matrix(ms; τ = 1.3)) ≈
+                Matrix(precision_matrix(mu; τ = 1.3 * ms.scale_factor))
+        end
+    end
+
+    @testset "τ becomes interpretable as a precision (geomean var ≈ 1/τ)" begin
+        m = RWModel{2}(20; scale_model = true)
+        for τ in (0.5, 2.0, 5.0)
+            @test isapprox(_gm(var(m(τ = τ))), 1 / τ; rtol = 2.0e-2)
+        end
+    end
+
+    @testset "scaling factor independent of τ (constant multiplier)" begin
+        m = RWModel{1}(10; scale_model = true)
+        # precision is linear in τ with slope scale_factor·(base); a finite difference in τ
+        # recovers scale_factor·base on the precision entries away from the boundary.
+        Q1 = Matrix(precision_matrix(m; τ = 1.0))
+        Q2 = Matrix(precision_matrix(m; τ = 2.0))
+        @test (Q2[3, 3] - Q1[3, 3]) ≈ 2 * m.scale_factor    # interior diagonal slope = 2·factor
+        @test (Q2[3, 4] - Q1[3, 4]) ≈ -m.scale_factor       # off-diagonal slope = -factor
+    end
+
+    @testset "scale factor ignores additional_constraints (intrinsic property)" begin
+        # The Sørbye–Rue factor is a property of the intrinsic null-space only, so extra
+        # user constraints must not change it (matching BesagModel's normalization).
+        n = 14
+        A = zeros(1, n)
+        A[1, 1] = 1.0   # extra constraint x[1] = 0, beyond the built-in null space
+        m_extra = RWModel{2}(n; scale_model = true, additional_constraints = (A, [0.0]))
+        m_plain = RWModel{2}(n; scale_model = true)
+        @test m_extra.scale_factor == m_plain.scale_factor
+    end
+end
