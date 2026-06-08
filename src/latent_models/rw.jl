@@ -125,11 +125,7 @@ end
 
 # Polynomial null-space constraint matrix of D_kᵀD_k: rows j^d (d = 0, …, Order-1).
 function _rw_nullspace_constraints(n::Int, ::Val{Order}) where {Order}
-    A = zeros(Order, n)
-    for d in 0:(Order - 1), j in 1:n
-        A[d + 1, j] = Float64(j)^d
-    end
-    return A
+    return Float64[Float64(j)^(d - 1) for d in 1:Order, j in 1:n]
 end
 
 # Tiny fixed regularization that makes the singular `DₖᵀDₖ` factorizable for the
@@ -147,7 +143,7 @@ function _rw_scale_factor(::Val{Order}, n::Int) where {Order}
     D = _difference_operator(n, Val(Order))
     Q = sparse(D' * D) + _RW_SCALE_REG * I
     A = _rw_nullspace_constraints(n, Val(Order))
-    x = ConstrainedGMRF(GMRF(zeros(n), Q), A, zeros(Order))
+    x = ConstrainedGMRF(GMRF(zeros(n), Q), A, zeros(size(A, 1)))
     return _geomean(var(x))
 end
 
