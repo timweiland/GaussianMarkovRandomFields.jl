@@ -60,6 +60,28 @@ using Random
         @test loglik(μ_η, inner) ≈ loglik(mean(prior), lik)
     end
 
+    @testset "LinearlyTransformedLikelihood with offset: μ_η = A μ + b" begin
+        k = 4
+        A = sparse(randn(k, n_latent))
+        b = randn(k)
+        m = LinearlyTransformedObservationModel(ExponentialFamily(Normal), A; offset = b)
+        y = randn(k)
+        lik = m(y; σ = 0.3)
+
+        μ_η, v_η, inner = linear_predictor_marginals(prior, lik)
+        @test μ_η ≈ A * mean(prior) .+ b
+        # The additive offset shifts the mean but leaves the variance unchanged.
+        @test v_η ≈ diag(A * Σ_ref * A')
+        @test inner === lik.base_likelihood
+        @test loglik(μ_η, inner) ≈ loglik(mean(prior), lik)
+
+        # Regression guard for #154: the offset must actually reach μ_η.
+        lik0 = LinearlyTransformedObservationModel(ExponentialFamily(Normal), A)(y; σ = 0.3)
+        μ_η0, = linear_predictor_marginals(prior, lik0)
+        @test μ_η ≈ μ_η0 .+ b
+        @test !isapprox(μ_η, μ_η0)
+    end
+
     @testset "LinearlyTransformedLikelihood on WorkspaceGMRF" begin
         k = 4
         A = sparse(randn(k, n_latent))

@@ -18,8 +18,10 @@ The dispatch recurses on the observation likelihood structure:
   `indices === nothing`). `μ_η` and `v_η` are the corresponding slices of
   `mean(ga)` / `var(ga)`; `eta_likelihood` is the same likelihood with
   `indices === nothing` so it consumes the returned (smaller) `μ_η` directly.
-- `LinearlyTransformedLikelihood`: `η = A x`, giving `μ_η = A · mean(ga)` and
-  `v_η = diag(A · Σ · Aᵀ)` from the posterior's selected-inversion output.
+- `LinearlyTransformedLikelihood`: affine predictor `η = A x + b` (the offset
+  `b = lik.offset` is omitted when `nothing`), giving `μ_η = A · mean(ga) + b`
+  and `v_η = diag(A · Σ · Aᵀ)` from the posterior's selected-inversion output
+  (the constant `b` does not affect the variance).
   `eta_likelihood = lik.base_likelihood`. Assumes the base's own `indices`
   field is `nothing` (the standard wrapping pattern); an indexed base is
   unusual and not specially handled.
@@ -70,6 +72,9 @@ end
 function linear_predictor_marginals(ga::AbstractGMRF, lik::LinearlyTransformedLikelihood)
     A = lik.design_matrix
     μ_η = A * mean(ga)
+    # Affine predictor η = A·x + b: include the additive offset in the mean.
+    # (The constant b does not affect the variance.)
+    lik.offset !== nothing && (μ_η = μ_η .+ lik.offset)
     v_η = _row_diag_AΣAt(A, ga)
     _apply_lpm_constraint_correction!(v_η, A, ga)
     return (Vector{Float64}(μ_η), v_η, lik.base_likelihood)
