@@ -11,7 +11,7 @@ using GaussianMarkovRandomFields:
     ImplicitEulerMetadata, ConcreteSTMetadata,
     ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMeshSTGMRF,
     ConstantMeshSTGMRF,
-    MaternModel,
+    MaternModel, BarrierModel,
     precision_map, to_matrix, make_chunks,
     SymmetricBlockTridiagonalMap, SSMBidiagonalMap, ZeroMap,
     temporal_block_gauss_seidel,
@@ -24,7 +24,7 @@ import GaussianMarkovRandomFields:
     lump_matrix, assemble_streamline_diffusion_matrix, apply_soft_constraints!,
     discretize,
     assemble_C_G_matrices, product_matern,
-    range_to_κ, smoothness_to_ν, matern_precision_only,
+    range_to_κ, smoothness_to_ν, matern_precision_only, barrier_triangles,
     joint_ssm,
     get_G, get_M, get_Σ⁻¹, get_Σ⁻¹_sqrt,
     get_constraint_handler, get_constraint_noise,
@@ -73,6 +73,7 @@ include("GaussianMarkovRandomFieldsFEM/product.jl")
 include("GaussianMarkovRandomFieldsFEM/mesh_rectangle.jl")
 include("GaussianMarkovRandomFieldsFEM/mesh_scattered.jl")
 include("GaussianMarkovRandomFieldsFEM/matern_model.jl")
+include("GaussianMarkovRandomFieldsFEM/barrier_model.jl")
 include("GaussianMarkovRandomFieldsFEM/fem_obs_models.jl")
 
 end
