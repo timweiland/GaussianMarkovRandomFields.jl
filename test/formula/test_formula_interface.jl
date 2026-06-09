@@ -570,8 +570,10 @@ end
         y_train = randn(20)
         train = (y = randn(20), x_coord = x_train, y_coord = y_train)
 
-        x_test = randn(5)
-        y_test = randn(5)
+        # Query a subset of the training points so the points are guaranteed to
+        # lie inside the discretization mesh (evaluating outside it is an error).
+        x_test = x_train[1:5]
+        y_test = y_train[1:5]
         test = (x_coord = x_test, y_coord = y_test)
 
         matern = Matern(smoothness = 1)

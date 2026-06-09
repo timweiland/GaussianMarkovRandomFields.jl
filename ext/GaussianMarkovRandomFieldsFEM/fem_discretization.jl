@@ -120,7 +120,19 @@ function evaluation_matrix(f::FEMDiscretization, X::AbstractVector; field = :def
         field = first(f.dof_handler.field_names)
     end
     dof_idcs = dof_range(f.dof_handler, field)
-    peh = PointEvalHandler(f.grid, X)
+    peh = PointEvalHandler(f.grid, X; warn = false)
+    # Points outside the mesh are not located in any cell (`cells[i] === nothing`).
+    # Evaluating there is undefined, so error clearly instead of silently dropping
+    # the row (which would silently discard observations / yield misleading zeros).
+    outside = findall(isnothing, peh.cells)
+    isempty(outside) || throw(
+        ArgumentError(
+            "evaluation_matrix: $(length(outside)) query point(s) lie outside the mesh " *
+                "and cannot be located in any cell. Offending indices: $(outside); " *
+                "coordinates: $(X[outside]). Restrict evaluation to points inside the " *
+                "discretization domain.",
+        ),
+    )
     cc = CellCache(f.dof_handler)
     Is = Int64[]
     Js = Int64[]
