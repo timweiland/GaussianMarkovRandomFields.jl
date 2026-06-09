@@ -23,7 +23,7 @@ Usage (via PkgBenchmark):
 """
 
 using GaussianMarkovRandomFields
-using GaussianMarkovRandomFields: selinv, selinv_diag
+using GaussianMarkovRandomFields: selinv, selinv_diag, loghessian, LinearlyTransformedLikelihood
 using BenchmarkTools
 using Distributions: Poisson, logpdf
 using SparseArrays
@@ -70,6 +70,29 @@ const Y_POISSON_SMALL = PoissonObservations(
 )
 const OBS_LIK_POISSON_SMALL = ExponentialFamily(Poisson)(Y_POISSON_SMALL)
 const GMRF_PRIOR_SMALL = GMRF(MU_SMALL, Q_RW1_SMALL, LinearSolve.LDLtFactorization())
+
+# LinearlyTransformedLikelihood on the ForwardDiff.Dual (AD-through-hyperparameter)
+# path: the `loghessian` transpose product Aᵀ·hess_η·A specialized in #157. The design
+# matrix is a sparse local transform (~3 nonzeros/row), as in FEM / evaluation-matrix
+# observation models, and the latent field carries Dual partials (as on the IFT path).
+const LTL_BENCH_A = let Is = Int[], Js = Int[], Vs = Float64[], r = MersenneTwister(20260525)
+    for i in 1:200
+        cols = rand(r, 1:N_SMALL, 3)
+        w = rand(r, 3)
+        w ./= sum(w)
+        append!(Is, fill(i, 3))
+        append!(Js, cols)
+        append!(Vs, w)
+    end
+    sparse(Is, Js, Vs, 200, N_SMALL)
+end
+const LTL_BENCH_LIK = LinearlyTransformedLikelihood(
+    ExponentialFamily(Poisson)(PoissonObservations(rand(MersenneTwister(7), 0:5, 200))),
+    LTL_BENCH_A,
+)
+const LTL_BENCH_X_DUAL = let r = MersenneTwister(11)
+    [ForwardDiff.Dual{:bench}(randn(r), ForwardDiff.Partials((randn(r), randn(r)))) for _ in 1:N_SMALL]
+end
 
 # Adjacency matrix for a small 2D grid (Besag spatial model).
 function _grid_adjacency(nx::Int, ny::Int)
@@ -205,6 +228,10 @@ SUITE["gmrf"]["workspace_selinv_diag"] =
 SUITE["gaussian_approximation"] = BenchmarkGroup()
 SUITE["gaussian_approximation"]["poisson_rw1_small"] =
     @benchmarkable gaussian_approximation($GMRF_PRIOR_SMALL, $OBS_LIK_POISSON_SMALL)
+# loghessian for a LinearlyTransformedLikelihood on the Dual path (#157): guards the
+# transpose-materialization that keeps this ~70-90x off the lazy-Adjoint fallback.
+SUITE["gaussian_approximation"]["loghessian_ltl_dual"] =
+    @benchmarkable loghessian($LTL_BENCH_X_DUAL, $LTL_BENCH_LIK)
 
 # ---------------------------------------------------------------------------
 # 4. Autodiff pipeline — gradient through full workflow.

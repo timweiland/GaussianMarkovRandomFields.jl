@@ -104,6 +104,27 @@ _strip_offset_partials(::Nothing) = nothing
 _strip_offset_partials(b::AbstractVector{<:ForwardDiff.Dual}) = ForwardDiff.value.(b)
 _strip_offset_partials(b::AbstractVector) = b
 
+# Issue #157: when the latent field is Dual-valued (differentiating through
+# `gaussian_approximation` w.r.t. hyperparameters), `hess_η = loghessian(η, base)` is
+# `Diagonal{<:ForwardDiff.Dual}`, and the generic `Symmetric(A' * hess_η * A)` — with a
+# lazy `Adjoint` `A'` — drops into an allocation-heavy generic fallback that is ~70–90×
+# slower than materializing the transpose and right-associating. This Dual-specialized
+# method does the latter. It is numerically identical to the generic form up to
+# floating-point reassociation, and the offset is folded in identically via
+# `_linear_predictor` (η = A·x + b is affine in x, so ∂η/∂x = A and the offset only
+# shifts the point at which `hess_η` is evaluated). The `Float64` generic method is left
+# untouched on purpose: there the lazy `Adjoint` already hits an optimized `SparseArrays`
+# kernel and materializing would be marginally slower.
+function GMRFs.loghessian(
+        x_full::AbstractVector{<:ForwardDiff.Dual},
+        ltlik::GMRFs.LinearlyTransformedLikelihood,
+    )
+    η = GMRFs._linear_predictor(ltlik.design_matrix, x_full, ltlik.offset)
+    hess_η = GMRFs.loghessian(η, ltlik.base_likelihood)
+    A = ltlik.design_matrix
+    return Symmetric(sparse(transpose(A)) * (hess_η * A))
+end
+
 # NonlinearLeastSquaresLikelihood: strip the σ-derived numeric fields (Dual when σ
 # carried partials) and the stored residual hyperparameters (Dual when an `f(x; θ...)`
 # hyperparameter carried partials). `f` and the cached backends (`jac_backend`,
