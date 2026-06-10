@@ -1,5 +1,5 @@
 using GaussianMarkovRandomFields
-using GaussianMarkovRandomFields: workspace_solve, backward_solve, selinv, selinv_diag
+using GaussianMarkovRandomFields: workspace_solve, backward_solve, selinv, selinv_diag, selinv_dot
 using LinearAlgebra
 using SparseArrays
 using Random
@@ -53,6 +53,16 @@ end
                 @test vals[idx] ≈ Q_inv[row, col] rtol = 1.0e-6
             end
         end
+    end
+
+    @testset "selinv_dot" begin
+        ws = GMRFWorkspace(Q)
+        # tr(Q⁻¹ Q) = tr(I) = n  (selinv has all of Q's pattern, so the contraction is exact)
+        @test selinv_dot(ws, Q) ≈ n rtol = 1.0e-8
+        # Matches the materialized-selinv dot for an arbitrary matrix on Q's pattern
+        B = copy(Q)
+        B.nzval .= randn(length(B.nzval))
+        @test selinv_dot(ws, B) ≈ dot(selinv(ws), B) rtol = 1.0e-10
     end
 
     @testset "Backward solve" begin

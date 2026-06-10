@@ -17,8 +17,16 @@ Each backend must implement:
 - `get_selinv(b)` — return the selected inverse (type is backend-specific)
 - `get_selinv_diag(b)` — return diagonal of Q⁻¹ as Vector
 - `backend_backward_solve(b, x)` — compute L^T \\ x for sampling
+
+Optional fast paths (a generic fallback is provided):
+- `selinv_dot(b, B)` — `dot(selinv, B) = tr(Q⁻¹ B)` without materializing selinv
 """
 abstract type WorkspaceBackend end
+
+# Generic fallback: materialize the selected inverse and dot. Backends that can
+# contract against `B` without building the full `SparseMatrixCSC` (e.g.
+# `CHOLMODBackend`) override this.
+selinv_dot(b::WorkspaceBackend, B::AbstractMatrix) = dot(get_selinv(b), B)
 
 """
     CHOLMODBackend{T} <: WorkspaceBackend
@@ -120,6 +128,16 @@ function get_selinv_diag(b::CHOLMODBackend)
             diag(b.selinv_cache)
     end
     return b.selinv_diag_cache
+end
+
+# `tr(Q⁻¹ B) = dot(selinv(Q), B)` for a `B` whose pattern is a subset of the
+# Cholesky factor's. Dots straight against the supernodal selected-inverse blocks
+# (merge-intersecting with `B`'s columns), skipping the full `SparseMatrixCSC`
+# materialization that `get_selinv` would build — which dominates the cost when
+# only this contraction is needed (the ForwardDiff `logdetcov` tangent). Accepts
+# a `ForwardDiff.Dual`-valued `B` directly, accumulating a Dual result.
+function selinv_dot(b::CHOLMODBackend, B::AbstractMatrix)
+    return dot(SelectedInversion.selinv(b.factor; depermute = true).Z, B)
 end
 
 function backend_backward_solve(b::CHOLMODBackend, x::AbstractVector)
