@@ -105,6 +105,31 @@ end
         @test logdet(ws) ≈ logdet(Q3_dense) rtol = 1.0e-10
     end
 
+    @testset "Persistent factorization buffer across many updates" begin
+        # The CHOLMOD backend reuses a persistent CHOLMOD.Sparse, refreshing its
+        # values in place on each refactorization rather than rebuilding it. Drive
+        # a sequence of distinct updates on one workspace and check every
+        # solve/logdet/selinv against a freshly built dense reference — this
+        # catches any stale-value carryover in the reused value buffer.
+        ws = GMRFWorkspace(Q)
+        rng = Random.MersenneTwister(7)
+        for k in 1:6
+            Qk = copy(Q)
+            Qk.nzval .*= 0.5 + k          # vary the overall scale...
+            for i in 1:n
+                Qk[i, i] += 0.3 * k * i / n   # ...and perturb the diagonal non-uniformly
+            end
+
+            update_precision!(ws, Qk)
+
+            Qk_dense = Matrix(Qk)
+            b = randn(rng, n)
+            @test workspace_solve(ws, b) ≈ Qk_dense \ b
+            @test logdet(ws) ≈ logdet(Qk_dense) rtol = 1.0e-10
+            @test selinv_diag(ws) ≈ diag(inv(Qk_dense)) rtol = 1.0e-8
+        end
+    end
+
     @testset "Pattern mismatch error" begin
         ws = GMRFWorkspace(Q)
         Q_different = sprand(n, n, 0.1)
