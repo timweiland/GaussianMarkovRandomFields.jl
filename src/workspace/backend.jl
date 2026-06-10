@@ -27,6 +27,13 @@ CHOLMOD-based factorization backend. Owns a `CHOLMOD.Factor` whose symbolic
 factorization (permutation, elimination tree, supernodes) is computed once
 and reused across numeric refactorizations.
 
+Also owns a persistent `CHOLMOD.Sparse` mirroring the precision's (fixed)
+sparsity pattern. `refactorize!` copies the new precision values into this
+buffer in place and refactorizes with `check = false`, avoiding the per-call
+`Sparse(::Symmetric)` re-allocation and `check_sparse` structural validation
+that `cholesky!(F, ::Symmetric)` would otherwise repeat on every Newton/grid
+iteration.
+
 Materializes the selected inverse lazily: callers needing only the diagonal
 (marginal variances) skip building the full `SparseMatrixCSC`, and the full
 matrix is built only when actually requested. Both caches are reset on
@@ -34,16 +41,45 @@ matrix is built only when actually requested. Both caches are reset on
 """
 mutable struct CHOLMODBackend{T} <: WorkspaceBackend
     factor::SparseArrays.CHOLMOD.Factor{T}
+    sparse::SparseArrays.CHOLMOD.Sparse{T}
     selinv_cache::Union{Nothing, SparseMatrixCSC{T, Int}}
     selinv_diag_cache::Union{Nothing, Vector{T}}
 end
 
 function CHOLMODBackend(Q::Symmetric{T, <:SparseMatrixCSC{T}}) where {T}
-    return CHOLMODBackend{T}(cholesky(Q), nothing, nothing)
+    return CHOLMODBackend{T}(cholesky(Q), SparseArrays.CHOLMOD.Sparse(Q), nothing, nothing)
+end
+
+"""
+    _copy_sparse_values!(S::CHOLMOD.Sparse, A::SparseMatrixCSC) -> S
+
+Copy `A`'s nonzero values into the value buffer of a persistent `CHOLMOD.Sparse`
+in place. `A` must share `S`'s sparsity pattern (same `nnz` and CSC ordering),
+which the workspace guarantees across refactorizations. This mirrors the
+value-copy step of the `Sparse(::SparseMatrixCSC)` constructor (a straight
+`unsafe_copyto!` into the `x` buffer) but skips both the re-allocation and the
+`check_sparse` structural validation.
+"""
+function _copy_sparse_values!(S::SparseArrays.CHOLMOD.Sparse{T}, A::SparseMatrixCSC{T}) where {T}
+    s = unsafe_load(pointer(S))
+    n = nnz(A)
+    Int(s.nzmax) == n || throw(
+        ArgumentError(
+            "CHOLMOD.Sparse buffer holds $(Int(s.nzmax)) values but A has $n nonzeros; " *
+                "the sparsity pattern must be invariant across refactorizations."
+        )
+    )
+    GC.@preserve S A unsafe_copyto!(Ptr{T}(s.x), pointer(nonzeros(A)), n)
+    return S
 end
 
 function refactorize!(b::CHOLMODBackend, Q::Symmetric)
-    cholesky!(b.factor, Q)
+    # The sparsity pattern is fixed across refactorizations, so refresh the
+    # persistent Sparse's values in place and refactorize with `check = false`
+    # instead of letting `cholesky!(F, ::Symmetric)` rebuild a fresh Sparse and
+    # re-run `check_sparse` every call. Bit-identical factor; ~10% less work.
+    _copy_sparse_values!(b.sparse, Q.data)
+    cholesky!(b.factor, b.sparse; check = false)
     b.selinv_cache = nothing
     b.selinv_diag_cache = nothing
     return nothing

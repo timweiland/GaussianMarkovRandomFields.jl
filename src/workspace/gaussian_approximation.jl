@@ -263,15 +263,19 @@ function gaussian_approximation(
                 (mean_change < mean_change_tol) ||
                 (mean_change_rel < mean_change_tol)
             verbose && println("  Converged after $iter iterations")
-            # Refresh ws.Q to Q_post(x_new) so `_build_result` snapshots the
-            # correct posterior precision. Without this, the line search's
-            # reload of Q_prior (via `ensure_loaded!` when the constrained
-            # branch uses a fresh `base_prior`, or whenever
-            # `_update_hessian!` tags the workspace as unowned) would leave
-            # ws.Q mismatched with x_new.
+            # Restore ws.Q to Q_post(x_new) so `_build_result` snapshots the correct
+            # posterior precision (the line search reloads Q_prior into ws.Q via
+            # `ensure_loaded!`, and `_update_hessian!` tags the workspace unowned).
+            # We set the VALUES but deliberately do NOT eagerly factorize:
+            # `_update_hessian!` marks the factorization invalid, and the first consumer
+            # of the returned posterior (`var`/`logdet`/`solve`/AD, or the constrained
+            # `ConstraintInfo` build) factorizes the snapshot on demand anyway — because
+            # `ws.loaded_version` is reset to 0 here, `ensure_loaded!(result)` reloads and
+            # refactorizes regardless. An eager `ensure_numeric!` would just be discarded
+            # and rebuilt, so deferring it saves one factorization per call with
+            # bit-identical results.
             H_final = loghessian(x_new, obs_lik)
             sparse_hess_map = _update_hessian!(ws, H_final, prior_nzval, diag_idx, sparse_hess_map)
-            ensure_numeric!(ws)
             return _build_result(ws, x_new, constraints)
         end
 
@@ -280,9 +284,10 @@ function gaussian_approximation(
 
     verbose && println("  Reached max_iter = $max_iter without convergence")
 
+    # Same as the converged branch: restore the precision values but defer the
+    # factorization to the first consumer (see the comment above).
     H_k = loghessian(x_k, obs_lik)
     sparse_hess_map = _update_hessian!(ws, H_k, prior_nzval, diag_idx, sparse_hess_map)
-    ensure_numeric!(ws)
 
     return _build_result(ws, x_k, constraints)
 end
