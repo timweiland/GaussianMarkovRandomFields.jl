@@ -139,16 +139,16 @@ function _row_diag_AΣAt(A::SparseMatrixCSC, Σ::AbstractMatrix)
     At = sparse(transpose(A))
     rv = rowvals(At)
     nz = nonzeros(At)
-    out = zeros(eltype(A), size(A, 1))
+    out = zeros(Float64, size(A, 1))
     @inbounds for i in eachindex(out)
         rng = nzrange(At, i)
-        s = zero(eltype(out))
+        s = 0.0
         for p in rng, q in rng
-            s += nz[p] * nz[q] * Σ[rv[p], rv[q]]
+            s += Float64(nz[p] * nz[q] * Σ[rv[p], rv[q]])
         end
         out[i] = s
     end
-    return Vector{Float64}(out)
+    return out
 end
 
 # Generic fallback: dense (or otherwise non-`SparseMatrixCSC`) design matrices have
