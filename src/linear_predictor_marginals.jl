@@ -117,12 +117,44 @@ _posterior_cov_sparse(ga::WorkspaceGMRF) = selinv(ga.workspace)
 _posterior_cov_sparse(ga::GMRF) = selinv(ga.linsolve_cache)
 _posterior_cov_sparse(ga::ConstrainedGMRF) = _posterior_cov_sparse(ga.base_gmrf)
 
-# v[i] = sum_{j,k} A[i,j] · A[i,k] · Σ[j,k] = (AΣ * Aᵀ)[i, i]. Sparse arithmetic
-# handles the pattern intersection; entries of Σ outside its stored pattern
-# contribute zero, which is exact when the pattern assumption in the docstring
-# holds.
+# v[i] = sum_{j,k} A[i,j] · A[i,k] · Σ[j,k] = (A Σ Aᵀ)[i, i]. Only the diagonal is
+# needed, and it depends only on the observation-local blocks of Σ. `Σ` is the
+# selected inverse, so `Σ[j, k]` is the true covariance for stored entries and zero
+# outside the factor's fill pattern (the documented sparse-pattern assumption); the
+# rewrite below preserves that behavior exactly.
 function _row_diag_AΣAt(A::AbstractMatrix, ga::AbstractGMRF)
     Σ = _posterior_cov_sparse(ga)
+    return _row_diag_AΣAt(A, Σ)
+end
+
+# Fast path (#159): for a sparse design matrix, read only each observation row's
+# local block of Σ — `O(m · nnz_per_row²)` instead of forming the full `m × n`
+# product `A * Σ` (which costs `O(m · nnz(Σ)/row)`, growing with the Cholesky fill).
+# Dispatch keys on `A::SparseMatrixCSC` and leaves `Σ` untyped on purpose: on the
+# GMRF path `Σ` is a `Symmetric` wrapper (whose `getindex` reflects both triangles),
+# on the workspace path a plain `SparseMatrixCSC`; indexing `Σ[j, k]` directly
+# reproduces the old `A * Σ` result exactly for every backend (and 0 outside the
+# stored pattern). Do NOT unwrap `Σ.data` — that would read only one bare triangle.
+function _row_diag_AΣAt(A::SparseMatrixCSC, Σ::AbstractMatrix)
+    At = sparse(transpose(A))
+    rv = rowvals(At)
+    nz = nonzeros(At)
+    out = zeros(eltype(A), size(A, 1))
+    @inbounds for i in eachindex(out)
+        rng = nzrange(At, i)
+        s = zero(eltype(out))
+        for p in rng, q in rng
+            s += nz[p] * nz[q] * Σ[rv[p], rv[q]]
+        end
+        out[i] = s
+    end
+    return Vector{Float64}(out)
+end
+
+# Generic fallback: dense (or otherwise non-`SparseMatrixCSC`) design matrices have
+# per-row support ≈ n, where forming the BLAS-backed `A * Σ` product is the right
+# choice. This is the original implementation.
+function _row_diag_AΣAt(A::AbstractMatrix, Σ::AbstractMatrix)
     AΣ = A * Σ
     return Vector{Float64}(vec(sum(AΣ .* A, dims = 2)))
 end

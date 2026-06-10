@@ -210,4 +210,30 @@ using Random
         @test length(v) == k
         @test all(>=(0), v)
     end
+
+    @testset "LTL variance via observation-local blocks (#159)" begin
+        Random.seed!(159)
+        # A sparse banded prior makes the selected inverse Σ genuinely sparse (the
+        # Cholesky fill pattern, not a full matrix), so this exercises the fast
+        # observation-local path of _row_diag_AΣAt. It must reproduce the original
+        # full-product `A * Σ` form exactly on the SAME Σ — for GMRF, WorkspaceGMRF,
+        # and ConstrainedGMRF (which reads the unconstrained Σ).
+        nl = 40
+        Qb = sparse(SymTridiagonal(fill(2.5, nl), fill(-1.0, nl - 1)))
+        μb = randn(nl)
+        kk = 10
+        Ab = sprandn(kk, nl, 0.2)
+        A_c = reshape(ones(nl), 1, nl)
+        for ga in (
+                GMRF(μb, Qb),
+                WorkspaceGMRF(μb, Qb, GMRFWorkspace(Qb)),
+                ConstrainedGMRF(GMRF(μb, Qb), A_c, zeros(1)),
+            )
+            fast = GaussianMarkovRandomFields._row_diag_AΣAt(Ab, ga)          # sparse A → fast path
+            slow = GaussianMarkovRandomFields._row_diag_AΣAt(Matrix(Ab), ga)  # dense A → A*Σ fallback
+            Σ = Matrix(GaussianMarkovRandomFields._posterior_cov_sparse(ga))
+            @test fast ≈ slow rtol = 1.0e-10
+            @test fast ≈ diag(Ab * Σ * Ab') rtol = 1.0e-10
+        end
+    end
 end

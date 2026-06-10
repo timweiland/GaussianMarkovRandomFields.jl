@@ -23,7 +23,8 @@ Usage (via PkgBenchmark):
 """
 
 using GaussianMarkovRandomFields
-using GaussianMarkovRandomFields: selinv, selinv_diag, loghessian, LinearlyTransformedLikelihood
+using GaussianMarkovRandomFields: selinv, selinv_diag, loghessian, LinearlyTransformedLikelihood,
+    _row_diag_AΣAt
 using BenchmarkTools
 using Distributions: Poisson, logpdf
 using SparseArrays
@@ -92,6 +93,18 @@ const LTL_BENCH_LIK = LinearlyTransformedLikelihood(
 )
 const LTL_BENCH_X_DUAL = let r = MersenneTwister(11)
     [ForwardDiff.Dual{:bench}(randn(r), ForwardDiff.Partials((randn(r), randn(r)))) for _ in 1:N_SMALL]
+end
+
+# A banded symmetric sparse Σ standing in for a selected inverse whose per-row
+# fill grows ~√n (2D mesh): the input to the per-row predictor variance
+# diag(A Σ Aᵀ). Used to benchmark the observation-local contraction in #159.
+const LPM_SIGMA = let n = N_SMALL, b = round(Int, sqrt(N_SMALL)), Is = Int[], Js = Int[], Vs = Float64[]
+    for j in 1:n, k in max(1, j - b):min(n, j + b)
+        push!(Is, k)
+        push!(Js, j)
+        push!(Vs, exp(-abs(j - k) / b))
+    end
+    sparse(Is, Js, Vs, n, n) + sparse(1.0I, n, n)
 end
 
 # Adjacency matrix for a small 2D grid (Besag spatial model).
@@ -232,6 +245,10 @@ SUITE["gaussian_approximation"]["poisson_rw1_small"] =
 # transpose-materialization that keeps this ~70-90x off the lazy-Adjoint fallback.
 SUITE["gaussian_approximation"]["loghessian_ltl_dual"] =
     @benchmarkable loghessian($LTL_BENCH_X_DUAL, $LTL_BENCH_LIK)
+# Per-row predictor variance diag(A Σ Aᵀ) via observation-local blocks (#159):
+# guards against reverting to the full m×n A*Σ product.
+SUITE["gaussian_approximation"]["row_diag_ltl_variance"] =
+    @benchmarkable _row_diag_AΣAt($LTL_BENCH_A, $LPM_SIGMA)
 
 # ---------------------------------------------------------------------------
 # 4. Autodiff pipeline — gradient through full workflow.
