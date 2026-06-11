@@ -121,10 +121,15 @@ end
 # full `get_selinv`, the `selinv_dot` contraction, and the `selinv_extract_at`
 # subset-read all share a single recursion per refactorization.
 function get_selinv_Z(b::CHOLMODBackend)
-    if b.selinv_Z_cache === nothing
-        b.selinv_Z_cache = SelectedInversion.selinv(b.factor; depermute = true).Z
+    # Bind to a local so the `=== nothing` check narrows the return type away from
+    # `Nothing` (a direct `return b.selinv_Z_cache` would be `Union{Nothing,...}`,
+    # which the downstream `sparse`/`dot`/`selinv_extract` calls cannot dispatch on).
+    cache = b.selinv_Z_cache
+    if cache === nothing
+        cache = SelectedInversion.selinv(b.factor; depermute = true).Z
+        b.selinv_Z_cache = cache
     end
-    return b.selinv_Z_cache
+    return cache
 end
 
 function get_selinv(b::CHOLMODBackend)
