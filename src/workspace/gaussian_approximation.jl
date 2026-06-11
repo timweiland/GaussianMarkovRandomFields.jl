@@ -164,6 +164,24 @@ function _build_result(ws::GMRFWorkspace, x::Vector, prior_constraints::Constrai
 end
 
 """
+    _line_search_energy(base_prior::WorkspaceGMRF, obs_lik, x)
+
+Backtracking-line-search objective: `neg_log_posterior` with the x-independent
+prior normalizer (`0.5·log|Q_prior| + 0.5·n·log2π`) dropped. The line search only
+compares this at different `x` for the same prior, where that constant cancels
+exactly — so the accept/reject decisions are bit-identical to using the full
+`neg_log_posterior`. Dropping it avoids `logpdf(base_prior, x)` → `logdetcov`,
+which on the shared workspace would reload `Q_prior` and **factorize it** on every
+`gaussian_approximation` call (the workspace is otherwise factorized at `Q_post`
+for the Newton step). The quadratic term uses the precision matrix directly (a
+matvec, no factorization).
+"""
+function _line_search_energy(base_prior::WorkspaceGMRF, obs_lik, x)
+    r = x .- base_prior.mean
+    return 0.5 * dot(r, base_prior.precision * r) - loglik(x, obs_lik)
+end
+
+"""
     gaussian_approximation(prior::WorkspaceGMRF, obs_lik::ObservationLikelihood; kwargs...)
 
 Workspace-aware Gaussian approximation via Fisher scoring.
@@ -218,12 +236,12 @@ function gaussian_approximation(
         step = _workspace_constrain_step(step, ws, constraints)
 
         if adaptive_stepsize
-            obj_current = neg_log_posterior(base_prior, obs_lik, x_k)
+            obj_current = _line_search_energy(base_prior, obs_lik, x_k)
             step_accepted = false
 
             for ls_iter in 1:max_linesearch_iter
                 candidate = x_k - α * step
-                obj_candidate = neg_log_posterior(base_prior, obs_lik, candidate)
+                obj_candidate = _line_search_energy(base_prior, obs_lik, candidate)
 
                 if obj_candidate <= obj_current
                     μ_new = candidate
