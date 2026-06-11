@@ -1,5 +1,6 @@
 using GaussianMarkovRandomFields
-using GaussianMarkovRandomFields: workspace_solve, backward_solve, selinv, selinv_diag, selinv_dot
+using GaussianMarkovRandomFields: workspace_solve, backward_solve, selinv, selinv_diag, selinv_dot,
+    selinv_extract_at
 using LinearAlgebra
 using SparseArrays
 using Random
@@ -63,6 +64,22 @@ end
         B = copy(Q)
         B.nzval .= randn(length(B.nzval))
         @test selinv_dot(ws, B) ≈ dot(selinv(ws), B) rtol = 1.0e-10
+    end
+
+    @testset "selinv_extract_at" begin
+        # Σ read at a subset pattern must equal the materialized selinv masked to that
+        # pattern (bit-identical), on simplicial (small) and supernodal (larger) factors.
+        for Qt in (Q, _make_test_precision(400))
+            ws = GMRFWorkspace(Qt)
+            nt = size(Qt, 1)
+            B = copy(Qt)   # Qt's pattern ⊆ the Cholesky fill, so all entries are stored
+            Σe = selinv_extract_at(ws, B)
+            Σf = selinv(ws)
+            @test Σe.colptr == B.colptr
+            @test rowvals(Σe) == rowvals(B)
+            rv = rowvals(B)
+            @test all(Σe[rv[t], j] == Σf[rv[t], j] for j in 1:nt for t in nzrange(B, j))
+        end
     end
 
     @testset "Backward solve" begin

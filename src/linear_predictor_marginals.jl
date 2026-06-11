@@ -127,6 +127,19 @@ function _row_diag_AΣAt(A::AbstractMatrix, ga::AbstractGMRF)
     return _row_diag_AΣAt(A, Σ)
 end
 
+# Workspace + sparse design matrix (#168): read Σ only at the observation-local
+# pattern (≈ AᵀA) straight from the selected-inverse supernodal blocks
+# (`selinv_extract_at`), never materializing the full `sparse(selinv)` — the
+# `sparse()` build is ~2-3× the selinv recursion and the dominant parallel-scaling
+# bottleneck. The per-row contraction then runs over the small extracted matrix.
+# Constraints are corrected by the caller via `_apply_lpm_constraint_correction!`,
+# exactly as on the materialized path.
+function _row_diag_AΣAt(A::SparseMatrixCSC, ga::WorkspaceGMRF)
+    ensure_loaded!(ga)
+    Σ_local = selinv_extract_at(ga.workspace, A' * A)
+    return _row_diag_AΣAt(A, Σ_local)
+end
+
 # Fast path (#159): for a sparse design matrix, read only each observation row's
 # local block of Σ — `O(m · nnz_per_row²)` instead of forming the full `m × n`
 # product `A * Σ` (which costs `O(m · nnz(Σ)/row)`, growing with the Cholesky fill).
