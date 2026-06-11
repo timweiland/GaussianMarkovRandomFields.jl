@@ -59,6 +59,37 @@ using FiniteDiff, ForwardDiff
         @test maximum(abs.(grad_fwd - grad_fd)) < 1.0e-3
     end
 
+    @testset "Posterior owns the workspace factorization after a Dual GA" begin
+        # The forward-mode GA leaves the shared workspace factorized at Q_post
+        # (from the IFT tangent solves) and tags the posterior as its owner, so a
+        # consumer that touches the posterior first (logpdf / var / logdetcov)
+        # reuses that factorization instead of reloading + refactorizing Q_post.
+        Random.seed!(202)
+        k = 8
+        y = [2, 1, 3, 0, 4, 1, 2, 3]
+        model = AR1Model(k)
+        ws = make_workspace(model; τ = 1.0, ρ = 0.3)
+        obs_model = AutoDiffObservationModel(
+            (x; y, φ) -> sum(y .* (φ .* x) .- exp.(φ .* x));
+            n_latent = k, hyperparams = (:φ,),
+            grad_backend = AutoForwardDiff(), hessian_backend = AutoForwardDiff(),
+        )
+        obs_lik = obs_model(y; φ = 1.0)
+
+        Tag = typeof(ForwardDiff.Tag(:handoff, Float64))
+        prior = model(
+            ws;
+            τ = exp(ForwardDiff.Dual{Tag}(0.1, 1.0, 0.0)),
+            ρ = tanh(ForwardDiff.Dual{Tag}(0.2, 0.0, 1.0)),
+        )  # WorkspaceGMRF{Dual}
+        posterior = gaussian_approximation(prior, obs_lik)
+
+        @test posterior.workspace.loaded_version == posterior.version
+        @test posterior.workspace.numeric_valid
+        # The reused-factor path stays consistent (finite, right Dual tag).
+        @test isfinite(ForwardDiff.value(logpdf(posterior, zeros(k))))
+    end
+
     @testset "Dual prior + Dual-hp AutoDiffLikelihood (joint outer AD)" begin
         # Both prior precision/mean and lik hyperparam carry Duals from the
         # same outer ForwardDiff pass over θ = (τ, φ). This is the canonical
