@@ -52,10 +52,17 @@ mutable struct CHOLMODBackend{T} <: WorkspaceBackend
     sparse::SparseArrays.CHOLMOD.Sparse{T}
     selinv_cache::Union{Nothing, SparseMatrixCSC{T, Int}}
     selinv_diag_cache::Union{Nothing, Vector{T}}
+    # Supernodal selected inverse (the Takahashi recursion output, before any
+    # `sparse()` materialization). It is cheap to read at a subset pattern, so the
+    # `get_selinv` / `selinv_dot` / `selinv_extract_at` consumers all source from
+    # it and the recursion runs at most once per refactorization.
+    selinv_Z_cache::Union{Nothing, AbstractMatrix}
 end
 
 function CHOLMODBackend(Q::Symmetric{T, <:SparseMatrixCSC{T}}) where {T}
-    return CHOLMODBackend{T}(cholesky(Q), SparseArrays.CHOLMOD.Sparse(Q), nothing, nothing)
+    return CHOLMODBackend{T}(
+        cholesky(Q), SparseArrays.CHOLMOD.Sparse(Q), nothing, nothing, nothing
+    )
 end
 
 """
@@ -90,6 +97,7 @@ function refactorize!(b::CHOLMODBackend, Q::Symmetric)
     cholesky!(b.factor, b.sparse; check = false)
     b.selinv_cache = nothing
     b.selinv_diag_cache = nothing
+    b.selinv_Z_cache = nothing
     return nothing
 end
 
@@ -109,12 +117,22 @@ function compute_selinv!(b::CHOLMODBackend)
     return nothing
 end
 
+# The supernodal selected inverse `.Z` from the Takahashi recursion, cached so the
+# full `get_selinv`, the `selinv_dot` contraction, and the `selinv_extract_at`
+# subset-read all share a single recursion per refactorization.
+function get_selinv_Z(b::CHOLMODBackend)
+    if b.selinv_Z_cache === nothing
+        b.selinv_Z_cache = SelectedInversion.selinv(b.factor; depermute = true).Z
+    end
+    return b.selinv_Z_cache
+end
+
 function get_selinv(b::CHOLMODBackend)
     if b.selinv_cache === nothing
         # `sparse` builds the result directly from the supernodal blocks. The
         # generic `SparseMatrixCSC` convert would instead call supernodal
         # `getindex` once per structural entry — orders of magnitude slower.
-        b.selinv_cache = sparse(SelectedInversion.selinv(b.factor; depermute = true).Z)
+        b.selinv_cache = sparse(get_selinv_Z(b))
     end
     return b.selinv_cache
 end
@@ -137,8 +155,20 @@ end
 # only this contraction is needed (the ForwardDiff `logdetcov` tangent). Accepts
 # a `ForwardDiff.Dual`-valued `B` directly, accumulating a Dual result.
 function selinv_dot(b::CHOLMODBackend, B::AbstractMatrix)
-    return dot(SelectedInversion.selinv(b.factor; depermute = true).Z, B)
+    return dot(get_selinv_Z(b), B)
 end
+
+# Read the selected inverse at `B`'s sparsity pattern (a `SparseMatrixCSC` with
+# B's pattern, values = Σ there), without materializing the full selinv. On the
+# CHOLMOD backend this streams straight from the supernodal blocks
+# (`SelectedInversion.selinv_extract`); other backends fall back to extracting
+# from the materialized selinv. Used by `diag(AΣAᵀ)` (predictor marginals), which
+# needs only the observation-local pattern `≈ AᵀA`.
+selinv_extract_at(b::WorkspaceBackend, B::SparseMatrixCSC) =
+    SelectedInversion.selinv_extract(get_selinv(b), B)
+
+selinv_extract_at(b::CHOLMODBackend, B::SparseMatrixCSC) =
+    SelectedInversion.selinv_extract(get_selinv_Z(b), B)
 
 function backend_backward_solve(b::CHOLMODBackend, x::AbstractVector)
     # CHOLMOD's FactorComponent \ only works with Vector, not SubArray views
