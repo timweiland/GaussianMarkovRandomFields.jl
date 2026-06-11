@@ -470,15 +470,18 @@ function _workspace_dualhp_ift(
     # for the constrained branch — the Dual-mean / Dual-Q corrections are
     # rebuilt inside `_build_constrained_dual_workspace_gmrf`.
     if prior_gmrf.constraints === nothing
-        return GMRFs.WorkspaceGMRF(x_star_dual, Q_post_dual, ws)
+        return _own_workspace_factor!(ws, GMRFs.WorkspaceGMRF(x_star_dual, Q_post_dual, ws))
     else
         ci_post = posterior_primal.constraints
         A_dense = ci_post.matrix
         log_AA_det = logdet(cholesky(Symmetric(A_dense * A_dense')))
-        return _build_constrained_dual_workspace_gmrf(
-            x_star_dual, Q_post_dual, ws,
-            A_dense, ci_post.vector, ci_post.A_tilde_T, ci_post.L_c,
-            log_AA_det, posterior_primal.version
+        return _own_workspace_factor!(
+            ws,
+            _build_constrained_dual_workspace_gmrf(
+                x_star_dual, Q_post_dual, ws,
+                A_dense, ci_post.vector, ci_post.A_tilde_T, ci_post.L_c,
+                log_AA_det, posterior_primal.version
+            ),
         )
     end
 end
