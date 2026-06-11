@@ -74,6 +74,7 @@ function product_matern end
 function range_to_κ end
 function smoothness_to_ν end
 function matern_precision_only end
+function barrier_triangles end
 
 # COV_EXCL_START
 assemble_C_G_matrices(args...; kwargs...) = _fem_extension_required("assemble_C_G_matrices")
@@ -81,9 +82,11 @@ product_matern(args...; kwargs...) = _fem_extension_required("product_matern")
 range_to_κ(args...; kwargs...) = _fem_extension_required("range_to_κ")
 smoothness_to_ν(args...; kwargs...) = _fem_extension_required("smoothness_to_ν")
 matern_precision_only(args...; kwargs...) = _fem_extension_required("matern_precision_only")
+barrier_triangles(args...; kwargs...) = _fem_extension_required("barrier_triangles")
 # COV_EXCL_STOP
 
 export assemble_C_G_matrices, product_matern, range_to_κ, smoothness_to_ν
+export barrier_triangles
 
 # --- State-space model helpers (impls in FEM ext) ---------------------------
 function joint_ssm end

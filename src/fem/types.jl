@@ -10,7 +10,7 @@
 ################################################################################
 
 export FEMDiscretization, MaternSPDE, AdvectionDiffusionSPDE,
-    MaternModel,
+    MaternModel, BarrierModel,
     ImplicitEulerSSM, ImplicitEulerJointSSMMatrices, JointSSMMatrices,
     ImplicitEulerMetadata, ConcreteSTMetadata,
     ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMeshSTGMRF,
@@ -217,4 +217,37 @@ end
 # COV_EXCL_START
 MaternModel(args...; kwargs...) = _fem_extension_required("MaternModel")
 (::Type{<:MaternModel})(args...; kwargs...) = _fem_extension_required("MaternModel")
+# COV_EXCL_STOP
+
+# --- Barrier Matérn latent model ---------------------------------------------
+"""
+    BarrierModel{F, Alg, C, P, M} <: LatentModel
+
+A *barrier* Matérn latent model (Bakka et al., 2019): a non-stationary variant of
+the `ν = 1` (α = 2) Matérn SPDE in which spatial correlation does not flow across
+designated *barrier* triangles of the mesh. Barrier triangles are given a small
+fixed range (a fraction of the normal range), so the field decorrelates sharply
+across them — useful for e.g. coastlines/islands blocking a marine field.
+
+The precision keeps the same sparsity and cost as the stationary model and is
+assembled per region. With no barrier triangles it reduces exactly to
+`MaternModel(disc; smoothness = 0)` (the stationary ν = 1 Matérn).
+
+Validated user-facing constructors live in the `GaussianMarkovRandomFieldsFEM`
+extension. The range-independent per-region FEM matrices are assembled once at
+construction and cached in `fem_matrices`.
+"""
+struct BarrierModel{F, Alg, C, P, M} <: LatentModel
+    discretization::F
+    range_fraction::Float64
+    barrier_cells::Vector{Int}
+    alg::Alg
+    constraint::C
+    observation_points::P
+    fem_matrices::M
+end
+
+# COV_EXCL_START
+BarrierModel(args...; kwargs...) = _fem_extension_required("BarrierModel")
+(::Type{<:BarrierModel})(args...; kwargs...) = _fem_extension_required("BarrierModel")
 # COV_EXCL_STOP
