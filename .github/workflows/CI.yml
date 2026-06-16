@@ -23,7 +23,9 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - '1.10'
+          - '1.10'   # LTS + declared compat floor
+          - '1.11'
+          - '1'       # latest stable (1.12 today; auto-tracks future releases)
         os:
           - ubuntu-latest
         arch:

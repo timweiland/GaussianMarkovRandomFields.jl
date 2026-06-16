@@ -185,6 +185,11 @@ function gaussian_approximation(
         if adaptive_stepsize
             obj_current = neg_log_posterior(base_gmrf, obs_lik, x_k)
             accept = false
+            # Pre-initialize so `x_new` is provably defined for static analysis: the loop
+            # assigns it only on the accept branch, coupled to the `accept` flag in a way
+            # JET cannot track. Always overwritten below — by the loop on acceptance, or by
+            # the `!accept` fallback (which uses the backtracked α, so this is a dead store).
+            x_new = x_k - α * step
 
             for ls_iter in 1:max_linesearch_iter
                 candidate = x_k - α * step

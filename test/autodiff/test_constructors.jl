@@ -9,6 +9,7 @@ using Enzyme, FiniteDiff, Zygote, ForwardDiff
 using Distributions
 using Test
 using ReTest
+import ChainRulesCore
 
 # Helper to create precision matrix
 function ar_precision(ρ, k)
@@ -215,4 +216,36 @@ if get(ENV, "GMRF_TEST_ENZYME", "false") == "true"
     @testset "Enzyme GMRF constructor autodiff tests (SymTridiagonal)" begin
         @run_symtridiagonal_tests(AutoEnzyme(; function_annotation = Enzyme.Const))
     end
+end
+
+# Regression (PR #171): the SymTridiagonal constructor rrule pullback read undefined
+# `dd`/`de` when handed a zero/absent cotangent — an `AbstractZero` (`ZeroTangent` or
+# `NoTangent`), which routinely flows through AD when the constructed matrix's gradient is
+# structurally zero — because the `if/elseif` branch chain had no fallback → `UndefVarError`
+# (JET surfaced this on Julia ≥1.11).
+@testset "SymTridiagonal rrule pullback handles zero/absent cotangents" begin
+    dv = [2.0, 2.0, 2.0]
+    ev = [-1.0, -1.0]
+    y, pb = ChainRulesCore.rrule(SymTridiagonal, dv, ev)
+    @test y == SymTridiagonal(dv, ev)
+
+    # Dense cotangent → field adjoints (dv from the diagonal, ev from the two off-diagonals).
+    c, gd, ge = pb(Matrix(1.0I, 3, 3))
+    @test c isa ChainRulesCore.NoTangent
+    @test gd == [1.0, 1.0, 1.0]
+    @test ge == [0.0, 0.0]
+
+    # Zero/absent cotangents must return zero tangents rather than throwing.
+    for z in (ChainRulesCore.ZeroTangent(), ChainRulesCore.NoTangent())
+        cz, gdz, gez = pb(z)
+        @test cz isa ChainRulesCore.NoTangent
+        @test gdz isa ChainRulesCore.AbstractZero
+        @test gez isa ChainRulesCore.AbstractZero
+    end
+
+    # An unrecognized cotangent falls back to zero instead of reading undefined locals.
+    cs, gds, ges = pb(2.0)
+    @test cs isa ChainRulesCore.NoTangent
+    @test gds isa ChainRulesCore.AbstractZero
+    @test ges isa ChainRulesCore.AbstractZero
 end

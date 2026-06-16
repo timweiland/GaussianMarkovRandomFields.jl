@@ -238,6 +238,10 @@ function gaussian_approximation(
         if adaptive_stepsize
             obj_current = _line_search_energy(base_prior, obs_lik, x_k)
             step_accepted = false
+            # Pre-initialize so `μ_new` is provably defined for static analysis (the loop
+            # assigns it only on the accept branch); always overwritten below. See the
+            # matching note in the non-workspace `gaussian_approximation`.
+            μ_new = x_k - α * step
 
             for ls_iter in 1:max_linesearch_iter
                 candidate = x_k - α * step

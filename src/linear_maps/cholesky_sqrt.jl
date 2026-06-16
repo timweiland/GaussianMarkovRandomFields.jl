@@ -9,7 +9,12 @@ function sparse_cho_sqrt(cho::SparseArrays.CHOLMOD.Factor)
     if Bool(s.is_ll)
         return sparse(cho.L)[p⁻¹, :]
     end
-    LD = sparse(cho.LD)
+    # `sparse(::FactorComponent{_,:LD})` is inferred as a non-concrete union
+    # (`Union{SparseMatrixCSC, Symmetric}` — CHOLMOD's `sparse` can't be type-stable across
+    # `stype`), but an :LD component always has `stype == 0`, so it is concretely a
+    # `SparseMatrixCSC`. Assert that so `getLd!` (which has only a `::SparseMatrixCSC`
+    # method) resolves without a union-split (a no-method JET flags on Julia ≥1.11).
+    LD = sparse(cho.LD)::SparseMatrixCSC
     L, d = SparseArrays.CHOLMOD.getLd!(LD)
     return (L .* sqrt.(d)')[p⁻¹, :]
 end

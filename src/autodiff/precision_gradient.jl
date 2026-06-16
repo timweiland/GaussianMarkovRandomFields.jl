@@ -51,6 +51,12 @@ function ChainRulesCore.rrule(::Type{SymTridiagonal}, dv::AbstractVector, ev::Ab
     function pullback(ȳ)
         ȳ = unthunk(ȳ)
 
+        # A zero/absent cotangent (e.g. the constructed matrix is unused) maps to
+        # zero tangents for both fields.
+        if ȳ isa AbstractZero
+            return (NoTangent(), ȳ, ȳ)
+        end
+
         # If we’re given a SymTridiagonal as the cotangent, just read its fields.
         if ȳ isa SymTridiagonal
             dd = ȳ.dv
@@ -63,6 +69,9 @@ function ChainRulesCore.rrule(::Type{SymTridiagonal}, dv::AbstractVector, ev::Ab
             # so the adjoint is the sum of those two entries.
             dd = diag(ȳ)
             de = diag(ȳ, 1) + diag(ȳ, -1)
+        else
+            # Unknown cotangent type: treat as zero rather than reading undefined locals.
+            return (NoTangent(), ZeroTangent(), ZeroTangent())
         end
 
         return (NoTangent(), project_d(dd), project_e(de))
