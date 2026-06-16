@@ -1,0 +1,141 @@
+using Test
+using GaussianMarkovRandomFields
+import DifferentiationInterface as DI
+using ForwardDiff
+# Loading these activates the SparseADLikelihoods extension, so the AD prior's
+# default Hessian backend is sparse (Tracer detection + greedy colouring).
+using SparseConnectivityTracer, SparseMatrixColorings
+using SparseArrays
+using LinearAlgebra
+using Random
+using Distributions: Normal, logpdf
+
+# Self-contained quadratic-drift joint log-prior with analytic derivatives as ground
+# truth. x[1] ~ N(0, 1/τ), x[t] = a·x[t-1]² + N(0, 1/τ). The Hessian depends on x
+# (genuinely non-Gaussian); the off-diagonals are structural but vanish at x = 0.
+function _qd_logp(x, τ, a)
+    n = length(x)
+    s = x[1]^2
+    @inbounds for t in 2:n
+        s += (x[t] - a * x[t - 1]^2)^2
+    end
+    return 0.5 * n * log(τ) - 0.5 * n * log(2π) - 0.5 * τ * s
+end
+
+function _qd_grad(x, τ, a)
+    n = length(x)
+    g = zeros(n)
+    g[1] = -τ * x[1]
+    @inbounds for t in 2:n
+        r = x[t] - a * x[t - 1]^2
+        g[t - 1] += τ * r * 2 * a * x[t - 1]
+        g[t] += -τ * r
+    end
+    return g
+end
+
+function _qd_neg_hessian(x, τ, a)
+    n = length(x)
+    rows = Int[]; cols = Int[]; vals = Float64[]
+    push!(rows, 1); push!(cols, 1); push!(vals, τ)
+    @inbounds for t in 2:n
+        r = x[t] - a * x[t - 1]^2
+        push!(rows, t); push!(cols, t); push!(vals, τ)
+        d2 = -4 * a * r + 8 * a^2 * x[t - 1]^2
+        push!(rows, t - 1); push!(cols, t - 1); push!(vals, 0.5 * τ * d2)
+        doff = 0.5 * τ * (-4 * a * x[t - 1])
+        push!(rows, t - 1); push!(cols, t); push!(vals, doff)
+        push!(rows, t); push!(cols, t - 1); push!(vals, doff)
+    end
+    return sparse(rows, cols, vals, n, n)
+end
+
+# The AD prior wraps the same density as a keyword-θ function.
+_qd_logp_kw(x; τ, a) = _qd_logp(x, τ, a)
+
+@testset "AutoDiffLatentPrior" begin
+
+    @testset "local_quadratic matches analytic (sparse AD)" begin
+        Random.seed!(1)
+        n = 5; τ = 1.5; a = 0.4
+        prior = AutoDiffLatentPrior(_qd_logp_kw; n = n, hyperparams = (:τ, :a))
+        for _ in 1:5
+            x = randn(n) .* 0.5
+            lq = local_quadratic(prior, x; τ = τ, a = a)
+            @test lq.Q isa SparseMatrixCSC
+            @test Matrix(lq.Q) ≈ Matrix(_qd_neg_hessian(x, τ, a)) atol = 1.0e-8
+            @test lq.h ≈ _qd_grad(x, τ, a) .+ _qd_neg_hessian(x, τ, a) * x atol = 1.0e-8
+            @test lq.logp_ref ≈ _qd_logp(x, τ, a) atol = 1.0e-10
+        end
+    end
+
+    @testset "prior_logdensity is the cheap primal and agrees with local_quadratic" begin
+        n = 4; τ = 2.0; a = 0.6
+        prior = AutoDiffLatentPrior(_qd_logp_kw; n = n, hyperparams = (:τ, :a))
+        x = randn(n) .* 0.5
+        @test prior_logdensity(prior, x; τ = τ, a = a) == _qd_logp(x, τ, a)
+        @test prior_logdensity(prior, x; τ = τ, a = a) ≈
+            local_quadratic(prior, x; τ = τ, a = a).logp_ref
+    end
+
+    @testset "AbstractLatentPrior interface" begin
+        prior = AutoDiffLatentPrior(_qd_logp_kw; n = 7, hyperparams = (:τ, :a), name = :qd)
+        @test length(prior) == 7
+        @test GaussianMarkovRandomFields.model_name(prior) == :qd
+        @test GaussianMarkovRandomFields.constraints(prior; τ = 1.0, a = 0.0) === nothing
+        @test GaussianMarkovRandomFields.hyperparameters(prior) == (τ = Real, a = Real)
+    end
+
+    @testset "gaussian_approximation matches an independent Newton on the joint" begin
+        Random.seed!(3)
+        n = 4; τ = 2.0; a = 0.6; σ = 0.5
+        x_true = zeros(n)
+        for t in 2:n
+            x_true[t] = a * x_true[t - 1]^2 + (1 / sqrt(τ)) * randn()
+        end
+        y = x_true .+ σ .* randn(n)
+        prior = AutoDiffLatentPrior(_qd_logp_kw; n = n, hyperparams = (:τ, :a))
+        obs_lik = ExponentialFamily(Normal)(y; σ = σ)
+        post = gaussian_approximation(prior, obs_lik; τ = τ, a = a)
+
+        # Independent damped Newton on the exact joint negative log-posterior.
+        x_gt = zeros(n)
+        for _ in 1:200
+            g = -_qd_grad(x_gt, τ, a) .- (y .- x_gt) ./ σ^2
+            Q = _qd_neg_hessian(x_gt, τ, a) + (1 / σ^2) * sparse(1.0I, n, n)
+            δ = Q \ g
+            x_gt -= δ
+            norm(δ, Inf) < 1.0e-10 && break
+        end
+        @test mean(post) ≈ x_gt atol = 1.0e-6
+        Q_expected = _qd_neg_hessian(x_gt, τ, a) + (1 / σ^2) * sparse(1.0I, n, n)
+        @test Matrix(precision_matrix(post)) ≈ Matrix(Q_expected) atol = 1.0e-4
+    end
+
+    @testset "structured: AD latent prior + exact Normal likelihood, marginal Laplace" begin
+        # The AD prior composes with a closed-form likelihood; the Laplace marginal
+        # matches brute-force integration up to Laplace's higher-order bias.
+        Random.seed!(9)
+        n = 3; τ = 10.0; a = 0.4; σ = 0.4
+        y = [0.3, 0.4, 0.5]
+        prior = AutoDiffLatentPrior(_qd_logp_kw; n = n, hyperparams = (:τ, :a))
+        obs_lik = ExponentialFamily(Normal)(y; σ = σ)
+        post = gaussian_approximation(prior, obs_lik; τ = τ, a = a)
+        @test isposdef(Symmetric(Matrix(precision_matrix(post))))
+
+        logml = marginal_loglikelihood(prior, obs_lik, post; τ = τ, a = a)
+        x_star = mean(post)
+        Q_post = Matrix(precision_matrix(post))
+        sd = sqrt.(diag(inv(Q_post)))
+        m_axis = 80
+        ranges = [range(x_star[i] - 8 * sd[i], x_star[i] + 8 * sd[i], length = m_axis) for i in 1:n]
+        dV = prod(step.(ranges))
+        S = 0.0
+        for i in 1:m_axis, j in 1:m_axis, k in 1:m_axis
+            xp = [ranges[1][i], ranges[2][j], ranges[3][k]]
+            logp = _qd_logp(xp, τ, a) + sum(logpdf.(Normal.(xp, σ), y))
+            S += exp(logp) * dV
+        end
+        @test abs(logml - log(S)) / abs(log(S)) < 1.0e-2
+    end
+end

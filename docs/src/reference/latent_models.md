@@ -56,6 +56,19 @@ local_quadratic
 prior_logdensity
 ```
 
+## AD-defined (TMB-style) priors
+
+`AutoDiffLatentPrior` defines a non-Gaussian latent prior implicitly through a
+scalar joint log-density `f(x; θ) = log p(x | θ)`; the natural-form local quadratic
+is obtained by automatic differentiation (gradient + sparse Hessian), so you never
+hand-derive `local_quadratic`. It is the latent-side analogue of
+[`AutoDiffObservationModel`](@ref) and reuses the same DifferentiationInterface
+backends and sparse-Hessian machinery.
+
+```@docs
+AutoDiffLatentPrior
+```
+
 ## Available Models
 
 ### Temporal Models
