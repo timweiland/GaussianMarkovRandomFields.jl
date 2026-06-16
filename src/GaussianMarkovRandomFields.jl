@@ -21,6 +21,10 @@ include("plots/makie.jl")
 include("kl_cholesky/base.jl")
 include("graphical_lasso/graphical_lasso.jl")
 include("workspace/gaussian_approximation.jl")
+# High-level latent-prior entry points for gaussian_approximation. Loaded here
+# (not from latent_models/) because it dispatches on `ObservationLikelihood` and
+# drives both the arithmetic and workspace Newton loops defined above.
+include("latent_models/gaussian_approximation.jl")
 include("workspace/latent_model_integration.jl")
 include("workspace/workspace_pool.jl")
 include("autodiff/autodiff.jl")

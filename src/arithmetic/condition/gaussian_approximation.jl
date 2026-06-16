@@ -75,26 +75,34 @@ function _update_linsolve_cache_inner!(cache, Q, alg::LinearSolve.LDLtFactorizat
     return cache.A = copy(Q)
 end
 
-# Solver abstraction for gaussian_approximation Newton iteration.
-# Allows shared iteration logic for both LinearSolve-backed GMRF and ChordalCholesky-backed ChordalGMRF.
+# Solver abstraction for the gaussian_approximation Newton iteration.
+# A "solver" is either a `LinearSolve` cache (CHOLMOD-backed GMRF /
+# ConstrainedGMRF / non-Gaussian latent priors) or a `ChordalCholesky`
+# (ChordalGMRF). The Newton loop is generic over it: `_ga_refactor!`
+# updates the factorization to the posterior precision `Q_prior - H`, and
+# `_ga_solve` solves against it. Splitting refactor from solve lets the
+# final `_build_posterior` refresh the factorization without a wasted
+# triangular solve.
 _ga_init_solver(gmrf::GMRF) = deepcopy(linsolve_cache(gmrf))
 _ga_init_solver(gmrf::ChordalGMRF) = copy(gmrf.F)
 
-function _ga_update_and_solve!(solver, Q_base, H_k, b, ::GMRF)
-    Q_new = prepare_for_linsolve(Q_base - H_k, solver.alg)
-    _update_linsolve_cache!(solver, Q_new)
-    solver.b = b
-    return Q_new, copy(solve!(solver).u)
+function _ga_refactor!(cache::LinearSolve.LinearCache, Q_prior, H)
+    Q_new = prepare_for_linsolve(Q_prior - H, cache.alg)
+    _update_linsolve_cache!(cache, Q_new)
+    return Q_new
 end
 
-function _ga_update_and_solve!(solver, Q_base, H_k, b, ::ChordalGMRF)
-    Q_new = hermdiff(Q_base, H_k)
-    copyto!(solver, Q_new)
-    cholesky!(solver)
-    return Q_new, solver \ b
+function _ga_refactor!(F::ChordalCholesky, Q_prior, H)
+    Q_new = hermdiff(Q_prior, H)
+    copyto!(F, Q_new)
+    cholesky!(F)
+    return Q_new
 end
 
-function _ga_make_posterior(x, Q, solver, prior::Union{GMRF, ConstrainedGMRF}, constraints)
+_ga_solve(cache::LinearSolve.LinearCache, b) = (cache.b = b; copy(solve!(cache).u))
+_ga_solve(F::ChordalCholesky, b) = F \ b
+
+function _ga_make_posterior(x, Q, solver, prior::Union{GMRF, ConstrainedGMRF, LatentPrior}, constraints)
     new_gmrf = GMRF(x, Q; linsolve_cache = solver)
     return _apply_constraints(new_gmrf, constraints)
 end
@@ -157,65 +165,106 @@ function gaussian_approximation(
         max_linesearch_iter::Int = 10,
         verbose::Bool = false
     )
-    # Extract base GMRF and constraints (nothing for GMRF/ChordalGMRF)
     base_gmrf = _base_gmrf(prior_gmrf)
     constraints = _extract_constraints(prior_gmrf)
-
-    # Initialize with provided starting point or prior mean
-    x_k = x0 === nothing ? copy(mean(prior_gmrf)) : copy(x0)
-
+    x_init = x0 === nothing ? mean(prior_gmrf) : x0
     solver = _ga_init_solver(base_gmrf)
-    Q_base = precision_matrix(base_gmrf)
+    return _newton_loop(
+        prior_gmrf, obs_lik, solver, constraints, x_init;
+        max_iter, mean_change_tol, newton_dec_tol,
+        adaptive_stepsize, max_linesearch_iter, verbose,
+    )
+end
 
-    # Adaptive stepsize state (persists across outer iterations)
+# Backtracking line search shared by the cache- and workspace-backed Newton loops.
+# Returns the accepted iterate `x_new` and the (possibly shrunk) step scale `α`. The
+# merit is `_prior_energy(prior, Q_p, h, ·) - loglik(·, obs_lik)` — the neg-log-posterior
+# up to an x-independent constant, so accept/reject decisions match the full merit while
+# never evaluating `logpdf` (no factorization on a shared workspace).
+function _ga_line_search(
+        prior, Q_p, h, energy_k, obs_lik, x_k, step, α;
+        max_linesearch_iter::Int, newton_dec_tol::Real, verbose::Bool,
+    )
+    obj_current = energy_k - loglik(x_k, obs_lik)
+    accept = false
+    # Pre-initialize so `x_new` is provably defined for static analysis: the loop assigns
+    # it only on the accept branch, in a way JET cannot track. Always overwritten below —
+    # by the loop on acceptance, or by the `!accept` fallback.
+    x_new = x_k - α * step
+
+    for ls_iter in 1:max_linesearch_iter
+        candidate = x_k - α * step
+        obj_candidate = _prior_energy(prior, Q_p, h, candidate) - loglik(candidate, obs_lik)
+
+        if obj_candidate <= obj_current
+            x_new = candidate
+            α = sqrt(α)
+            accept = true
+            verbose && ls_iter > 1 && println("    Accepted at α=$(round(α^2, digits = 3)) after $ls_iter backtracks")
+            break
+        else
+            α *= 0.1
+            verbose && println("    Backtrack: α=$(round(α, digits = 4))")
+            if α * norm(step, Inf) < newton_dec_tol / 1000
+                x_new = candidate
+                accept = true
+                break
+            end
+        end
+    end
+
+    accept || (x_new = x_k - α * step)
+    return x_new, α
+end
+
+"""
+    _newton_loop(prior, obs_lik, solver, constraints, x_init; ...) -> AbstractGMRF
+
+Shared Newton loop for `gaussian_approximation`. Two abstractions compose
+here:
+
+- The prior side is queried per iterate via `_prior_local(prior, x_k) ->
+  (Q, h, energy)`. For Gaussian priors `(Q, h)` are constant in `x_k`;
+  for the non-Gaussian `LatentPrior` adapter they re-linearise. The
+  line-search merit never calls `logpdf`, so a shared `GMRFWorkspace` is
+  not refactorized at the prior precision.
+- The linear-algebra side is the `solver`: a `LinearSolve` cache
+  (CHOLMOD) or a `ChordalCholesky` (`ChordalGMRF`). `_ga_refactor!`
+  updates it to `Q_prior - H`; `_ga_solve` solves the Newton system.
+
+`constraints` is `nothing` or `(A=..., e=...)` for KKT step projection.
+"""
+function _newton_loop(
+        prior, obs_lik::ObservationLikelihood,
+        solver, constraints, x_init::AbstractVector;
+        max_iter::Int,
+        mean_change_tol::Real,
+        newton_dec_tol::Real,
+        adaptive_stepsize::Bool,
+        max_linesearch_iter::Int,
+        verbose::Bool,
+    )
+    x_k = copy(x_init)
     α = 1.0
-
     verbose && println("Starting Fisher scoring...")
 
     for iter in 1:max_iter
+        Q_p, h, energy_k = _prior_local(prior, x_k)
         H_k = loghessian(x_k, obs_lik)
-        neg_score_k = ∇ₓ_neg_log_posterior(base_gmrf, obs_lik, x_k)
-        Q_new, step = _ga_update_and_solve!(solver, Q_base, H_k, neg_score_k, base_gmrf)
+        g_l = loggrad(x_k, obs_lik)
 
-        # For constrained problems, project step onto constraint tangent space
-        # via the KKT Schur complement. No-op when constraints are nothing.
+        _ga_refactor!(solver, Q_p, H_k)
+        # ∇ₓ neg_log_posterior(x_k) = -∇log p_prior(x_k) - ∇log p_lik(x_k);
+        # prior gradient in natural form is ∇log p(x_k) = h - Q_p · x_k.
+        neg_score_k = (Q_p * x_k - h) .- g_l
+        step = _ga_solve(solver, neg_score_k)
         step = _constrain_step(step, solver, constraints)
 
-        # Apply step with adaptive line search or full step
         if adaptive_stepsize
-            obj_current = neg_log_posterior(base_gmrf, obs_lik, x_k)
-            accept = false
-            # Pre-initialize so `x_new` is provably defined for static analysis: the loop
-            # assigns it only on the accept branch, coupled to the `accept` flag in a way
-            # JET cannot track. Always overwritten below — by the loop on acceptance, or by
-            # the `!accept` fallback (which uses the backtracked α, so this is a dead store).
-            x_new = x_k - α * step
-
-            for ls_iter in 1:max_linesearch_iter
-                candidate = x_k - α * step
-                obj_candidate = neg_log_posterior(base_gmrf, obs_lik, candidate)
-
-                if obj_candidate <= obj_current
-                    x_new = candidate
-                    α = sqrt(α)
-                    accept = true
-                    verbose && ls_iter > 1 && println("    Accepted at α=$(round(α^2, digits = 3)) after $ls_iter backtracks")
-                    break
-                else
-                    α *= 0.1
-                    verbose && println("    Backtrack: α=$(round(α, digits = 4))")
-
-                    if α * norm(step, Inf) < newton_dec_tol / 1000
-                        x_new = candidate
-                        accept = true
-                        break
-                    end
-                end
-            end
-
-            if !accept
-                x_new = x_k - α * step
-            end
+            x_new, α = _ga_line_search(
+                prior, Q_p, h, energy_k, obs_lik, x_k, step, α;
+                max_linesearch_iter, newton_dec_tol, verbose,
+            )
         else
             x_new = x_k - step
         end
@@ -223,32 +272,29 @@ function gaussian_approximation(
         newton_decrement = dot(neg_score_k, step)
         mean_change = norm(x_new - x_k)
         mean_change_rel = mean_change / max(norm(x_k), 1.0e-10)
-
         verbose && println("  Iter $iter: Newton dec = $(round(newton_decrement, sigdigits = 3)), α = $(round(α, digits = 3))")
+
         if (newton_decrement < newton_dec_tol) || (mean_change < mean_change_tol) || (mean_change_rel < mean_change_tol)
             verbose && println("  Converged after $iter iterations")
-            # Refresh Q at x_new so the posterior mean and precision are
-            # consistent (Q_new above was computed at x_k, not x_new). At
-            # convergence x_new ≈ x_k, but the mismatch shows up as a small
-            # ~1e-4 error in AD gradients and matters for downstream INLA
-            # hyperparameter optimization. The max_iter branch already does
-            # this refresh (it recomputes H_k at the final iterate).
-            H_final = loghessian(x_new, obs_lik)
-            neg_score_final = ∇ₓ_neg_log_posterior(base_gmrf, obs_lik, x_new)
-            Q_final, _ = _ga_update_and_solve!(solver, Q_base, H_final, neg_score_final, base_gmrf)
-            return _ga_make_posterior(x_new, Q_final, solver, prior_gmrf, constraints)
+            return _build_posterior(prior, obs_lik, solver, constraints, x_new)
         end
 
         x_k = x_new
     end
 
-    verbose && println("  Reached max_iter = $max_iter without convergence")
+    verbose && println("  Reached max_iter without convergence")
+    return _build_posterior(prior, obs_lik, solver, constraints, x_k)
+end
 
-    # Return current best approximation at final x_k
-    H_k = loghessian(x_k, obs_lik)
-    neg_score_k = ∇ₓ_neg_log_posterior(base_gmrf, obs_lik, x_k)
-    Q_final, _ = _ga_update_and_solve!(solver, Q_base, H_k, neg_score_k, base_gmrf)
-    return _ga_make_posterior(x_k, Q_final, solver, prior_gmrf, constraints)
+# Refresh the factorization at the final iterate so the posterior
+# `(mean, precision)` are consistent (the loop's last `_ga_refactor!`
+# happened at `x_k`, not `x_new`). Matters for AD gradients on
+# hyperparameter objectives where small drift turns into ~1e-4 error.
+function _build_posterior(prior, obs_lik, solver, constraints, x_final)
+    Q_p, = _prior_local(prior, x_final)
+    H_final = loghessian(x_final, obs_lik)
+    Q_final = _ga_refactor!(solver, Q_p, H_final)
+    return _ga_make_posterior(x_final, Q_final, solver, prior, constraints)
 end
 
 # Specialized dispatch for Normal observation likelihoods with identity link (conjugate prior case)

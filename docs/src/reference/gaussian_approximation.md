@@ -107,8 +107,69 @@ The package includes significant performance optimizations:
 - **MetaGMRF support** preserves metadata through the approximation process
 - **Type consistency** ensures optimal memory usage and dispatch efficiency
 
+## Iterated linearisation for non-Gaussian priors
+
+`gaussian_approximation` also accepts an [`AbstractLatentPrior`](@ref) directly as the prior side, which is useful in two situations:
+
+1. **Gaussian latent prior + hyperparameters in scope.** Pass the [`LatentModel`](@ref) (e.g. `AR1Model(n)`) and its hyperparameters as keyword arguments — the call materialises the prior internally and dispatches to the existing `(::AbstractGMRF, obs_lik)` path. Behaviour is identical to first calling `model(; θ...)` and then `gaussian_approximation(prior_gmrf, obs_lik)`.
+
+2. **Non-Gaussian latent prior.** When the prior log-density is not quadratic in `x` (a [`NonGaussianLatentPrior`](@ref) — e.g. a nonlinear state-space model), fixed-Q Newton on a single Gaussian approximation is biased: the prior Hessian depends on `x`, so the linearisation has to track the current Newton iterate. The dispatch on `NonGaussianLatentPrior` runs *iterated re-linearisation* — at every Newton step the prior is re-quadratised at the current iterate via [`local_quadratic`](@ref), and the joint Newton system is solved against the re-linearised prior. The line-search merit uses the *exact* `log p(x | θ)`, evaluated at trial points through [`prior_logdensity`](@ref) (which defaults to `local_quadratic(prior, x; θ...).logp_ref` but can be overridden to evaluate the scalar log-density directly, avoiding a full Hessian rebuild per backtrack).
+
+Both cases share the same Newton machinery (cache-backed via `LinearSolve` or workspace-backed via `GMRFWorkspace`); the prior side is only queried via a per-iterate local-quadratic hook (returning `(Q, h)` plus a line-search energy), so the loop body is identical regardless of whether the prior is Gaussian. For Gaussian priors that hook never evaluates `logpdf`, so the line search adds no factorization on a shared workspace.
+
+```julia
+using GaussianMarkovRandomFields
+
+# Define a non-Gaussian latent prior — only requires `local_quadratic`
+# plus the AbstractLatentPrior interface (length, hyperparameters,
+# model_name, constraints).
+struct MyNonlinearPrior <: NonGaussianLatentPrior
+    n::Int
+end
+
+Base.length(m::MyNonlinearPrior) = m.n
+GaussianMarkovRandomFields.hyperparameters(::MyNonlinearPrior) = (τ = Real,)
+GaussianMarkovRandomFields.model_name(::MyNonlinearPrior) = :my_nonlinear
+GaussianMarkovRandomFields.constraints(::MyNonlinearPrior; kwargs...) = nothing
+
+function GaussianMarkovRandomFields.local_quadratic(
+        m::MyNonlinearPrior, x_ref::AbstractVector; τ::Real
+    )
+    # Compute Q = -∇²log p(x_ref | τ), the natural-form linear coefficient
+    # h = ∇log p(x_ref) + Q · x_ref, and the *exact* log p(x_ref | τ).
+    Q = ...
+    h = ...
+    logp_ref = ...
+    return LocalLatentQuadratic(Q, h, logp_ref, x_ref)
+end
+
+# Use it.
+model = MyNonlinearPrior(50)
+posterior = gaussian_approximation(model, obs_lik; τ = 1.0, x0 = my_initial_guess)
+logml = marginal_loglikelihood(model, obs_lik, posterior; τ = 1.0)
+```
+
+### Pitfall: symmetric saddles
+
+The default initial point for `NonGaussianLatentPrior` is `zeros(length(prior))`. This is the worst possible start for any prior with a discrete reflection symmetry — Newton from `x = 0` stays on the symmetry axis because the gradient identically vanishes there. For symmetric models (e.g. transitions involving `x²`, `|x|`, etc.), pass `x0` explicitly:
+
+```julia
+posterior = gaussian_approximation(
+    model, obs_lik;
+    τ = 1.0,
+    x0 = fill(0.5, length(model)),   # any non-zero start works
+)
+```
+
+A common pattern for state-space models is to initialise from the data (e.g. `x0 = y` for direct-observation likelihoods) or from the mode of a simpler Gaussian-prior approximation.
+
+### Marginal log-likelihood
+
+[`marginal_loglikelihood`](@ref) returns the Laplace approximation to `log p(y | θ)` at the converged mode. It uses the elementary identity `log p(y | θ) = log p(x*, y | θ) - log p(x* | y, θ)`, which handles unconstrained and constrained posteriors uniformly via the posterior's `Distributions.logpdf`.
+
 ## API Reference
 
 ```@docs
 gaussian_approximation
+marginal_loglikelihood
 ```
