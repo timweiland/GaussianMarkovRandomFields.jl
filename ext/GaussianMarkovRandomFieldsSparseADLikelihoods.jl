@@ -51,6 +51,18 @@ function GaussianMarkovRandomFields.known_pattern_hessian_backend(g, x_probe::Ab
     )
 end
 
+# Build the backend from an already-known *structural* pattern (no detection). Used by the
+# IFT θ-gradient path to reuse a prior's own Hessian sparsity — which works even when the
+# density can't be traced (e.g. it solves an ODE), since detection never runs here.
+function GaussianMarkovRandomFields.known_pattern_hessian_backend(pattern::SparseMatrixCSC)
+    P = SparseMatrixCSC(pattern.m, pattern.n, copy(pattern.colptr), copy(pattern.rowval), ones(Bool, nnz(pattern)))
+    return DI.AutoSparse(
+        DI.AutoForwardDiff();
+        sparsity_detector = DI.ADTypes.KnownHessianSparsityDetector(P),
+        coloring_algorithm = GreedyColoringAlgorithm(),
+    )
+end
+
 # Residual-curvature term C = Σ_k (W r)_k ∇²f_k(x*) = ∇²[Σ_k (W r)_k f_k(x)] at x*.
 # `W r` is held constant (evaluated at x*), so this is a plain scalar Hessian with no
 # inner Jacobian. Its sparsity pattern is θ- and x*-independent, so it is detected once

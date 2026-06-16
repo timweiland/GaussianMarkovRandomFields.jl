@@ -75,8 +75,12 @@ function GMRFs._nongaussian_dualhp_ift(
 
     # Step 5: Dual Q_post. The prior Hessian uses a known-pattern backend (no tracer on
     # Duals); its Duals capture the total dQ/dθ (explicit θ + implicit x*(θ)).
-    f_primal = z -> prior.logp_func(z; θ_primal...)
-    known_backend = GMRFs.known_pattern_hessian_backend(f_primal, x_star)
+    # Take the structural pattern from the prior's *own* primal local quadratic rather than
+    # re-tracing `logp_func`: that reuses whatever Hessian backend the prior was built with,
+    # so it works even when the density can't be traced (e.g. it solves an ODE). The
+    # structural pattern is θ-independent, so detecting it at the primal point is exact.
+    Q_prior_primal = GMRFs.local_quadratic(prior, x_star; θ_primal...).Q
+    known_backend = GMRFs.known_pattern_hessian_backend(Q_prior_primal)
     H_prior_dual = DI.hessian(z -> prior.logp_func(z; θ_full...), known_backend, x_star_dual)
     H_lik_dual = GMRFs.loghessian(x_star_dual, obs_lik)
     Q_post_dual = (-H_prior_dual) - H_lik_dual
