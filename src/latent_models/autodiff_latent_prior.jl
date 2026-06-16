@@ -114,10 +114,18 @@ function local_quadratic(m::AutoDiffLatentPrior, x_ref::AbstractVector; θ...)
     logp_ref = f(xS)
     g = DI.gradient(f, grad_prep, m.grad_backend, xS)
     H = DI.hessian(f, hess_prep, m.hess_backend, xS)
-    Q = sparse(-H)
+    Q = _neg_hessian_csc(H)
     h = g + Q * xS
     return LocalLatentQuadratic(Q, h, logp_ref, xS)
 end
+
+# Q = -∇²f as a SparseMatrixCSC. For a sparse Hessian (the SparseADLikelihoods
+# path) negate in place so the *structural* pattern — including coloring-filled
+# structural zeros — is preserved across iterates; that fixed pattern is what the
+# GMRFWorkspace path reuses. A dense Hessian (no extension loaded) is sparsified,
+# which is fine for the cache path but not pattern-stable for a workspace.
+_neg_hessian_csc(H::SparseMatrixCSC) = -H
+_neg_hessian_csc(H::AbstractMatrix) = sparse(-H)
 
 """
     prior_logdensity(m::AutoDiffLatentPrior, x; θ...) -> Real

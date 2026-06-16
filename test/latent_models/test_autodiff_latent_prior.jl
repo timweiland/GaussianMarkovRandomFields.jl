@@ -138,4 +138,24 @@ _qd_logp_kw(x; τ, a) = _qd_logp(x, τ, a)
         end
         @test abs(logml - log(S)) / abs(log(S)) < 1.0e-2
     end
+
+    @testset "make_workspace + workspace GA matches the cache path" begin
+        # The structural (value-agnostic) Hessian sparsity lets make_workspace seed
+        # from x_ref = zeros; the workspace path must then agree with the cache path
+        # (and the prior's per-iterate Q pattern must stay fixed, else the workspace
+        # update would error).
+        Random.seed!(43)
+        n = 4; τ = 2.0; a = 0.5; σ = 0.5
+        y = [0.4, 0.7, 1.0, 1.1]
+        prior = AutoDiffLatentPrior(_qd_logp_kw; n = n, hyperparams = (:τ, :a))
+        obs_lik = ExponentialFamily(Normal)(y; σ = σ)
+
+        post_cache = gaussian_approximation(prior, obs_lik; τ = τ, a = a)
+        ws = make_workspace(prior; τ = τ, a = a)
+        post_ws = gaussian_approximation(prior, obs_lik; τ = τ, a = a, ws = ws)
+
+        @test post_ws isa GaussianMarkovRandomFields.WorkspaceGMRF
+        @test mean(post_ws) ≈ mean(post_cache) atol = 1.0e-6
+        @test Matrix(precision_matrix(post_ws)) ≈ Matrix(precision_matrix(post_cache)) atol = 1.0e-4
+    end
 end

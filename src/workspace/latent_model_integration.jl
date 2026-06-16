@@ -47,6 +47,43 @@ make_workspace_pool(m::LatentModel; size::Int = Threads.nthreads(), kwargs...) =
     WorkspacePool(m; size = size, kwargs...)
 
 """
+    make_workspace(m::NonGaussianLatentPrior; x_ref=zeros(length(m)), θ_ref...) -> GMRFWorkspace
+
+Construct a workspace for a non-Gaussian latent prior, seeded with the sparsity
+pattern of `local_quadratic(m, x_ref; θ_ref...).Q`. The seed must carry the union
+of the patterns the prior produces across Newton iterates.
+
+For AD-defined priors ([`AutoDiffLatentPrior`](@ref)) the Hessian sparsity is
+detected *structurally* (value-agnostic), so `x_ref = zeros` always captures the
+full pattern. For a hand-written `local_quadratic` whose pattern is x-dependent,
+pass a representative non-degenerate `x_ref`.
+
+!!! warning "Experimental API (pre v0.5)"
+    Surface may shift until validated against at least two downstream implementations.
+"""
+function make_workspace(
+        m::NonGaussianLatentPrior; x_ref::AbstractVector = zeros(length(m)), kwargs...
+    )
+    return GMRFWorkspace(_ensure_sparse(local_quadratic(m, x_ref; kwargs...).Q))
+end
+
+"""
+    make_workspace_pool(m::NonGaussianLatentPrior; size=Threads.nthreads(), x_ref=zeros(length(m)), θ_ref...) -> WorkspacePool
+
+Task-safe pool of workspaces for a non-Gaussian latent prior, seeded as in
+[`make_workspace`](@ref) (see its note on the `x_ref` reference point).
+
+!!! warning "Experimental API (pre v0.5)"
+    Surface may shift until validated against at least two downstream implementations.
+"""
+function make_workspace_pool(
+        m::NonGaussianLatentPrior; size::Int = Threads.nthreads(),
+        x_ref::AbstractVector = zeros(length(m)), kwargs...
+    )
+    return WorkspacePool(_ensure_sparse(local_quadratic(m, x_ref; kwargs...).Q); size = size)
+end
+
+"""
     GMRFWorkspace(model::LatentModel; kwargs...)
 
 Create a `GMRFWorkspace` from a `LatentModel` at reference hyperparameter values.
