@@ -158,4 +158,40 @@ _qd_logp_kw(x; τ, a) = _qd_logp(x, τ, a)
         @test mean(post_ws) ≈ mean(post_cache) atol = 1.0e-6
         @test Matrix(precision_matrix(post_ws)) ≈ Matrix(precision_matrix(post_cache)) atol = 1.0e-4
     end
+
+    @testset "ZeroLikelihood evaluates to nothing" begin
+        x = randn(5)
+        @test loglik(x, ZeroLikelihood()) == 0.0
+        @test loggrad(x, ZeroLikelihood()) == zeros(5)
+        @test loghessian(x, ZeroLikelihood()) == Diagonal(zeros(5))
+    end
+
+    @testset "monolithic joint via ZeroLikelihood == structured (prior + likelihood)" begin
+        # Design (a): a monolithic TMB joint is an AutoDiffLatentPrior carrying ALL the
+        # energy + ZeroLikelihood. When the joint factorises as prior + likelihood, it
+        # must give the same posterior and Laplace marginal as the structured form.
+        Random.seed!(7)
+        n = 4; τ = 2.0; a = 0.6; σ = 0.5
+        y = [0.4, 0.7, 1.0, 1.1]
+
+        # Structured: AD prior for the drift + an exact, closed-form Normal likelihood.
+        drift_prior = AutoDiffLatentPrior(_qd_logp_kw; n = n, hyperparams = (:τ, :a))
+        obs_lik = ExponentialFamily(Normal)(y; σ = σ)
+        post_structured = gaussian_approximation(drift_prior, obs_lik; τ = τ, a = a)
+
+        # Monolithic: drift log-prior + Normal log-likelihood folded into one joint.
+        # The Normal term is written as plain arithmetic (not `Normal(μ, σ)`) so the
+        # sparse-Hessian tracer can trace through it — see the AutoDiffLatentPrior note.
+        joint(x; τ, a) = _qd_logp(x, τ, a) -
+            0.5 * sum(((y .- x) ./ σ) .^ 2) - n * (log(σ) + 0.5 * log(2π))
+        joint_prior = AutoDiffLatentPrior(joint; n = n, hyperparams = (:τ, :a))
+        post_joint = gaussian_approximation(joint_prior, ZeroLikelihood(); τ = τ, a = a)
+
+        @test mean(post_joint) ≈ mean(post_structured) atol = 1.0e-6
+        @test Matrix(precision_matrix(post_joint)) ≈ Matrix(precision_matrix(post_structured)) atol = 1.0e-4
+
+        ml_structured = marginal_loglikelihood(drift_prior, obs_lik, post_structured; τ = τ, a = a)
+        ml_joint = marginal_loglikelihood(joint_prior, ZeroLikelihood(), post_joint; τ = τ, a = a)
+        @test ml_joint ≈ ml_structured atol = 1.0e-6
+    end
 end

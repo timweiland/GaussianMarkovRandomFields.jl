@@ -21,10 +21,19 @@ so the pattern is stable across Newton iterates, which is what lets the
 `GMRFWorkspace` path reuse a single symbolic factorisation.
 
 A monolithic TMB-style joint `f(x, θ; data)` is just an `AutoDiffLatentPrior`
-carrying the entire energy, combined with a trivial likelihood — `marginal_loglikelihood`
-then reduces to the Laplace marginal `log ∫ exp f(x, θ) dx`. The structured case
-(an AD-defined latent prior plus an *exact* closed-form likelihood) works equally
-well by composing this prior with any [`ObservationLikelihood`](@ref).
+carrying the entire energy, combined with a [`ZeroLikelihood`](@ref) —
+`marginal_loglikelihood` then reduces to the Laplace marginal `log ∫ exp f(x, θ) dx`.
+The structured case (an AD-defined latent prior plus an *exact* closed-form
+likelihood) works equally well by composing this prior with any
+[`ObservationLikelihood`](@ref).
+
+!!! note "Write `logp_func` in tracer-friendly form"
+    With the default sparse Hessian backend, the sparsity pattern is detected by
+    running `logp_func` on `SparseConnectivityTracer` tracers. Express the density
+    as plain arithmetic on `x`; constructs that branch on a tracer value — e.g.
+    `Distributions.Normal(x[i], σ)` (whose `check_args` tests `σ > 0`) — will error.
+    Inline the closed form (`-0.5*((y-x)/σ)^2 - log(σ) - 0.5log(2π)`), or pass a
+    dense / `KnownHessianSparsityDetector` `hessian_backend`.
 
 # Fields
 - `logp_func::F`: log-density with signature `(x; θ...) -> Real`.
