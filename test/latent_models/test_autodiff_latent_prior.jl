@@ -182,9 +182,13 @@ _qd_logp_kw(x; τ, a) = _qd_logp(x, τ, a)
         # Monolithic: drift log-prior + Normal log-likelihood folded into one joint.
         # The Normal term is written as plain arithmetic (not `Normal(μ, σ)`) so the
         # sparse-Hessian tracer can trace through it — see the AutoDiffLatentPrior note.
+        # `joint` captures the data array `y`; the default Enzyme backend can't prove
+        # such a capture read-only, so use ForwardDiff here (see the docstring note).
         joint(x; τ, a) = _qd_logp(x, τ, a) -
             0.5 * sum(((y .- x) ./ σ) .^ 2) - n * (log(σ) + 0.5 * log(2π))
-        joint_prior = AutoDiffLatentPrior(joint; n = n, hyperparams = (:τ, :a))
+        joint_prior = AutoDiffLatentPrior(
+            joint; n = n, hyperparams = (:τ, :a), grad_backend = DI.AutoForwardDiff()
+        )
         post_joint = gaussian_approximation(joint_prior, ZeroLikelihood(); τ = τ, a = a)
 
         @test mean(post_joint) ≈ mean(post_structured) atol = 1.0e-6

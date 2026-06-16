@@ -35,6 +35,13 @@ likelihood) works equally well by composing this prior with any
     Inline the closed form (`-0.5*((y-x)/σ)^2 - log(σ) - 0.5log(2π)`), or pass a
     dense / `KnownHessianSparsityDetector` `hessian_backend`.
 
+!!! note "Capturing data with the Enzyme default backend"
+    `grad_backend` defaults to Enzyme when it's loaded. Enzyme can't prove a
+    `logp_func` that *captures* a mutable array (e.g. observation data folded into a
+    monolithic joint) is read-only, and raises `EnzymeMutabilityException`. For such
+    a `logp_func`, pass `grad_backend = AutoForwardDiff()` (its `hessian_backend`
+    follows automatically). Functions that capture only scalars are unaffected.
+
 # Hyperparameter gradients
 With the ForwardDiff extension loaded, the Laplace marginal likelihood is
 differentiable in the hyperparameters: `ForwardDiff.gradient(θ -> marginal_loglikelihood(
