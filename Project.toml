@@ -1,6 +1,6 @@
 name = "GaussianMarkovRandomFields"
 uuid = "d5f06795-35bb-4323-9f0b-405ef76cfc5b"
-version = "0.12.0"
+version = "0.12.1"
 authors = ["Tim Weiland <hello@timwei.land> and contributors"]
 
 [deps]
