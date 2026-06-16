@@ -326,10 +326,17 @@ function loghessian(x_full, ltlik::LinearlyTransformedLikelihood)
     hess_η = loghessian(η, ltlik.base_likelihood)
     A = ltlik.design_matrix
 
-    # Chain rule: A^T * hess_η * A. η = A·x + b is affine in x, so the additive
-    # offset leaves ∂η/∂x = A and the Hessian structure unchanged (it only shifts the
-    # point η at which the base Hessian is evaluated).
-    return Symmetric(A' * hess_η * A)
+    # Chain rule: H = Aᵀ·hess_η·A. η = A·x + b is affine in x, so the additive offset
+    # leaves ∂η/∂x = A and the Hessian structure unchanged (it only shifts the point η at
+    # which the base Hessian is evaluated).
+    #
+    # Parenthesize as Aᵀ·(hess_η·A), NOT (Aᵀ·hess_η)·A. On Julia ≥1.11 the left-associated
+    # `Aᵀ·hess_η` dispatches to `Adjoint{SparseMatrixCSC}·Diagonal`, which materializes a
+    # *fully dense* structural pattern of explicit zeros (a diagonal A blows up to n²
+    # stored entries — O(n²) memory/compute, and the spurious zeros trip the workspace
+    # Newton step's `pattern(H) ⊆ pattern(Q)` check). Evaluating `hess_η·A` first keeps
+    # every factor a genuine sparse product, so H carries only true nonzeros.
+    return Symmetric(A' * (hess_η * A))
 end
 
 """
