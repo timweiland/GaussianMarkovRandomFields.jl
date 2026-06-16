@@ -84,7 +84,27 @@ function GaussianMarkovRandomFields.local_quadratic(
     return LocalLatentQuadratic(Q, h, logp_ref, x_ref)
 end
 
+# Optional line-search hook: evaluate the scalar log-density directly, skipping the
+# sparse-Hessian assembly that `local_quadratic` does. Must agree with the default
+# (`local_quadratic(m, x; θ...).logp_ref`) at every point.
+GaussianMarkovRandomFields.prior_logdensity(
+    m::QuadraticDriftModel, x::AbstractVector; τ::Real, a::Real,
+) = _qd_logp(x, τ, a)
+
 @testset "local_quadratic — non-Gaussian prior validation" begin
+
+    @testset "prior_logdensity override matches local_quadratic.logp_ref" begin
+        Random.seed!(101)
+        n = 5
+        τ = 1.3
+        a = 0.45
+        model = QuadraticDriftModel(n)
+        for _ in 1:5
+            x = randn(n) .* 0.6
+            @test prior_logdensity(model, x; τ = τ, a = a) ==
+                local_quadratic(model, x; τ = τ, a = a).logp_ref
+        end
+    end
 
     @testset "Hessian/gradient analytic vs FiniteDiff" begin
         # Sanity-check the analytic Q, h before using them as ground truth.

@@ -53,6 +53,7 @@ model_name(::AbstractLatentPrior)
 ```@docs
 LocalLatentQuadratic
 local_quadratic
+prior_logdensity
 ```
 
 ## Available Models

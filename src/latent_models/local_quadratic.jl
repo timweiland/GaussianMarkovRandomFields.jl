@@ -1,4 +1,4 @@
-export LocalLatentQuadratic, local_quadratic
+export LocalLatentQuadratic, local_quadratic, prior_logdensity
 
 """
     LocalLatentQuadratic{TQ, Th, T, Tx}
@@ -61,6 +61,22 @@ function local_quadratic(m::NonGaussianLatentPrior, x_ref::AbstractVector; θ...
     )
 end
 
+"""
+    prior_logdensity(m::AbstractLatentPrior, x::AbstractVector; θ...) -> Real
+
+Exact `log p(x | θ)` of the latent prior at `x`.
+
+The iterated-linearisation line search evaluates the prior log-density at trial
+points where it needs only this scalar — not the full local quadratic. The
+default delegates to `local_quadratic(m, x; θ...).logp_ref`, so models that
+don't override it keep working unchanged. A [`NonGaussianLatentPrior`](@ref)
+whose `local_quadratic` is expensive (e.g. it assembles a sparse Hessian) can
+override `prior_logdensity` with a direct, allocation-light evaluation of
+`log p(x | θ)` to make the line search cheaper.
+"""
+prior_logdensity(m::AbstractLatentPrior, x::AbstractVector; θ...) =
+    local_quadratic(m, x; θ...).logp_ref
+
 # Internal adapter: bundles an `AbstractLatentPrior` with its
 # hyperparameter `NamedTuple` so the Newton loops can dispatch the prior
 # side on a single argument.
@@ -93,7 +109,8 @@ end
 
 # Line-search energy at an arbitrary point. Gaussian priors reuse the
 # at-iterate `(Q, h)` (constant in `x`); the `LatentPrior` adapter
-# re-evaluates the exact prior log-density.
+# re-evaluates the exact prior log-density via `prior_logdensity`, which a
+# subtype can override to avoid rebuilding the full local quadratic per
+# trial point.
 _prior_energy(::AbstractGMRF, Q, h, x::AbstractVector) = 0.5 * dot(x, Q, x) - dot(x, h)
-_prior_energy(p::LatentPrior, _Q, _h, x::AbstractVector) =
-    -local_quadratic(p.model, x; p.θ...).logp_ref
+_prior_energy(p::LatentPrior, _Q, _h, x::AbstractVector) = -prior_logdensity(p.model, x; p.θ...)
