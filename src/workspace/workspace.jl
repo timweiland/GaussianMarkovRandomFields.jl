@@ -6,7 +6,7 @@ export AbstractLatentWorkspace, AbstractLatentWorkspacePool
 Abstract supertype for workspace objects that persist factorization state
 across precision-matrix updates for a `LatentModel`.
 
-!!! warning "Experimental API (pre v0.5)"
+!!! warning "Experimental API"
     The `AbstractLatentWorkspace` protocol is experimental. Surface may shift
     until validated against at least two downstream implementations.
 
@@ -27,7 +27,7 @@ abstract type AbstractLatentWorkspace end
 Abstract supertype for task-safe pools of workspaces for use across
 multiple concurrent Julia tasks.
 
-!!! warning "Experimental API (pre v0.5)"
+!!! warning "Experimental API"
     See [`AbstractLatentWorkspace`](@ref) for stability status.
 
 # Protocol

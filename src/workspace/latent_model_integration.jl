@@ -14,7 +14,7 @@ Default implementation: returns `GMRFWorkspace(m; θ_ref...)`. Downstream
 workspace type when their factorization structure doesn't fit
 `GMRFWorkspace`'s "one sparse precision, one factorization" shape.
 
-!!! warning "Experimental API (pre v0.5)"
+!!! warning "Experimental API"
     Surface may shift until validated against at least two downstream
     implementations.
 
@@ -39,7 +39,7 @@ Construct a task-safe pool of workspaces for parallel evaluation of `m`.
 Default implementation: returns `WorkspacePool(m; size=size, θ_ref...)`.
 Downstream `LatentModel` subtypes may override to return a peer pool type.
 
-!!! warning "Experimental API (pre v0.5)"
+!!! warning "Experimental API"
     Surface may shift until validated against at least two downstream
     implementations.
 """
@@ -58,7 +58,7 @@ detected *structurally* (value-agnostic), so `x_ref = zeros` always captures the
 full pattern. For a hand-written `local_quadratic` whose pattern is x-dependent,
 pass a representative non-degenerate `x_ref`.
 
-!!! warning "Experimental API (pre v0.5)"
+!!! warning "Experimental API"
     Surface may shift until validated against at least two downstream implementations.
 """
 function make_workspace(
@@ -73,7 +73,7 @@ end
 Task-safe pool of workspaces for a non-Gaussian latent prior, seeded as in
 [`make_workspace`](@ref) (see its note on the `x_ref` reference point).
 
-!!! warning "Experimental API (pre v0.5)"
+!!! warning "Experimental API"
     Surface may shift until validated against at least two downstream implementations.
 """
 function make_workspace_pool(
