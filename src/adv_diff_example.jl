@@ -29,10 +29,10 @@ E_total = [E; E₂]
 
 N_ic = length(ic_vals_total)
 Q_ϵ = sparse(1.0e10 * I, (N_ic, N_ic))
-X_cond = condition_on_observations(X, E_total, Q_ϵ, ic_vals_total)
+X_cond = linear_condition(X; A = E_total, Q_ϵ = Q_ϵ, y = ic_vals_total)
 
 # X₀ = X.ssm.x₀
-# X₀_cond = condition_on_observations(X₀, E_spatial, Q_ϵ, ic_vals)
+# X₀_cond = linear_condition(X₀; A = E_spatial, Q_ϵ = Q_ϵ, y = ic_vals)
 # pred₀ = Array(mean(X₀_cond))
 # G = G = sparse(X.ssm.G(0.005))
 # M = sparse(X.ssm.M(0.005))

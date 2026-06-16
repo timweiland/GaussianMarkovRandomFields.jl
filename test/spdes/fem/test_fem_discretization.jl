@@ -11,7 +11,7 @@ using GaussianMarkovRandomFields, Ferrite, SparseArrays
     @test ndim(f) == 2
     @test ndofs(f) == (N_xy + 1)^2
 
-    X = [Tensors.Vec(0.5, 0.45), Tensors.Vec(0.67, 0.55)]
+    X = [Vec(0.5, 0.45), Vec(0.67, 0.55)]
     A = evaluation_matrix(f, X)
 
     @test size(A) == (length(X), ndofs(f))
@@ -23,6 +23,12 @@ using GaussianMarkovRandomFields, Ferrite, SparseArrays
     X_matrix = [0.5 0.45; 0.67 0.55]  # N×2 matrix
     A_matrix = evaluation_matrix(f, X_matrix)
     @test A_matrix ≈ A
+
+    # Points outside the mesh cannot be located in any cell and must raise a
+    # clear error rather than silently producing an empty row.
+    X_oob = [Vec(0.5, 0.45), Vec(5.0, 5.0)]  # second point lies outside [-1, 1]^2
+    @test_throws ArgumentError evaluation_matrix(f, X_oob)
+    @test_throws ArgumentError evaluation_matrix(f, [0.5 0.45; 5.0 5.0])
 
 
     node_idcs = [6, 13]

@@ -71,9 +71,44 @@ RW2Model
 
 ```@docs
 MaternModel
+BarrierModel
+barrier_triangles
 BesagModel
 BYM2Model
 ```
+
+#### Barrier Matérn model
+
+The barrier model ([Bakka2019](@cite)) is a non-stationary variant of the Matérn
+SPDE in which spatial correlation does **not** flow across designated *barrier*
+regions of the domain — for example land barriers (coastlines, islands) that
+should block correlation in a marine field. The stationary Matérn correlates
+points purely by Euclidean distance, so it incorrectly couples points that are
+close in straight-line distance but physically separated by a barrier.
+
+`BarrierModel` tags a subset of mesh triangles as barriers and gives them a small
+fixed range (`range_fraction` times the normal `range`), so the field
+decorrelates sharply across them. It keeps the same sparsity and computational
+cost as the stationary model, exposes the same `precision_matrix(model; τ, range)`
+interface, and reduces exactly to `MaternModel(disc; smoothness = 0)` when there
+are no barrier triangles.
+
+```julia
+using Ferrite, FerriteGmsh, Gmsh, LibGEOS   # activate the FEM extension
+
+disc = FEMDiscretization(grid, ip, qr)
+
+# Tag barrier triangles by their centroid lying inside a barrier polygon
+# (e.g. land). Pass an N×2 matrix of vertices or a vector of points.
+land  = [(-0.1, -1.0), (0.1, -1.0), (0.1, 1.0), (-0.1, 1.0)]
+cells = barrier_triangles(disc, land)
+
+model = BarrierModel(disc; barrier_cells = cells, range_fraction = 0.1)
+x = model(τ = 1.0, range = 0.5)   # a GMRF whose correlation does not cross the barrier
+```
+
+You can also pass an explicit `Vector{Int}` of triangle ids as `barrier_cells`.
+The model is defined for the ν = 1 (α = 2) Matérn on 2D discretizations.
 
 ### Independence Models
 

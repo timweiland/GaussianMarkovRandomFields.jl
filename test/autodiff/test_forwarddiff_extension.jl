@@ -597,4 +597,47 @@ using Test
             @test all(eigs .> 0)
         end
     end
+
+    @testset "loghessian LinearlyTransformedLikelihood: Dual specialization (#157)" begin
+        # The Dual-specialized loghessian materializes the transpose and
+        # right-associates (Aᵀ * (hess_η * A)); it must match the generic chain
+        # rule `Aᵀ * hess_η * A` up to floating-point reassociation, on the Dual
+        # value AND every partial component, for any base likelihood and offset.
+        rng = MersenneTwister(157)
+        m, n, P = 8, 20, 3
+        A = sprandn(rng, m, n, 0.35)
+        x0 = randn(rng, n)
+        seeds = randn(rng, n, P)
+        xd = [
+            ForwardDiff.Dual{:t}(x0[i], ForwardDiff.Partials(ntuple(k -> seeds[i, k], P)))
+                for i in 1:n
+        ]
+
+        # Full Dual-matrix agreement: values and each partial component.
+        function dual_mat_approx(X, Y)
+            ForwardDiff.value.(X) ≈ ForwardDiff.value.(Y) || return false
+            return all(ForwardDiff.partials.(X, k) ≈ ForwardDiff.partials.(Y, k) for k in 1:P)
+        end
+
+        bases = [
+            ("Normal", ExponentialFamily(Normal)(randn(rng, m); σ = 0.7)),
+            ("Poisson", ExponentialFamily(Poisson)(PoissonObservations(rand(rng, 0:5, m)))),
+        ]
+        for (_, base) in bases, offset in (nothing, randn(rng, m))
+            ltlik = LinearlyTransformedLikelihood(base, A, offset)
+            η = offset === nothing ? A * xd : A * xd .+ offset
+            hess_η = loghessian(η, base)
+            ref = Symmetric(Matrix(transpose(A)) * Matrix(hess_η) * Matrix(A))  # generic, dense
+            got = loghessian(xd, ltlik)                                          # new Dual method
+            @test got isa Symmetric
+            @test dual_mat_approx(Matrix(got), Matrix(ref))
+        end
+
+        # Dispatch guard: a Float64 latent field stays on the (exact) generic method.
+        ltlik_f = LinearlyTransformedLikelihood(
+            ExponentialFamily(Poisson)(PoissonObservations(rand(rng, 0:5, m))), A,
+        )
+        Hf = loghessian(randn(rng, n), ltlik_f)
+        @test eltype(Hf) <: AbstractFloat
+    end
 end

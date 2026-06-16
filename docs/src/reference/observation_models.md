@@ -243,6 +243,7 @@ Key properties
   - `∇²ℓ(x) ≈ − J(x)' Diagonal(w) J(x)`
 - `σ`: accepts a scalar or vector (heteroskedastic), both interpreted as standard deviations.
 - Sparse autodiff: requires loading `SparseConnectivityTracer` and `SparseMatrixColorings` to activate the sparse Jacobian backend.
+- Fixed sparsity pattern: the residual's Jacobian and residual-curvature Hessian sparsity patterns are detected once (at a probe point) and reused, so they must be independent of both `x` and the hyperparameters `θ`. Data-dependent control flow that changes *which* latents an output couples to (e.g. `x[1] > 0 ? x[1] * x[2] : x[1]`) is unsupported: `SparseConnectivityTracer` follows only the branch active at the probe point, so the pattern is frozen on one branch and entries on the others are silently dropped.
 
 Example
 ```julia
@@ -440,17 +441,60 @@ For multiple observation types in a single model:
 # Multiple observation vectors
 count_data = [1, 3, 0, 2]
 binary_data = [0, 1, 1, 0]
-obs = CompositeObservations(count_data, binary_data)
+obs = CompositeObservations((count_data, binary_data))
 
 # Corresponding models for each observation type
 poisson_model = ExponentialFamily(Poisson)
-bernoulli_model = ExponentialFamily(Bernoulli) 
-composite_model = CompositeObservationModel(poisson_model, bernoulli_model)
+bernoulli_model = ExponentialFamily(Bernoulli)
+composite_model = CompositeObservationModel((poisson_model, bernoulli_model))
 
 obs_lik = composite_model(obs)
 # Latent field x now corresponds to concatenated observations
 ll = loglik(x, obs_lik)
 ```
+
+When components share an internal kwarg name (e.g. two `ExponentialFamily(Normal)`
+components both expecting `σ`), pass per-component routes binding the inner name
+to a distinct outer hyperparameter:
+
+```julia
+m_phys = ExponentialFamily(Normal)
+m_data = ExponentialFamily(Normal)
+composite_model = CompositeObservationModel(
+    (m_phys, m_data),
+    ((σ = :σ_phys,), (σ = :σ_data,)),
+)
+obs_lik = composite_model(obs; σ_phys = 0.1, σ_data = 5.0)
+```
+
+A `nothing` route keeps the legacy passthrough behaviour for that component, so
+the single-arg constructor remains the right choice when component kwarg names
+are already disjoint.
+
+### Linear Predictor Marginals
+
+Downstream consumers of a Gaussian approximation (posterior predictive checks,
+calibration plots, WAIC/CPO/PSIS-LOO accumulators) need the per-observation
+*linear-predictor* marginal `η_i = aᵢᵀ x`, not the per-latent-coordinate
+marginal. [`linear_predictor_marginals`](@ref) is the primitive for this:
+
+```julia
+ga = gaussian_approximation(prior, obs_lik)
+μ_η, v_η, eta_likelihood = linear_predictor_marginals(ga, obs_lik)
+```
+
+For each observation `i`, `μ_η[i]` and `v_η[i]` are the mean and variance of
+`η_i` under `ga`, and `eta_likelihood` is the observation likelihood with any
+design-matrix wrapping stripped — ready to evaluate `p(y | η)` at candidate
+`η` values without going back through the design matrix. The dispatch recurses
+through `LinearlyTransformedLikelihood` and `CompositeLikelihood`, so a mixed
+LGM (direct channels + linearly-transformed channels in a composite) is
+handled uniformly.
+
+`v_η` for `LinearlyTransformedLikelihood` is `diag(A · Σ · Aᵀ)` computed from
+the posterior's selected-inversion output; the result is exact whenever the
+prior precision's pattern subsumes `Aᵀ A` (the standard case when the
+posterior comes out of `gaussian_approximation`).
 
 ## API Reference
 
@@ -523,6 +567,8 @@ PointSecondDerivativeObsModel
 ```@docs
 LinearlyTransformedObservationModel
 LinearlyTransformedLikelihood
+ParameterizedMatrix
+ParameterizedOffset
 PoissonObservations
 NegativeBinomialObservations
 counts
@@ -533,4 +579,5 @@ trials
 CompositeObservations
 CompositeObservationModel
 CompositeLikelihood
+linear_predictor_marginals
 ```

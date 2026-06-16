@@ -157,7 +157,7 @@ Used by the `(::LatentModel)(ws; θ...)` fast path so that workspaces
 built with the joint prior + observation-Hessian pattern can still accept
 prior-pattern precision matrices from the model.
 """
-function _pad_to_workspace_pattern(Q::SparseMatrixCSC, ws::GMRFWorkspace)
+function _pad_to_workspace_pattern(Q::SparseMatrixCSC{T}, ws::GMRFWorkspace) where {T}
     size(Q) == size(ws.Q) ||
         throw(
         DimensionMismatch(
@@ -166,11 +166,10 @@ function _pad_to_workspace_pattern(Q::SparseMatrixCSC, ws::GMRFWorkspace)
     )
     _same_pattern(Q, ws.Q) && return Q
 
-    T = eltype(Q)
     Q_padded = SparseMatrixCSC(
         ws.Q.m, ws.Q.n,
         copy(ws.Q.colptr), copy(ws.Q.rowval),
-        zeros(T, length(ws.Q.nzval))
+        zeros(T, length(ws.Q.nzval))::Vector{T}
     )
 
     Q_rows = rowvals(Q)

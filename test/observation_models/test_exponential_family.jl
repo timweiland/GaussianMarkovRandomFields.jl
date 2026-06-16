@@ -22,6 +22,26 @@ end
 
 @testset "ExponentialFamily Models" begin
 
+    @testset "PoissonObservations validation" begin
+        @test_throws DomainError PoissonObservations([-1, 2])
+        @test_throws DomainError PoissonObservations([1, 2], [0.0, 1.0])
+        @test_throws DomainError PoissonObservations([1, 2], [-1.0, 1.0])
+        @test_throws DimensionMismatch PoissonObservations([1], [1.0, 2.0])
+    end
+
+    @testset "BinomialObservations validation" begin
+        # Length mismatch
+        @test_throws DimensionMismatch BinomialObservations([1, 2], [3])
+        # Successes exceeding trials (relational ArgumentError) — note: this
+        # check fires before the non-negativity check, so an obs like
+        # (0, -1) hits this branch rather than the DomainError branch.
+        @test_throws ArgumentError BinomialObservations([5, 2], [3, 3])
+        @test_throws ArgumentError BinomialObservations([0, 1], [-1, 3])
+        # Negative values where successes ≤ trials (domain violation)
+        @test_throws DomainError BinomialObservations([-1, 0], [3, 3])
+        @test_throws DomainError BinomialObservations([-2, 0], [-1, 1])
+    end
+
     @testset "Poisson Family" begin
         # Test with different link functions
         links = [LogLink(), IdentityLink()]

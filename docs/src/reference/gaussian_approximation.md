@@ -115,7 +115,7 @@ The package includes significant performance optimizations:
 
 2. **Non-Gaussian latent prior.** When the prior log-density is not quadratic in `x` (a [`NonGaussianLatentPrior`](@ref) — e.g. a nonlinear state-space model), fixed-Q Newton on a single Gaussian approximation is biased: the prior Hessian depends on `x`, so the linearisation has to track the current Newton iterate. The dispatch on `NonGaussianLatentPrior` runs *iterated re-linearisation* — at every Newton step the prior is re-quadratised at the current iterate via [`local_quadratic`](@ref), and the joint Newton system is solved against the re-linearised prior. The line-search merit uses the *exact* `log p(x | θ)` carried in `LocalLatentQuadratic.logp_ref`.
 
-Both cases share the same Newton machinery (cache-backed via `LinearSolve` or workspace-backed via `GMRFWorkspace`); the prior side is only queried via `prior_quadratic(prior, x)` per iterate, so the loop body is identical regardless of whether the prior is Gaussian.
+Both cases share the same Newton machinery (cache-backed via `LinearSolve` or workspace-backed via `GMRFWorkspace`); the prior side is only queried via a per-iterate local-quadratic hook (returning `(Q, h)` plus a line-search energy), so the loop body is identical regardless of whether the prior is Gaussian. For Gaussian priors that hook never evaluates `logpdf`, so the line search adds no factorization on a shared workspace.
 
 ```julia
 using GaussianMarkovRandomFields

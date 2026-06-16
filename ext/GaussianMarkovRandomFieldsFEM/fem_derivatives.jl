@@ -1,8 +1,3 @@
-using Tensors, Ferrite, SparseArrays
-using Tensors: ⊗
-
-export derivative_matrices, second_derivative_matrices
-
 """
     shape_gradient_local(f::FEMDiscretization, shape_idx::Int, ξ)
 
@@ -10,7 +5,7 @@ Gradient of the shape function with index `shape_idx` with respect to the local
 coordinates `ξ`.
 """
 function shape_gradient_local(f::FEMDiscretization, shape_idx::Int, ξ)
-    return Tensors.gradient(
+    return gradient(
         ξ -> Ferrite.reference_shape_value(f.interpolation, ξ, shape_idx),
         ξ,
     )
@@ -23,7 +18,7 @@ Hessian of the shape function with index `shape_idx` with respect to the local
 coordinates `ξ`.
 """
 function shape_hessian_local(f::FEMDiscretization, shape_idx::Int, ξ)
-    return Tensors.hessian(
+    return hessian(
         ξ -> Ferrite.reference_shape_value(f.interpolation, ξ, shape_idx),
         ξ,
     )
@@ -56,7 +51,7 @@ physical element.
 """
 function geom_hessian(f::FEMDiscretization, dof_coords, ξ)
     hessians = [
-        Ferrite.hessian(ξ -> Ferrite.reference_shape_value(f.geom_interpolation, ξ, b), ξ) for b in 1:getnbasefunctions(f.geom_interpolation)
+        hessian(ξ -> Ferrite.reference_shape_value(f.geom_interpolation, ξ, b), ξ) for b in 1:getnbasefunctions(f.geom_interpolation)
     ]
     return sum([n ⊗ h for (n, h) in zip(dof_coords, hessians)])
 end
@@ -125,7 +120,7 @@ grid = generate_grid(Triangle, (20,20)) # hide
 ip = Lagrange{RefTriangle, 1}() # hide
 qr = QuadratureRule{RefTriangle}(2) # hide
 disc = FEMDiscretization(grid, ip, qr)
-X = [Tensors.Vec(0.11, 0.22), Tensors.Vec(-0.1, 0.4)]
+X = [Vec(0.11, 0.22), Vec(-0.1, 0.4)]
 
 mats = derivative_matrices(disc, X; derivative_idcs=[2])
 ```
@@ -171,7 +166,7 @@ end
     derivative_matrices(f::FEMDiscretization, X::AbstractMatrix; kwargs...)
 
 Convenience method that accepts a matrix where each row is a point.
-Converts the matrix to a Vector of Tensors.Vec and delegates to the vector method.
+Converts the matrix to a Vector of Vec and delegates to the vector method.
 """
 function derivative_matrices(
         f::FEMDiscretization,
@@ -183,8 +178,8 @@ function derivative_matrices(
     D = ndim(f)
     size(X, 2) == D || throw(ArgumentError("Matrix must have $D columns for $(D)D discretization, got $(size(X, 2))"))
 
-    # Convert matrix to Vector of Tensors.Vec
-    X_vec = [Tensors.Vec(Tuple(X[i, :])) for i in 1:size(X, 1)]
+    # Convert matrix to Vector of Vec
+    X_vec = [Vec(Tuple(X[i, :])) for i in 1:size(X, 1)]
 
     # Delegate to existing implementation
     return derivative_matrices(f, X_vec; derivative_idcs = derivative_idcs, field = field)
@@ -208,7 +203,7 @@ grid = generate_grid(Triangle, (20,20)) # hide
 ip = Lagrange{RefTriangle, 1}() # hide
 qr = QuadratureRule{RefTriangle}(2) # hide
 disc = FEMDiscretization(grid, ip, qr)
-X = [Tensors.Vec(0.11, 0.22), Tensors.Vec(-0.1, 0.4)]
+X = [Vec(0.11, 0.22), Vec(-0.1, 0.4)]
 
 A, B = derivative_matrices(disc, X; derivative_idcs=[(1, 1), (2, 2)])
 laplacian = A + B
@@ -261,7 +256,7 @@ end
     second_derivative_matrices(f::FEMDiscretization, X::AbstractMatrix; kwargs...)
 
 Convenience method that accepts a matrix where each row is a point.
-Converts the matrix to a Vector of Tensors.Vec and delegates to the vector method.
+Converts the matrix to a Vector of Vec and delegates to the vector method.
 """
 function second_derivative_matrices(
         f::FEMDiscretization,
@@ -273,8 +268,8 @@ function second_derivative_matrices(
     D = ndim(f)
     size(X, 2) == D || throw(ArgumentError("Matrix must have $D columns for $(D)D discretization, got $(size(X, 2))"))
 
-    # Convert matrix to Vector of Tensors.Vec
-    X_vec = [Tensors.Vec(Tuple(X[i, :])) for i in 1:size(X, 1)]
+    # Convert matrix to Vector of Vec
+    X_vec = [Vec(Tuple(X[i, :])) for i in 1:size(X, 1)]
 
     # Delegate to existing implementation
     return second_derivative_matrices(f, X_vec; derivative_idcs = derivative_idcs, field = field)

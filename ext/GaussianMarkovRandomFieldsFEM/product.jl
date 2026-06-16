@@ -1,7 +1,3 @@
-using LinearAlgebra, Ferrite
-
-export kronecker_product_spatiotemporal_model
-
 """
     kronecker_product_spatiotemporal_model(
         Q_t::AbstractMatrix,

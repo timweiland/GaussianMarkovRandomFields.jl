@@ -249,6 +249,35 @@ function selinv_diag(ws::GMRFWorkspace)
 end
 
 """
+    selinv_dot(ws::GMRFWorkspace, B::AbstractMatrix)
+
+Return `dot(selinv(Q), B) = tr(Q⁻¹ B)`, the selected inverse contracted against
+`B` (whose pattern must be a subset of the Cholesky factor's). On the CHOLMOD
+backend this dots straight against the supernodal blocks, skipping the full
+selected-inverse `SparseMatrixCSC` build. `B` may carry `ForwardDiff.Dual`
+values, in which case the result is `Dual` — used by the `logdetcov` tangent.
+"""
+function selinv_dot(ws::GMRFWorkspace, B::AbstractMatrix)
+    ensure_selinv!(ws)
+    return selinv_dot(ws.backend, B)
+end
+
+"""
+    selinv_extract_at(ws::GMRFWorkspace, B::SparseMatrixCSC)
+
+Return the selected inverse of Q read at `B`'s sparsity pattern — a
+`SparseMatrixCSC` with exactly `B`'s pattern whose values are `Q⁻¹` at those
+positions (zero where outside the Cholesky factor's pattern). On the CHOLMOD
+backend this streams the entries straight from the supernodal blocks, never
+materializing the full selected inverse. Used for `diag(A Σ Aᵀ)`, which needs
+only the observation-local pattern `≈ AᵀA`.
+"""
+function selinv_extract_at(ws::GMRFWorkspace, B::SparseMatrixCSC)
+    ensure_selinv!(ws)
+    return selinv_extract_at(ws.backend, B)
+end
+
+"""
     backward_solve(ws::GMRFWorkspace, x::AbstractVector) -> Vector
 
 Compute L^T \\ x where Q = L L^T. Used for sampling from the GMRF.

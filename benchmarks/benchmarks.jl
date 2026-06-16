@@ -1,0 +1,273 @@
+#!/usr/bin/env julia
+"""
+Performance regression benchmark suite for GaussianMarkovRandomFields.jl.
+
+Defines a `BenchmarkTools.BenchmarkGroup` named `SUITE` that exercises
+representative-but-small workloads across the package's most user-facing
+operations. The aim is to catch performance regressions in CI without
+running large jobs.
+
+Conventions:
+- File path / variable name follow the `PkgBenchmark.jl` convention so the
+  suite can be picked up by `PkgBenchmark.benchmarkpkg` and similar tools.
+- Each top-level subgroup corresponds to one functional area of the package.
+- Problem sizes are tuned so the full suite runs in roughly a minute on a
+  laptop. Larger workloads belong in `*_comparison.jl` scripts.
+
+Usage (standalone):
+    cd benchmarks
+    julia --project=. -e 'include("benchmarks.jl"); using BenchmarkTools; results = run(SUITE; verbose=true); display(results)'
+
+Usage (via PkgBenchmark):
+    julia --project=benchmarks -e 'using PkgBenchmark; result = benchmarkpkg("GaussianMarkovRandomFields"); export_markdown(stdout, result)'
+"""
+
+using GaussianMarkovRandomFields
+using GaussianMarkovRandomFields: selinv, selinv_diag, loghessian, LinearlyTransformedLikelihood,
+    _row_diag_AΣAt
+using BenchmarkTools
+using Distributions: Poisson, logpdf
+using SparseArrays
+using LinearAlgebra
+using LinearSolve
+using Random
+using ForwardDiff
+using Zygote
+using DifferentiationInterface: DifferentiationInterface, AutoForwardDiff, AutoZygote
+
+const SUITE = BenchmarkGroup()
+
+# ---------------------------------------------------------------------------
+# Deterministic data shared across groups
+# ---------------------------------------------------------------------------
+
+Random.seed!(20260525)
+
+# Sizes chosen to be representative without being heavy.
+const N_SMALL = 500   # RW1/RW2/Besag baseline
+const N_MED = 1000    # GMRF core operations
+const N_AD = 100      # Autodiff pipeline (matches existing autodiff bench)
+
+# Pre-built precision matrices used by several groups.
+# RW1Model returns SymTridiagonal, which is what LDLtFactorization expects.
+# Convert to sparse only when feeding CHOLMOD.
+const Q_RW1_MED = precision_matrix(RW1Model(N_MED); τ = 1.0)
+const Q_RW1_SMALL = precision_matrix(RW1Model(N_SMALL); τ = 1.0)
+
+# Mean / evaluation vectors.
+const MU_MED = zeros(N_MED)
+const X_MED = randn(N_MED)
+const MU_SMALL = zeros(N_SMALL)
+
+# Pre-built GMRFs reused across groups so we benchmark the operation, not the
+# construction cost (construction itself is benchmarked separately).
+const GMRF_MED_LDLT = GMRF(MU_MED, Q_RW1_MED, LinearSolve.LDLtFactorization())
+const GMRF_MED_CHOLMOD = GMRF(MU_MED, sparse(Q_RW1_MED), LinearSolve.CHOLMODFactorization())
+
+# Poisson observations for gaussian_approximation benchmarks.
+const POISSON_LATENT_SMALL = 0.5 .* sin.(range(0, 2π; length = N_SMALL))
+const Y_POISSON_SMALL = PoissonObservations(
+    rand.(MersenneTwister(1), Poisson.(exp.(POISSON_LATENT_SMALL .+ 0.5)))
+)
+const OBS_LIK_POISSON_SMALL = ExponentialFamily(Poisson)(Y_POISSON_SMALL)
+const GMRF_PRIOR_SMALL = GMRF(MU_SMALL, Q_RW1_SMALL, LinearSolve.LDLtFactorization())
+
+# LinearlyTransformedLikelihood on the ForwardDiff.Dual (AD-through-hyperparameter)
+# path: the `loghessian` transpose product Aᵀ·hess_η·A specialized in #157. The design
+# matrix is a sparse local transform (~3 nonzeros/row), as in FEM / evaluation-matrix
+# observation models, and the latent field carries Dual partials (as on the IFT path).
+const LTL_BENCH_A = let Is = Int[], Js = Int[], Vs = Float64[], r = MersenneTwister(20260525)
+    for i in 1:200
+        cols = rand(r, 1:N_SMALL, 3)
+        w = rand(r, 3)
+        w ./= sum(w)
+        append!(Is, fill(i, 3))
+        append!(Js, cols)
+        append!(Vs, w)
+    end
+    sparse(Is, Js, Vs, 200, N_SMALL)
+end
+const LTL_BENCH_LIK = LinearlyTransformedLikelihood(
+    ExponentialFamily(Poisson)(PoissonObservations(rand(MersenneTwister(7), 0:5, 200))),
+    LTL_BENCH_A,
+)
+const LTL_BENCH_X_DUAL = let r = MersenneTwister(11)
+    [ForwardDiff.Dual{:bench}(randn(r), ForwardDiff.Partials((randn(r), randn(r)))) for _ in 1:N_SMALL]
+end
+
+# A banded symmetric sparse Σ standing in for a selected inverse whose per-row
+# fill grows ~√n (2D mesh): the input to the per-row predictor variance
+# diag(A Σ Aᵀ). Used to benchmark the observation-local contraction in #159.
+const LPM_SIGMA = let n = N_SMALL, b = round(Int, sqrt(N_SMALL)), Is = Int[], Js = Int[], Vs = Float64[]
+    for j in 1:n, k in max(1, j - b):min(n, j + b)
+        push!(Is, k)
+        push!(Js, j)
+        push!(Vs, exp(-abs(j - k) / b))
+    end
+    sparse(Is, Js, Vs, n, n) + sparse(1.0I, n, n)
+end
+
+# Adjacency matrix for a small 2D grid (Besag spatial model).
+function _grid_adjacency(nx::Int, ny::Int)
+    n = nx * ny
+    I = Int[]
+    J = Int[]
+    idx(i, j) = (j - 1) * nx + i
+    for j in 1:ny, i in 1:nx
+        k = idx(i, j)
+        if i < nx
+            push!(I, k); push!(J, idx(i + 1, j))
+            push!(I, idx(i + 1, j)); push!(J, k)
+        end
+        if j < ny
+            push!(I, k); push!(J, idx(i, j + 1))
+            push!(I, idx(i, j + 1)); push!(J, k)
+        end
+    end
+    return sparse(I, J, ones(Bool, length(I)), n, n)
+end
+
+const BESAG_ADJ = _grid_adjacency(20, 20)  # 400 nodes, mirrors typical spatial use cases
+
+# 3D grid graph-Laplacian precision (7-point stencil + diagonal). A 3D grid
+# produces the dense Cholesky fill that makes selected inversion non-trivial,
+# unlike the near-banded 1D/2D models above. Used for the workspace selinv
+# benchmarks below.
+function _grid_precision_3d(nx, ny, nz; c = 0.1)
+    n = nx * ny * nz
+    lin(i, j, k) = ((k - 1) * ny + (j - 1)) * nx + i
+    I = Int[]; J = Int[]; V = Float64[]
+    for k in 1:nz, j in 1:ny, i in 1:nx
+        p = lin(i, j, k)
+        deg = 0
+        for (di, dj, dk) in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1))
+            ii, jj, kk = i + di, j + dj, k + dk
+            if 1 <= ii <= nx && 1 <= jj <= ny && 1 <= kk <= nz
+                push!(I, p); push!(J, lin(ii, jj, kk)); push!(V, -1.0)
+                deg += 1
+            end
+        end
+        push!(I, p); push!(J, p); push!(V, deg + c)
+    end
+    return sparse(I, J, V, n, n)
+end
+
+const Q_GRID3D = _grid_precision_3d(12, 12, 12)  # 1728 DOF, dense Cholesky fill
+const WS_GRID3D = GMRFWorkspace(Q_GRID3D)
+
+# Reset only the selected-inverse caches so each benchmark sample re-runs the
+# selected inversion while reusing the numeric factorization. This isolates the
+# selinv cost (the subject of the benchmark) from refactorization.
+function _reset_selinv!(ws)
+    ws.selinv_valid = false
+    ws.backend.selinv_cache = nothing
+    ws.backend.selinv_diag_cache = nothing
+    return ws
+end
+
+# Autodiff pipeline data (matches the existing autodiff_comparison.jl shape).
+let
+    Random.seed!(123)
+    μ_true = 0.5 .+ 0.3 .* sin.(range(0, 2π; length = N_AD))
+    τ_true = 5.0
+    θ_init = vcat(μ_true, log(τ_true)) .+ randn(N_AD + 1) .* 0.1
+    x_true = μ_true .+ cumsum(randn(N_AD)) .* sqrt(1 / τ_true) .* 0.5
+    x_true .-= sum(x_true) / N_AD
+    y_counts = rand.(Poisson.(exp.(x_true .+ 0.5)))
+    y_obs = PoissonObservations(y_counts)
+    x_eval = randn(N_AD) .+ 0.3
+    global const AD_THETA = θ_init
+    global const AD_Y = y_obs
+    global const AD_X_EVAL = x_eval
+end
+
+# Workflow used inside the autodiff benchmark.
+function _ad_workflow(θ::AbstractVector, y::PoissonObservations, x_eval::AbstractVector)
+    n = N_AD
+    μ = θ[1:n]
+    τ = exp(θ[n + 1])
+    Q = precision_matrix(RW1Model(n); τ = τ)
+    prior = GMRF(μ, Q, LinearSolve.LDLtFactorization())
+    obs_lik = ExponentialFamily(Poisson)(y)
+    posterior = gaussian_approximation(prior, obs_lik)
+    return logpdf(posterior, x_eval)
+end
+
+const AD_LOSS = θ -> _ad_workflow(θ, AD_Y, AD_X_EVAL)
+const AD_PREP_ZYGOTE = DifferentiationInterface.prepare_gradient(AD_LOSS, AutoZygote(), AD_THETA)
+const AD_PREP_FORWARDDIFF = DifferentiationInterface.prepare_gradient(AD_LOSS, AutoForwardDiff(), AD_THETA)
+
+# ---------------------------------------------------------------------------
+# 1. Latent model construction (precision matrix assembly)
+# ---------------------------------------------------------------------------
+SUITE["latent_models"] = BenchmarkGroup()
+SUITE["latent_models"]["rw1_precision_matrix"] =
+    @benchmarkable precision_matrix(model; τ = 1.0) setup = (model = RW1Model($N_MED))
+SUITE["latent_models"]["rw2_precision_matrix"] =
+    @benchmarkable precision_matrix(model; τ = 1.0) setup = (model = RW2Model($N_SMALL))
+SUITE["latent_models"]["besag_construction"] =
+    @benchmarkable BesagModel($BESAG_ADJ)
+SUITE["latent_models"]["besag_instantiate"] =
+    @benchmarkable model(; τ = 1.0) setup = (model = BesagModel($BESAG_ADJ))
+
+# ---------------------------------------------------------------------------
+# 2. GMRF core operations
+# ---------------------------------------------------------------------------
+SUITE["gmrf"] = BenchmarkGroup()
+
+# Construction = factorization cost. Use LDLt (default for RW1) and CHOLMOD
+# (default for sparse SPD precision); both are common.
+SUITE["gmrf"]["construct_ldlt"] = @benchmarkable GMRF($MU_MED, $Q_RW1_MED, LinearSolve.LDLtFactorization())
+SUITE["gmrf"]["construct_cholmod"] = @benchmarkable GMRF($MU_MED, $(sparse(Q_RW1_MED)), LinearSolve.CHOLMODFactorization())
+
+# Read-only operations on a pre-built GMRF.
+SUITE["gmrf"]["logpdf_ldlt"] = @benchmarkable logpdf($GMRF_MED_LDLT, $X_MED)
+SUITE["gmrf"]["logpdf_cholmod"] = @benchmarkable logpdf($GMRF_MED_CHOLMOD, $X_MED)
+SUITE["gmrf"]["var_selinv"] = @benchmarkable var($GMRF_MED_CHOLMOD)
+SUITE["gmrf"]["rand_backward_solve"] =
+    @benchmarkable rand(rng, $GMRF_MED_LDLT) setup = (rng = MersenneTwister(0))
+
+# Workspace selected inverse (GMRFWorkspace CHOLMOD backend). Exercises the
+# selinv conversion that compute_selinv!/get_selinv cache — the full path builds
+# the sparse matrix, the diagonal path skips it.
+SUITE["gmrf"]["workspace_selinv_full"] =
+    @benchmarkable selinv(ws) setup = (ws = _reset_selinv!($WS_GRID3D))
+SUITE["gmrf"]["workspace_selinv_diag"] =
+    @benchmarkable selinv_diag(ws) setup = (ws = _reset_selinv!($WS_GRID3D))
+
+# ---------------------------------------------------------------------------
+# 3. Gaussian approximation (Fisher scoring hot path)
+# ---------------------------------------------------------------------------
+SUITE["gaussian_approximation"] = BenchmarkGroup()
+SUITE["gaussian_approximation"]["poisson_rw1_small"] =
+    @benchmarkable gaussian_approximation($GMRF_PRIOR_SMALL, $OBS_LIK_POISSON_SMALL)
+# loghessian for a LinearlyTransformedLikelihood on the Dual path (#157): guards the
+# transpose-materialization that keeps this ~70-90x off the lazy-Adjoint fallback.
+SUITE["gaussian_approximation"]["loghessian_ltl_dual"] =
+    @benchmarkable loghessian($LTL_BENCH_X_DUAL, $LTL_BENCH_LIK)
+# Per-row predictor variance diag(A Σ Aᵀ) via observation-local blocks (#159):
+# guards against reverting to the full m×n A*Σ product.
+SUITE["gaussian_approximation"]["row_diag_ltl_variance"] =
+    @benchmarkable _row_diag_AΣAt($LTL_BENCH_A, $LPM_SIGMA)
+
+# ---------------------------------------------------------------------------
+# 4. Autodiff pipeline — gradient through full workflow.
+# Forward- and reverse-mode are tracked separately because they exercise
+# largely disjoint code paths (custom ChainRules vs. ForwardDiff dual numbers).
+# ---------------------------------------------------------------------------
+SUITE["autodiff"] = BenchmarkGroup()
+SUITE["autodiff"]["zygote_grad_full_pipeline"] =
+    @benchmarkable DifferentiationInterface.gradient($AD_LOSS, $AD_PREP_ZYGOTE, AutoZygote(), $AD_THETA)
+SUITE["autodiff"]["forwarddiff_grad_full_pipeline"] =
+    @benchmarkable DifferentiationInterface.gradient($AD_LOSS, $AD_PREP_FORWARDDIFF, AutoForwardDiff(), $AD_THETA)
+
+# Default tuning: shorter than BenchmarkTools defaults so the suite finishes
+# quickly in CI. Override per-benchmark above when needed.
+for group in values(SUITE)
+    for bench in values(group)
+        bench.params.seconds = 5
+        bench.params.samples = 50
+    end
+end
+
+SUITE

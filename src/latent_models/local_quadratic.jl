@@ -53,21 +53,47 @@ function local_quadratic(m::LatentModel, x_ref::AbstractVector; θ...)
 end
 
 function local_quadratic(m::NonGaussianLatentPrior, x_ref::AbstractVector; θ...)
-    return error("local_quadratic not implemented for $(typeof(m))")
+    throw(
+        ArgumentError(
+            "local_quadratic not implemented for $(typeof(m)). " *
+                "Every NonGaussianLatentPrior subtype must implement it."
+        )
+    )
 end
 
 # Internal adapter: bundles an `AbstractLatentPrior` with its
-# hyperparameter `NamedTuple` so the Newton loops can dispatch on a
-# single argument.
+# hyperparameter `NamedTuple` so the Newton loops can dispatch the prior
+# side on a single argument.
 struct LatentPrior{M <: AbstractLatentPrior, T <: NamedTuple}
     model::M
     θ::T
 end
 
-prior_quadratic(p::LatentPrior, x_ref::AbstractVector) =
-    local_quadratic(p.model, x_ref; p.θ...)
-
-function prior_quadratic(prior::AbstractGMRF, x_ref::AbstractVector)
+# Per-iterate prior query for the shared Newton loops. Returns the
+# natural-form coefficients `(Q, h)` of the local quadratic at `x` plus
+# the line-search energy `e = -log p_prior(x)` up to an x-independent
+# constant.
+#
+# For a materialised Gaussian prior `(Q, h)` are independent of `x` and
+# the energy is the bare quadratic `½ xᵀQx - hᵀx`. Crucially this never
+# calls `logpdf`, so it does NOT trigger a `logdetcov` factorization of a
+# shared `GMRFWorkspace` (which stays factorized at `Q_post` for the
+# Newton step). For the `LatentPrior` adapter the prior re-linearises per
+# iterate and the energy is the *exact* `-log p(x | θ)`.
+function _prior_local(prior::AbstractGMRF, x::AbstractVector)
     Q = precision_matrix(prior)
-    return LocalLatentQuadratic(Q, Q * mean(prior), logpdf(prior, x_ref), x_ref)
+    h = Q * mean(prior)
+    return Q, h, 0.5 * dot(x, Q, x) - dot(x, h)
 end
+
+function _prior_local(p::LatentPrior, x::AbstractVector)
+    lq = local_quadratic(p.model, x; p.θ...)
+    return lq.Q, lq.h, -lq.logp_ref
+end
+
+# Line-search energy at an arbitrary point. Gaussian priors reuse the
+# at-iterate `(Q, h)` (constant in `x`); the `LatentPrior` adapter
+# re-evaluates the exact prior log-density.
+_prior_energy(::AbstractGMRF, Q, h, x::AbstractVector) = 0.5 * dot(x, Q, x) - dot(x, h)
+_prior_energy(p::LatentPrior, _Q, _h, x::AbstractVector) =
+    -local_quadratic(p.model, x; p.θ...).logp_ref

@@ -1,11 +1,3 @@
-using Ferrite
-using LinearAlgebra
-using SparseArrays
-using SpecialFunctions
-
-export MaternSPDE,
-    α, ndim, discretize, assemble_C_G_matrices, product_matern, range_to_κ, smoothness_to_ν
-
 ################################################################################
 #    Whittle-Matérn
 ################################################################################
@@ -23,13 +15,6 @@ where Δ is the Laplacian operator, $κ > 0$, $ν > 0$.
 
 The stationary solutions to this SPDE are Matérn processes.
 """
-struct MaternSPDE{D, Tv <: Real, Ti <: Integer} <: SPDE
-    κ::Tv
-    ν::Rational{Ti}
-    σ²::Tv
-    diffusion_factor::Matrix{Tv}
-end
-
 function MaternSPDE{D}(;
         κ::Union{Real, Nothing} = nothing,
         ν::Union{Integer, Rational, Nothing} = nothing,
@@ -64,7 +49,6 @@ end
 
 
 α(𝒟::MaternSPDE{D}) where {D} = 𝒟.ν + D // 2
-ndim(::MaternSPDE{D}) where {D} = D
 
 function assemble_C_G_matrices(
         cellvalues::CellValues,
@@ -247,10 +231,39 @@ function _matern_precision_only(
 end
 
 """
+    assemble_matern_C_G(disc::FEMDiscretization{D}) where {D}
+
+Assemble the κ-independent FEM matrices for a Matérn discretization: the lumped
+mass matrix `C` and the stiffness matrix `G` (with identity diffusion). These
+depend only on the discretization (mesh, interpolation, quadrature), so they can
+be assembled once and reused across `precision_matrix` / `matern_precision_only`
+calls with different κ.
+"""
+function assemble_matern_C_G(disc::FEMDiscretization{D}) where {D}
+    cellvalues = CellValues(
+        disc.quadrature_rule,
+        disc.interpolation,
+        disc.geom_interpolation,
+    )
+    diffusion_factor = Matrix{Float64}(I, D, D)
+    return assemble_C_G_matrices(
+        cellvalues,
+        disc.dof_handler,
+        disc.interpolation,
+        diffusion_factor,
+    )
+end
+
+"""
     matern_precision_only(disc::FEMDiscretization{D}, smoothness::Integer, κ; σ²=1.0) where {D}
+    matern_precision_only(disc, smoothness, κ, C, G; σ²=1.0)
 
 Compute the Matérn precision matrix directly from a FEM discretization without
 constructing a GMRF. Avoids all factorizations, so supports ForwardDiff.Dual values for κ.
+
+The κ-independent matrices `C` (lumped mass) and `G` (stiffness) may be supplied
+pre-assembled (e.g. cached on a `MaternModel`); otherwise they are assembled on
+each call via [`assemble_matern_C_G`](@ref).
 """
 function matern_precision_only(
         disc::FEMDiscretization{D},
@@ -258,22 +271,20 @@ function matern_precision_only(
         κ;
         σ² = 1.0,
     ) where {D}
+    C, G = assemble_matern_C_G(disc)
+    return matern_precision_only(disc, smoothness, κ, C, G; σ² = σ²)
+end
+
+function matern_precision_only(
+        disc::FEMDiscretization{D},
+        smoothness::Integer,
+        κ,
+        C::SparseMatrixCSC,
+        G::SparseMatrixCSC;
+        σ² = 1.0,
+    ) where {D}
     ν = smoothness_to_ν(smoothness, D)
     α_val = Integer(ν + D // 2)
-
-    # Assemble FEM matrices at Float64 (κ-independent)
-    cellvalues = CellValues(
-        disc.quadrature_rule,
-        disc.interpolation,
-        disc.geom_interpolation,
-    )
-    diffusion_factor = Matrix{Float64}(I, D, D)
-    C, G = assemble_C_G_matrices(
-        cellvalues,
-        disc.dof_handler,
-        disc.interpolation,
-        diffusion_factor,
-    )
 
     # Form K (may carry Dual type from κ)
     K = κ^2 * C + G

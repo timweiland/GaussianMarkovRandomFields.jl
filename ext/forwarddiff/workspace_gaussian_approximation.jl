@@ -3,6 +3,17 @@
 #   - Dual prior, unconstrained (via _forwarddiff_workspace_ga)
 #   - Dual prior, constrained (via _forwarddiff_workspace_ga_constrained)
 
+# After the IFT tangent solves, the workspace is factorized at Q_post and ws.Q
+# already equals `value(posterior.precision)`. Tag the posterior as the
+# workspace's current owner so the first consumer that touches it (logpdf / var /
+# logdetcov on the posterior) reuses this factorization instead of reloading and
+# refactorizing Q_post. This pays off when the posterior term is consumed before
+# any other WorkspaceGMRF sharing the workspace — e.g. evaluating a Laplace
+# marginal likelihood as `logpdf(posterior, x*)` before `logpdf(prior, x*)`. It
+# is harmless otherwise: a consumer with a different version reloads as usual.
+_own_workspace_factor!(ws::GMRFs.GMRFWorkspace, posterior) =
+    (ws.loaded_version = posterior.version; posterior)
+
 # ----------------------------------------------------------------------------
 # Float64 WorkspaceGMRF + Dual obs_lik
 # ----------------------------------------------------------------------------
@@ -73,15 +84,18 @@ function _forwarddiff_workspace_ga_obs_dual(
     # ConstraintInfo (already computed at Q_post during the primal pass) to
     # avoid a second factorization + m constraint solves.
     if prior_gmrf.constraints === nothing
-        return GMRFs.WorkspaceGMRF(x_star_dual, Q_post_sparse, ws)
+        return _own_workspace_factor!(ws, GMRFs.WorkspaceGMRF(x_star_dual, Q_post_sparse, ws))
     else
         ci_post = posterior_primal.constraints
         A_dense = ci_post.matrix
         log_AA_det = logdet(cholesky(Symmetric(A_dense * A_dense')))
-        return _build_constrained_dual_workspace_gmrf(
-            x_star_dual, Q_post_sparse, ws,
-            A_dense, ci_post.vector, ci_post.A_tilde_T, ci_post.L_c,
-            log_AA_det, posterior_primal.version
+        return _own_workspace_factor!(
+            ws,
+            _build_constrained_dual_workspace_gmrf(
+                x_star_dual, Q_post_sparse, ws,
+                A_dense, ci_post.vector, ci_post.A_tilde_T, ci_post.L_c,
+                log_AA_det, posterior_primal.version
+            ),
         )
     end
 end
@@ -158,7 +172,7 @@ function _forwarddiff_workspace_ga(
 
     # Step 6: Return WorkspaceGMRF with Dual values and primal workspace
     Q_post_sparse = sparse(Q_post_dual)
-    return GMRFs.WorkspaceGMRF(x_star_dual, Q_post_sparse, ws)
+    return _own_workspace_factor!(ws, GMRFs.WorkspaceGMRF(x_star_dual, Q_post_sparse, ws))
 end
 
 # Tried splitting via `WorkspaceGMRF{D, B, W, Nothing}` and
@@ -264,7 +278,10 @@ function _forwarddiff_workspace_ga_constrained(
 
     # Step 6: Build Dual constrained WorkspaceGMRF with the prior's constraints.
     ci_prior = prior_gmrf.constraints
-    return GMRFs.WorkspaceGMRF(
-        x_star_dual, Q_post_sparse, ws, ci_prior.matrix, ci_prior.vector
+    return _own_workspace_factor!(
+        ws,
+        GMRFs.WorkspaceGMRF(
+            x_star_dual, Q_post_sparse, ws, ci_prior.matrix, ci_prior.vector
+        ),
     )
 end

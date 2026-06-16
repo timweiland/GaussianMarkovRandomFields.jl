@@ -282,7 +282,7 @@ end
         e_wrong = [0.0]
         iid_wrong = IID(constraint = (A_wrong, e_wrong))
 
-        @test_throws ErrorException build_formula_components(@formula(y ~ 0 + iid_wrong(group)), data; family = Normal)
+        @test_throws DimensionMismatch build_formula_components(@formula(y ~ 0 + iid_wrong(group)), data; family = Normal)
     end
 
     @testset "RW2 via formula interface" begin
@@ -305,6 +305,19 @@ end
         # Sampling should work
         s = rand(gmrf)
         @test length(s) == n
+    end
+
+    @testset "RandomWalk scale_model threads through the formula interface" begin
+        _gm(v) = exp(sum(log, v) / length(v))
+        rws = RandomWalk(1; scale_model = true)
+        rwu = RandomWalk(1)
+        comp_s = build_formula_components(@formula(y ~ 0 + rws(time)), data; family = Normal)
+        comp_u = build_formula_components(@formula(y ~ 0 + rwu(time)), data; family = Normal)
+        vs = var(comp_s.combined_model(τ_rw1 = 1.0))
+        vu = var(comp_u.combined_model(τ_rw1 = 1.0))
+        # Scaled: geometric-mean marginal variance ≈ 1 (Sørbye–Rue). Unscaled: n-dependent.
+        @test isapprox(_gm(vs), 1.0; rtol = 0.05)
+        @test _gm(vs) < _gm(vu)
     end
 
     @testset "AR(2) via formula interface" begin
@@ -557,8 +570,10 @@ end
         y_train = randn(20)
         train = (y = randn(20), x_coord = x_train, y_coord = y_train)
 
-        x_test = randn(5)
-        y_test = randn(5)
+        # Query a subset of the training points so the points are guaranteed to
+        # lie inside the discretization mesh (evaluating outside it is an error).
+        x_test = x_train[1:5]
+        y_test = y_train[1:5]
         test = (x_coord = x_test, y_coord = y_test)
 
         matern = Matern(smoothness = 1)

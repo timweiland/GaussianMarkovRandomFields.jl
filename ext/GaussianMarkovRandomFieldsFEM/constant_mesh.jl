@@ -1,56 +1,11 @@
-using LinearMaps, LinearAlgebra, SparseArrays
-
-export ConstantMeshSTGMRF, ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMeshSTGMRF
-
 ################################################################################
 #
 #    ConstantMeshSTGMRF - MetaGMRF-based design
 #
-#    Spatiotemporal GMRF metadata types and constructors
+#    Constructors and operations on spatiotemporal GMRFs with constant spatial
+#    mesh. The metadata structs and type aliases live in `src/fem_types.jl`.
 #
 ################################################################################
-
-"""
-    ImplicitEulerMetadata{D, SSM} <: GMRFMetadata
-
-Metadata for implicit Euler spatiotemporal GMRFs with constant spatial mesh.
-"""
-struct ImplicitEulerMetadata{D, SSM} <: GMRFMetadata
-    discretization::FEMDiscretization{D}
-    ssm::SSM
-    N_spatial::Int
-    N_t::Int
-end
-
-"""
-    ConcreteSTMetadata{D} <: GMRFMetadata
-
-Metadata for concrete spatiotemporal GMRFs with constant spatial mesh.
-"""
-struct ConcreteSTMetadata{D} <: GMRFMetadata
-    discretization::FEMDiscretization{D}
-    N_spatial::Int
-    N_t::Int
-end
-
-"""
-    ImplicitEulerConstantMeshSTGMRF
-
-A spatiotemporal GMRF with constant spatial discretization and an implicit Euler
-discretization of the temporal dynamics. Uses MetaGMRF for clean type structure.
-"""
-const ImplicitEulerConstantMeshSTGMRF{D, SSM, T, P, G} = MetaGMRF{ImplicitEulerMetadata{D, SSM}, T, P, G}
-
-"""
-    ConcreteConstantMeshSTGMRF
-
-A concrete implementation of a spatiotemporal GMRF with constant spatial
-discretization. Uses MetaGMRF for clean type structure.
-"""
-const ConcreteConstantMeshSTGMRF{D, T, P, G} = MetaGMRF{ConcreteSTMetadata{D}, T, P, G}
-
-# Type aliases for backward compatibility
-const ConstantMeshSTGMRF{D} = Union{ImplicitEulerConstantMeshSTGMRF{D}, ConcreteConstantMeshSTGMRF}
 
 # Constructors
 function ImplicitEulerConstantMeshSTGMRF(

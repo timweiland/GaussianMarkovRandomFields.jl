@@ -1,28 +1,4 @@
-using Distributions, LinearAlgebra, Random, LinearMaps
 import Base: step
-
-export joint_ssm, JointSSMMatrices
-
-"""
-    JointSSMMatrices
-
-Abstract type for the matrices defining the transition of a certain linear
-state-space model of the form
-
-```math
-G(Δt) x_{k+1} ∣ xₖ ∼ 𝒩(M(Δt) xₖ, Σ)
-```
-
-# Fields
-- `Δt::Real`: Time step.
-- `G::LinearMap`: Transition matrix.
-- `M::LinearMap`: Observation matrix.
-- `Σ⁻¹::LinearMap`: Transition precision map.
-- `Σ⁻¹_sqrt::LinearMap`: Square root of the transition precision map.
-- `constraint_handler`: Ferrite constraint handler.
-- `constraint_noise`: Constraint noise.
-"""
-abstract type JointSSMMatrices end;
 
 step(x::JointSSMMatrices) = x.Δt
 get_G(x::JointSSMMatrices) = x.G
@@ -44,8 +20,7 @@ G(Δtₖ) x_{k+1} ∣ xₖ ∼ 𝒩(M(Δtₖ) xₖ, Σ)
 
 at time points given by `ts` (from which the Δtₖ are computed).
 """
-joint_ssm(x₀::GMRF, ssm_matrices::Union{Function, JointSSMMatrices}, ts::AbstractVector) =
-    error("joint_ssm not implemented for these argument types")
+joint_ssm(x₀::GMRF, ssm_matrices::Union{Function, JointSSMMatrices}, ts::AbstractVector) = throw(MethodError(joint_ssm, (x₀, ssm_matrices, ts))) # COV_EXCL_LINE
 
 """
 function joint_ssm(x₀::GMRF, ssm_mats_fn::Function, ts::AbstractVector)

@@ -11,7 +11,7 @@ function _latent_model(term::IIDTerm, data)
     if term.constraint isa Tuple
         A, e = term.constraint
         if size(A, 2) != n
-            error("Constraint matrix for $(term.variable) has $(size(A, 2)) columns but variable has $(n) levels")
+            throw(DimensionMismatch("Constraint matrix for $(term.variable) has $(size(A, 2)) columns but variable has $(n) levels"))
         end
     end
 
@@ -26,11 +26,11 @@ function _latent_model(term::RandomWalkTerm{Order}, data) where {Order}
     if term.additional_constraints isa Tuple
         A, e = term.additional_constraints
         if size(A, 2) != n
-            error("Additional constraint matrix for $(term.variable) has $(size(A, 2)) columns but variable has $(n) levels")
+            throw(DimensionMismatch("Additional constraint matrix for $(term.variable) has $(size(A, 2)) columns but variable has $(n) levels"))
         end
     end
 
-    return RWModel{Order}(n; additional_constraints = term.additional_constraints, levels = collect(levels))
+    return RWModel{Order}(n; additional_constraints = term.additional_constraints, levels = collect(levels), scale_model = term.scale_model)
 end
 
 function _latent_model(term::ARTerm{P}, data) where {P}
@@ -41,7 +41,7 @@ function _latent_model(term::ARTerm{P}, data) where {P}
     if term.constraint isa Tuple
         A, e = term.constraint
         if size(A, 2) != n
-            error("Constraint matrix for $(term.variable) has $(size(A, 2)) columns but variable has $(n) levels")
+            throw(DimensionMismatch("Constraint matrix for $(term.variable) has $(size(A, 2)) columns but variable has $(n) levels"))
         end
     end
 
@@ -56,7 +56,7 @@ function _latent_model(term::AR1Term, data)
     if term.constraint isa Tuple
         A, e = term.constraint
         if size(A, 2) != n
-            error("Constraint matrix for $(term.variable) has $(size(A, 2)) columns but variable has $(n) levels")
+            throw(DimensionMismatch("Constraint matrix for $(term.variable) has $(size(A, 2)) columns but variable has $(n) levels"))
         end
     end
 
@@ -79,7 +79,7 @@ function _latent_model(term::BYM2Term, _)
         A, e = term.additional_constraints
         n = size(term.adjacency, 1)
         if size(A, 2) != n
-            error("Additional constraint matrix for BYM2 term has $(size(A, 2)) columns but adjacency has $(n) nodes")
+            throw(DimensionMismatch("Additional constraint matrix for BYM2 term has $(size(A, 2)) columns but adjacency has $(n) nodes"))
         end
     end
 
@@ -88,7 +88,7 @@ function _latent_model(term::BYM2Term, _)
         A, e = term.iid_constraint
         n = size(term.adjacency, 1)
         if size(A, 2) != n
-            error("IID constraint matrix for BYM2 term has $(size(A, 2)) columns but adjacency has $(n) nodes")
+            throw(DimensionMismatch("IID constraint matrix for BYM2 term has $(size(A, 2)) columns but adjacency has $(n) nodes"))
         end
     end
 
@@ -162,25 +162,25 @@ end
 
 function GaussianMarkovRandomFields.predict_cols(term::IIDTerm, model::GaussianMarkovRandomFields.IIDModel, data)
     v = _getcolumn(data, term.variable)
-    model.levels === nothing && error("Model has no stored levels. Was it built via the formula interface?")
+    model.levels === nothing && throw(ArgumentError("Model has no stored levels. Was it built via the formula interface?"))
     return _predict_indicator(v, model.levels)
 end
 
 function GaussianMarkovRandomFields.predict_cols(term::RandomWalkTerm, model::GaussianMarkovRandomFields.LatentModel, data)
     v = _getcolumn(data, term.variable)
-    model.levels === nothing && error("Model has no stored levels. Was it built via the formula interface?")
+    model.levels === nothing && throw(ArgumentError("Model has no stored levels. Was it built via the formula interface?"))
     return _predict_indicator(v, model.levels)
 end
 
 function GaussianMarkovRandomFields.predict_cols(term::AR1Term, model::GaussianMarkovRandomFields.LatentModel, data)
     v = _getcolumn(data, term.variable)
-    model.levels === nothing && error("Model has no stored levels. Was it built via the formula interface?")
+    model.levels === nothing && throw(ArgumentError("Model has no stored levels. Was it built via the formula interface?"))
     return _predict_indicator(v, model.levels)
 end
 
 function GaussianMarkovRandomFields.predict_cols(term::ARTerm, model::GaussianMarkovRandomFields.LatentModel, data)
     v = _getcolumn(data, term.variable)
-    model.levels === nothing && error("Model has no stored levels. Was it built via the formula interface?")
+    model.levels === nothing && throw(ArgumentError("Model has no stored levels. Was it built via the formula interface?"))
     return _predict_indicator(v, model.levels)
 end
 
@@ -194,7 +194,7 @@ function GaussianMarkovRandomFields.predict_cols(term::BYM2Term, model::Gaussian
     return StatsModels.modelcols(term, data)
 end
 
-function GaussianMarkovRandomFields.predict_cols(term::MaternTerm, model::GaussianMarkovRandomFields.MaternModel, data)
+function GaussianMarkovRandomFields.predict_cols(term::MaternTerm, model, data)
     x = _getcolumn(data, term.coord_variables[1])
     y = _getcolumn(data, term.coord_variables[2])
     points = hcat(Float64.(x), Float64.(y))
@@ -228,14 +228,14 @@ function GaussianMarkovRandomFields.build_formula_components(
     # Response
     y = StatsModels.modelcols(tf.lhs, data)
     if family == Distributions.Binomial
-        trials === nothing && error("family=Binomial requires trials keyword specifying a column name")
+        trials === nothing && throw(ArgumentError("family=Binomial requires trials keyword specifying a column name"))
         tcol = _getcolumn(data, trials)
-        length(tcol) == length(y) || error("trials length $(length(tcol)) must match response length $(length(y))")
+        length(tcol) == length(y) || throw(DimensionMismatch("trials length $(length(tcol)) must match response length $(length(y))"))
         y = BinomialObservations(y, tcol)
     elseif family == Distributions.Poisson
         if exposure !== nothing
             exp_col = _getcolumn(data, exposure)
-            length(exp_col) == length(y) || error("exposure length $(length(exp_col)) must match response length $(length(y))")
+            length(exp_col) == length(y) || throw(DimensionMismatch("exposure length $(length(exp_col)) must match response length $(length(y))"))
             y = PoissonObservations(y, exp_col)
         else
             y = PoissonObservations(y)
@@ -243,7 +243,7 @@ function GaussianMarkovRandomFields.build_formula_components(
     elseif family == Distributions.NegativeBinomial
         if exposure !== nothing
             exp_col = _getcolumn(data, exposure)
-            length(exp_col) == length(y) || error("exposure length $(length(exp_col)) must match response length $(length(y))")
+            length(exp_col) == length(y) || throw(DimensionMismatch("exposure length $(length(exp_col)) must match response length $(length(y))"))
             y = NegativeBinomialObservations(y, exp_col)
         else
             y = NegativeBinomialObservations(y)
@@ -295,10 +295,10 @@ function GaussianMarkovRandomFields.build_formula_components(
     end
 
     # Assemble A and CombinedModel
-    isempty(A_blocks) && error("No terms found in RHS to construct design matrix")
+    isempty(A_blocks) && throw(ArgumentError("No terms found in RHS to construct design matrix"))
     A = hcat(A_blocks...)
 
-    isempty(models) && error("No latent components constructed (check formula RHS)")
+    isempty(models) && throw(ArgumentError("No latent components constructed (check formula RHS)"))
     combined_model = CombinedModel(models...)
 
     # Observation model
@@ -320,7 +320,7 @@ function GaussianMarkovRandomFields.build_formula_components(
     # Sanity: columns of A must match latent dimension
     n_cols = size(A, 2)
     n_lat = length(combined_model)
-    n_cols == n_lat || error("Design matrix columns ($n_cols) do not match latent dimension ($n_lat)")
+    n_cols == n_lat || throw(DimensionMismatch("Design matrix columns ($n_cols) do not match latent dimension ($n_lat)"))
 
     return (
         A = A,

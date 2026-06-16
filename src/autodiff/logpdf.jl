@@ -50,13 +50,13 @@ function ChainRulesCore.rrule(::typeof(logpdf), x::ConstrainedGMRF, z::AbstractV
     return val, constrained_logpdf_pullback
 end
 
-function ChainRulesCore.rrule(::typeof(logpdf), x::AbstractGMRF, z::AbstractVector)
+function ChainRulesCore.rrule(::typeof(logpdf), x::GMRF, z::AbstractVector)
     μ = mean(x)
     Q = precision_matrix(x)
     r = z - μ
 
     # Check if GMRF supports selected inversion for efficient gradients
-    if hasproperty(x, :linsolve_cache) && supports_selinv(x.linsolve_cache.alg) == Val{true}()
+    if supports_selinv(x.linsolve_cache.alg) == Val{true}()
         # Forward computation - use existing implementation
         val = logpdf(x, z)
 
@@ -90,11 +90,15 @@ function ChainRulesCore.rrule(::typeof(logpdf), x::AbstractGMRF, z::AbstractVect
 
         return val, logpdf_pullback
     else
-        error(
-            "Automatic differentiation through logpdf requires an algorithm that supports selected inversion " *
-                "(CHOLMODFactorization, CholeskyFactorization). " *
-                "Got algorithm type: $(typeof(x.linsolve_cache.alg)). " *
-                "Consider using LinearSolve.CHOLMODFactorization() or LinearSolve.CholeskyFactorization()."
+        # COV_EXCL_START
+        throw(
+            ArgumentError(
+                "Automatic differentiation through logpdf requires an algorithm that supports selected inversion " *
+                    "(CHOLMODFactorization, CholeskyFactorization). " *
+                    "Got algorithm type: $(typeof(x.linsolve_cache.alg)). " *
+                    "Consider using LinearSolve.CHOLMODFactorization() or LinearSolve.CholeskyFactorization()."
+            )
         )
+        # COV_EXCL_STOP
     end
 end

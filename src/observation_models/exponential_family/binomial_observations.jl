@@ -31,16 +31,16 @@ struct BinomialObservations <: AbstractVector{Tuple{Int, Int}}
         trials_int = Int.(trials)
 
         if length(successes_int) != length(trials_int)
-            error("Length of successes ($(length(successes_int))) must match length of trials ($(length(trials_int)))")
+            throw(DimensionMismatch("Length of successes ($(length(successes_int))) must match length of trials ($(length(trials_int)))"))
         end
 
         # Validate that successes ≤ trials
         for i in eachindex(successes_int)
             if successes_int[i] > trials_int[i]
-                error("Number of successes ($(successes_int[i])) cannot exceed number of trials ($(trials_int[i])) at index $i")
+                throw(ArgumentError("Number of successes ($(successes_int[i])) cannot exceed number of trials ($(trials_int[i])) at index $i"))
             end
             if successes_int[i] < 0 || trials_int[i] < 0
-                error("Successes and trials must be non-negative at index $i")
+                throw(DomainError((successes_int[i], trials_int[i]), "Successes and trials must be non-negative at index $i"))
             end
         end
 

@@ -45,13 +45,18 @@ model = BesagModel(W, alg=LDLtFactorization())
 gmrf = model(τ=1.0)
 ```
 """
-struct BesagModel{M <: AbstractMatrix, NF, QT <: AbstractMatrix, PT, Alg, C} <: LatentModel
+struct BesagModel{M <: AbstractMatrix, NF, QT <: AbstractMatrix, Alg, C} <: LatentModel
     adjacency::M
     regularization::Float64
     connected_components::Vector{Vector{Int}}
     normalization_factor::NF
     Q::QT
-    singleton_policy::PT
+    # Declared as the concrete two-member union rather than a dependent type parameter
+    # `PT`: with `PT`, `new` lowers to `convert(typeof(x), x)` over an inferred union and
+    # Julia ≥1.11 union-splits the type-param × value cross-product, manufacturing
+    # type-impossible `convert(Val{:degenerate}, ::Val{:gaussian})` pairs (a JET no-method).
+    # A fixed union field is a plain identity-convert with no cross-product.
+    singleton_policy::Union{Val{:gaussian}, Val{:degenerate}}
     alg::Alg
     additional_constraints::C
 
@@ -103,7 +108,7 @@ struct BesagModel{M <: AbstractMatrix, NF, QT <: AbstractMatrix, PT, Alg, C} <: 
         _enforce_singleton_policy_on_Q!(Q, comps, singleton_policy)
 
         normalization_factor = _compute_normalization(Q, comps, normalize_var, singleton_policy)
-        return new{typeof(adj), typeof(normalization_factor), typeof(Q), typeof(singleton_policy), typeof(alg), typeof(processed_additional)}(adj, regularization, comps, normalization_factor, Q, singleton_policy, alg, processed_additional)
+        return new{typeof(adj), typeof(normalization_factor), typeof(Q), typeof(alg), typeof(processed_additional)}(adj, regularization, comps, normalization_factor, Q, singleton_policy, alg, processed_additional)
     end
 end
 

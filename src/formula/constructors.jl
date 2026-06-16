@@ -59,10 +59,10 @@ struct IID
     end
 end
 
-(::IID)(args...) = error("IID(...) functor is only intended for use inside @formula; not callable directly.")
+(::IID)(args...) = throw(ArgumentError("IID(...) functor is only intended for use inside @formula; not callable directly.")) # COV_EXCL_LINE
 
 """
-    RandomWalk(order=1; additional_constraints = nothing)
+    RandomWalk(order=1; additional_constraints = nothing, scale_model = false)
 
 Formula functor for RandomWalk random effects of any order.
 
@@ -73,6 +73,9 @@ Formula functor for RandomWalk random effects of any order.
   Can be:
   - `nothing` (default): Only the built-in null space constraints
   - `(A, e)`: Custom additional linear constraint matrix and vector where `Ax = e`
+- `scale_model`: When `true`, apply the Sørbye–Rue (2014) variance normalization so the
+  precision parameter `τ` is interpretable and comparable across `n` and order (see
+  [`RWModel`](@ref)). Default `false`.
 
 # Usage
 ```julia
@@ -101,13 +104,14 @@ st = Separable(rw1, besag)
 struct RandomWalk
     order::Int
     additional_constraints::Union{Nothing, Tuple{AbstractMatrix, AbstractVector}}
+    scale_model::Bool
 
-    function RandomWalk(order::Integer = 1; additional_constraints = nothing)
-        return new(Int(order), additional_constraints)
+    function RandomWalk(order::Integer = 1; additional_constraints = nothing, scale_model::Bool = false)
+        return new(Int(order), additional_constraints, scale_model)
     end
 end
 
-(::RandomWalk)(args...) = error("RandomWalk(...) functor is only intended for use inside @formula; not callable directly.")
+(::RandomWalk)(args...) = throw(ArgumentError("RandomWalk(...) functor is only intended for use inside @formula; not callable directly.")) # COV_EXCL_LINE
 
 """
     AR1(; constraint = nothing)
@@ -149,7 +153,7 @@ struct AR1
     end
 end
 
-(::AR1)(args...) = error("AR1(...) functor is only intended for use inside @formula; not callable directly.")
+(::AR1)(args...) = throw(ArgumentError("AR1(...) functor is only intended for use inside @formula; not callable directly.")) # COV_EXCL_LINE
 
 """
     AR(order=1; constraint = nothing)
@@ -190,7 +194,7 @@ struct AR
     end
 end
 
-(::AR)(args...) = error("AR(...) functor is only intended for use inside @formula; not callable directly.")
+(::AR)(args...) = throw(ArgumentError("AR(...) functor is only intended for use inside @formula; not callable directly.")) # COV_EXCL_LINE
 
 """
     Besag(W; id_to_node = nothing, normalize_var = true, singleton_policy = :gaussian)
@@ -219,7 +223,7 @@ struct Besag{WT <: AbstractMatrix, MT}
     end
 end
 
-(::Besag)(args...) = error("Besag(...) functor is only intended for use inside @formula; not callable directly.")
+(::Besag)(args...) = throw(ArgumentError("Besag(...) functor is only intended for use inside @formula; not callable directly.")) # COV_EXCL_LINE
 
 """
     BYM2(W; id_to_node = nothing, normalize_var = true, singleton_policy = :gaussian, additional_constraints = nothing, iid_constraint = nothing)
@@ -314,7 +318,7 @@ struct BYM2{WT <: AbstractMatrix, MT}
     end
 end
 
-(::BYM2)(args...) = error("BYM2(...) functor is only intended for use inside @formula; not callable directly.")
+(::BYM2)(args...) = throw(ArgumentError("BYM2(...) functor is only intended for use inside @formula; not callable directly.")) # COV_EXCL_LINE
 
 """
     Matern(; smoothness = 1, element_order = 1, alg = CHOLMODFactorization(), constraint = nothing)
@@ -360,34 +364,24 @@ struct Matern{F, S <: Integer, Alg, C}
     element_order::Int
     alg::Alg
     constraint::C
-
-    function Matern(
-            discretization::FEMDiscretization;
-            smoothness::Integer = 1,
-            alg = CHOLMODFactorization(),
-            constraint = nothing,
-        )
-        smoothness >= 0 || throw(ArgumentError("Smoothness must be non-negative, got smoothness=$smoothness"))
-        return new{typeof(discretization), typeof(smoothness), typeof(alg), typeof(constraint)}(
-            discretization, smoothness, 1, alg, constraint
-        )
-    end
-
-    function Matern(;
-            smoothness::Integer = 1,
-            element_order::Int = 1,
-            alg = CHOLMODFactorization(),
-            constraint = nothing,
-        )
-        smoothness >= 0 || throw(ArgumentError("Smoothness must be non-negative, got smoothness=$smoothness"))
-        element_order >= 1 || throw(ArgumentError("Element order must be >= 1, got element_order=$element_order"))
-        return new{Nothing, typeof(smoothness), typeof(alg), typeof(constraint)}(
-            nothing, smoothness, element_order, alg, constraint
-        )
-    end
 end
 
-(::Matern)(args...) = error("Matern(...) functor is only intended for use inside @formula; not callable directly.")
+# Pre-built FEMDiscretization constructor lives in the FEM package extension.
+
+function Matern(;
+        smoothness::Integer = 1,
+        element_order::Int = 1,
+        alg = CHOLMODFactorization(),
+        constraint = nothing,
+    )
+    smoothness >= 0 || throw(ArgumentError("Smoothness must be non-negative, got smoothness=$smoothness"))
+    element_order >= 1 || throw(ArgumentError("Element order must be >= 1, got element_order=$element_order"))
+    return Matern{Nothing, typeof(smoothness), typeof(alg), typeof(constraint)}(
+        nothing, smoothness, element_order, alg, constraint
+    )
+end
+
+(::Matern)(args...) = throw(ArgumentError("Matern(...) functor is only intended for use inside @formula; not callable directly.")) # COV_EXCL_LINE
 
 """
     Separable(components...)
@@ -431,9 +425,9 @@ struct Separable{T <: Tuple}
 
     function Separable(components...)
         length(components) >= 2 ||
-            error("Separable requires at least 2 components, got $(length(components))")
+            throw(ArgumentError("Separable requires at least 2 components, got $(length(components))")) # COV_EXCL_LINE
         return new{typeof(components)}(components)
     end
 end
 
-(::Separable)(args...) = error("Separable(...) functor is only intended for use inside @formula; not callable directly.")
+(::Separable)(args...) = throw(ArgumentError("Separable(...) functor is only intended for use inside @formula; not callable directly.")) # COV_EXCL_LINE

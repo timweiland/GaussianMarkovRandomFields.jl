@@ -1,0 +1,128 @@
+name: Benchmark
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    name: Performance regression benchmarks
+    runs-on: ubuntu-latest
+    # PR comment requires write access on the PR.
+    permissions:
+      contents: read
+      pull-requests: write
+    timeout-minutes: 30
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.10'
+          arch: x64
+
+      - uses: julia-actions/cache@v2
+
+      - name: Instantiate benchmark environment
+        run: julia --project=benchmarks -e 'using Pkg; Pkg.develop(path="."); Pkg.instantiate()'
+
+      - name: Run benchmarks on PR HEAD
+        run: julia --project=benchmarks benchmarks/run_regression.jl pr.json
+
+      # Stash the PR's benchmark scripts so we can run the *same* suite against
+      # the baseline source. This matters for first-time PRs where the baseline
+      # branch doesn't have the benchmark suite yet.
+      - name: Stash PR benchmark scripts
+        run: |
+          mkdir -p /tmp/bench
+          cp benchmarks/benchmarks.jl /tmp/bench/
+          cp benchmarks/run_regression.jl /tmp/bench/
+          cp benchmarks/compare_results.jl /tmp/bench/
+          cp benchmarks/Project.toml /tmp/bench/
+
+      - name: Checkout baseline (${{ github.base_ref || 'main' }})
+        run: |
+          git fetch origin ${{ github.base_ref || 'main' }}:_baseline
+          git checkout _baseline
+          mkdir -p benchmarks
+          cp /tmp/bench/benchmarks.jl benchmarks/
+          cp /tmp/bench/run_regression.jl benchmarks/
+          cp /tmp/bench/compare_results.jl benchmarks/
+          cp /tmp/bench/Project.toml benchmarks/
+
+      - name: Re-instantiate baseline environment
+        run: julia --project=benchmarks -e 'using Pkg; Pkg.develop(path="."); Pkg.instantiate()'
+
+      - name: Run benchmarks on baseline
+        run: julia --project=benchmarks benchmarks/run_regression.jl baseline.json
+
+      - name: Restore PR worktree for comparison script
+        run: |
+          # Force-switch back to the PR worktree. The baseline checkout
+          # overwrote the tracked benchmark scripts (cp from /tmp); a plain
+          # `git checkout -` PRESERVES those local edits/deletions whenever the
+          # file is byte-identical across branches, which left compare_results.jl
+          # missing at the compare step. `-f` discards the local changes and
+          # restores the PR's tracked files (scripts + Project.toml).
+          git checkout -f "@{-1}"
+
+      - name: Compare PR vs baseline
+        id: compare
+        # Don't fail the job here — surface the regression info in the PR comment first.
+        continue-on-error: true
+        run: julia --project=benchmarks benchmarks/compare_results.jl baseline.json pr.json benchmark_report.md
+
+      - name: Upload raw results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            pr.json
+            baseline.json
+            benchmark_report.md
+
+      - name: Post comparison as PR comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('benchmark_report.md', 'utf8');
+            // Find existing comment from this workflow and update it in place
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const marker = '## Performance benchmark comparison';
+            const existing = comments.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Fail if regressions were detected
+        if: steps.compare.outcome == 'failure'
+        run: |
+          echo "Regressions were detected — see PR comment / artifact for details."
+          exit 1

@@ -51,6 +51,12 @@ function ChainRulesCore.rrule(::Type{SymTridiagonal}, dv::AbstractVector, ev::Ab
     function pullback(ȳ)
         ȳ = unthunk(ȳ)
 
+        # A zero/absent cotangent (e.g. the constructed matrix is unused) maps to
+        # zero tangents for both fields.
+        if ȳ isa AbstractZero
+            return (NoTangent(), ȳ, ȳ)
+        end
+
         # If we’re given a SymTridiagonal as the cotangent, just read its fields.
         if ȳ isa SymTridiagonal
             dd = ȳ.dv
@@ -63,11 +69,33 @@ function ChainRulesCore.rrule(::Type{SymTridiagonal}, dv::AbstractVector, ev::Ab
             # so the adjoint is the sum of those two entries.
             dd = diag(ȳ)
             de = diag(ȳ, 1) + diag(ȳ, -1)
+        else
+            # Unknown cotangent type: treat as zero rather than reading undefined locals.
+            return (NoTangent(), ZeroTangent(), ZeroTangent())
         end
 
         return (NoTangent(), project_d(dd), project_e(de))
     end
     return y, pullback
+end
+
+"""
+    ChainRulesCore.rrule(::typeof(sum), Q::SymTridiagonal)
+
+ChainRule for `sum(::SymTridiagonal)`.
+
+Restoring the rrules above triggers method invalidation that exposes a bug in
+ChainRulesCore's `ProjectTo{SymTridiagonal}`: it extracts only one triangle of
+the off-diagonal, dropping the factor of 2 from symmetry. The explicit
+`sum(::SymTridiagonal)` rrule sidesteps the projection and returns the
+correctly-doubled off-diagonal tangent.
+"""
+function ChainRulesCore.rrule(::typeof(sum), Q::SymTridiagonal)
+    function sum_symtridiag_pullback(ȳ)
+        s = unthunk(ȳ)
+        return NoTangent(), Tangent{SymTridiagonal}(dv = fill(s, length(Q.dv)), ev = fill(2s, length(Q.ev)))
+    end
+    return sum(Q), sum_symtridiag_pullback
 end
 
 """

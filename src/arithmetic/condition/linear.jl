@@ -1,8 +1,6 @@
 using LinearMaps
 
 export linear_condition
-# DEPRECATED:
-export condition_on_observations
 
 """
     prepare_map(Q_prior, x) -> x_converted
@@ -74,52 +72,21 @@ end
 ####################
 ##   DEPRECATED   ##
 ####################
-""""
-    condition_on_observations(
-        x::GMRF,
-        A::Union{AbstractMatrix,LinearMap},
-        Q_ϵ::Union{AbstractMatrix,LinearMap,Real},
-        y::AbstractVector=zeros(size(A)[1]),
-        b::AbstractVector=zeros(size(A)[1]);
-        # solver_blueprint parameter removed - no longer needed with LinearSolve
-    )
+@deprecate condition_on_observations(
+    x::GMRF,
+    A::Union{AbstractMatrix, LinearMap},
+    Q_ϵ::Union{AbstractMatrix, LinearMap, Real},
+    y::AbstractVector = zeros(size(A, 1)),
+    b::AbstractVector = zeros(size(A, 1))
+) linear_condition(x; A = A, Q_ϵ = Q_ϵ, y = y, b = b)
 
-Condition a GMRF `x` on observations `y = A * x + b + ϵ` where `ϵ ~ N(0, Q_ϵ⁻¹)`.
-
-# Arguments
-- `x::GMRF`: The GMRF to condition on.
-- `A::Union{AbstractMatrix,LinearMap}`: The matrix `A`.
-- `Q_ϵ::Union{AbstractMatrix,LinearMap, Real}`: The precision matrix of the
-         noise term `ϵ`. In case a real number is provided, it is interpreted
-         as a scalar multiple of the identity matrix.
-- `y::AbstractVector=zeros(size(A)[1])`: The observations `y`; optional.
-- `b::AbstractVector=zeros(size(A)[1])`: Offset vector `b`; optional.
-
-# Keyword arguments
-# Note: solver_blueprint parameter removed - no longer needed with LinearSolve.jl
-
-# Returns
-A `GMRF` object representing the conditional GMRF `x | (y = A * x + b + ϵ)`.
-
-# Notes
-This function is deprecated. Use `linear_condition`.
-"""
-function condition_on_observations(
-        x::GMRF,
-        A::Union{AbstractMatrix, LinearMap},
-        Q_ϵ::Union{AbstractMatrix, LinearMap, Real},
-        y::AbstractVector = zeros(size(A, 1)),
-        b::AbstractVector = zeros(size(A, 1))
-        # solver_blueprint parameter removed - no longer needed with LinearSolve
-    )
-    # Delegate to new linear_condition function
-    return linear_condition(x; A = A, Q_ϵ = Q_ϵ, y = y, b = b)
-end
-
-function condition_on_observations(mgmrf::MetaGMRF, args...; kwargs...)
-    conditioned_gmrf = condition_on_observations(mgmrf.gmrf, args...; kwargs...)
-    return MetaGMRF(conditioned_gmrf, mgmrf.metadata)
-end
+@deprecate condition_on_observations(
+    mgmrf::MetaGMRF,
+    A::Union{AbstractMatrix, LinearMap},
+    Q_ϵ::Union{AbstractMatrix, LinearMap, Real},
+    y::AbstractVector = zeros(size(A, 1)),
+    b::AbstractVector = zeros(size(A, 1))
+) linear_condition(mgmrf; A = A, Q_ϵ = Q_ϵ, y = y, b = b)
 
 # ConstrainedGMRF linear conditioning - apply conditioning to base GMRF then re-constrain
 function linear_condition(constrained_gmrf::ConstrainedGMRF; kwargs...)

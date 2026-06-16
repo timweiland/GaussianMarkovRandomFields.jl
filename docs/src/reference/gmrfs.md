@@ -3,6 +3,7 @@
 ```@docs
 AbstractGMRF
 GMRF
+ChordalGMRF
 precision_map
 precision_matrix
 InformationVector
@@ -18,7 +19,6 @@ GMRFMetadata
 
 ## Arithmetic
 ```@docs
-condition_on_observations
 linear_condition
 joint_gmrf
 ```

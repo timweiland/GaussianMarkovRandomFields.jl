@@ -1,4 +1,6 @@
 using Distributions: Normal, Poisson
+using LinearAlgebra: Diagonal
+using SparseArrays: SparseMatrixCSC
 
 @testset "CompositeLikelihood evaluation" begin
     @testset "Basic loglik summation" begin
@@ -90,6 +92,49 @@ using Distributions: Normal, Poisson
 
         hess = loghessian(x, composite_lik)
         @test size(hess) == (2, 2)
+    end
+
+    @testset "Hessian sum across mismatched component types" begin
+        # AutoDiffObservationModel with default sparse Hessian backend returns
+        # SparseMatrixCSC; ExponentialFamily(Normal) returns Diagonal. The
+        # accumulator must promote correctly regardless of component order.
+        function band_loglik(x; y)
+            ll = 0.0
+            for i in eachindex(y)
+                ll += -0.5 * (x[i] - y[i])^2
+                if i > 1
+                    ll += -0.1 * x[i - 1] * x[i]
+                end
+            end
+            return ll
+        end
+        autodiff_model = AutoDiffObservationModel(band_loglik; n_latent = 4)
+        gaussian_model = ExponentialFamily(Normal)
+
+        y_ad = [0.5, 1.5, 2.5, 3.5]
+        y_g = [1.0, 2.0, 3.0, 4.0]
+
+        ad_lik = autodiff_model(y_ad)
+        g_lik = gaussian_model(y_g; σ = 1.0)
+        @test loghessian(zeros(4), ad_lik) isa SparseMatrixCSC
+        @test loghessian(zeros(4), g_lik) isa Diagonal
+
+        x = randn(4)
+        hess_manual = loghessian(x, ad_lik) + loghessian(x, g_lik)
+
+        # Sparse first, then Diagonal — route σ only to the gaussian component.
+        composite_lik_a = CompositeObservationModel(
+            (autodiff_model, gaussian_model),
+            (NamedTuple(), (σ = :σ,)),
+        )(CompositeObservations((y_ad, y_g)); σ = 1.0)
+        @test loghessian(x, composite_lik_a) ≈ hess_manual
+
+        # Diagonal first, then Sparse
+        composite_lik_b = CompositeObservationModel(
+            (gaussian_model, autodiff_model),
+            ((σ = :σ,), NamedTuple()),
+        )(CompositeObservations((y_g, y_ad)); σ = 1.0)
+        @test loghessian(x, composite_lik_b) ≈ hess_manual
     end
 
     @testset "Type stability" begin

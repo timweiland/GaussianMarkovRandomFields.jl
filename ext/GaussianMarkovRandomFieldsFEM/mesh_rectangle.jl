@@ -1,7 +1,3 @@
-using Gmsh, FerriteGmsh, Ferrite
-
-export create_inflated_rectangle
-
 """
     create_inflated_rectangle(x0, y0, dx, dy, boundary_width, interior_mesh_size,
     exterior_mesh_size = 2 * interior_mesh_size; element_order = 1)

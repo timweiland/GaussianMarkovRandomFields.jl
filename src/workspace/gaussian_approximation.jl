@@ -47,9 +47,13 @@ function _sparse_hessian_map(Q::SparseMatrixCSC, H::SparseMatrixCSC)
             if q_ptr <= q_end && Q_rows[q_ptr] == h_row
                 hmap[k] = q_ptr
             else
-                error(
-                    "Hessian has nonzero at ($h_row, $col) which is outside the workspace Q sparsity pattern."
+                # COV_EXCL_START
+                throw(
+                    ArgumentError(
+                        "Hessian has nonzero at ($h_row, $col) which is outside the workspace Q sparsity pattern."
+                    )
                 )
+                # COV_EXCL_STOP
             end
         end
     end
@@ -81,8 +85,22 @@ end
 
 Restore prior values into workspace Q and subtract the Hessian in-place.
 Returns the (possibly initialized) sparse_hess_map.
+
+`prior_nzval` is copied positionally onto `ws.Q.nzval`, so it must carry exactly
+the workspace's stored entries in the same CSC order. The Gaussian path guarantees
+this via `_check_workspace_pattern` at `WorkspaceGMRF` construction; the non-Gaussian
+path relies on the user seeding the workspace with the full structural pattern that
+`local_quadratic` produces across iterates. The length check below turns a pattern
+mismatch into a clear error instead of a silent partial copy.
 """
 function _update_hessian!(ws, H_k, prior_nzval, diag_idx, sparse_hess_map)
+    length(prior_nzval) == length(ws.Q.nzval) || throw(
+        ArgumentError(
+            "prior precision has $(length(prior_nzval)) stored entries but the workspace " *
+                "pattern has $(length(ws.Q.nzval)). For a NonGaussianLatentPrior, seed the " *
+                "GMRFWorkspace with the full structural sparsity pattern of `local_quadratic`."
+        )
+    )
     copyto!(ws.Q.nzval, prior_nzval)
     if H_k isa Diagonal
         _subtract_diagonal_hessian!(ws, H_k, diag_idx)
@@ -200,8 +218,10 @@ end
     _workspace_newton_loop(prior, ws, obs_lik, constraints, x_init; ...) -> WorkspaceGMRF
 
 Shared workspace-backed Newton loop. The prior side is queried via
-`prior_quadratic(prior, x_k)` per iterate; for materialised
-`WorkspaceGMRF` priors `(Q, h)` are constant in `x_k`, while for the
+`_prior_local(prior, x_k) -> (Q, h, energy)` per iterate; for materialised
+`WorkspaceGMRF` priors `(Q, h)` are constant in `x_k` and the line-search
+`energy` is the bare quadratic (no `logpdf`, so the shared workspace stays
+factorized at `Q_post` — the #166 optimisation), while for the
 `LatentPrior` adapter they re-evaluate via `local_quadratic`. The
 workspace's symbolic factor is reused as long as the sparsity pattern is
 constant, which is true whenever the prior's structural couplings are
@@ -225,41 +245,22 @@ function _workspace_newton_loop(
     verbose && println("Starting workspace Fisher scoring...")
 
     for iter in 1:max_iter
-        lq = prior_quadratic(prior, x_k)
+        Q_p, h, energy_k = _prior_local(prior, x_k)
         H_k = loghessian(x_k, obs_lik)
         g_l = loggrad(x_k, obs_lik)
 
-        sparse_hess_map = _update_hessian!(ws, H_k, lq.Q.nzval, diag_idx, sparse_hess_map)
+        sparse_hess_map = _update_hessian!(ws, H_k, Q_p.nzval, diag_idx, sparse_hess_map)
         ensure_numeric!(ws)
 
-        neg_score_k = (lq.Q * x_k - lq.h) .- g_l
+        neg_score_k = (Q_p * x_k - h) .- g_l
         step = workspace_solve(ws, neg_score_k)
         step = _workspace_constrain_step(step, ws, constraints)
 
         if adaptive_stepsize
-            obj_current = -lq.logp_ref - loglik(x_k, obs_lik)
-            step_accepted = false
-            local x_candidate
-            for ls_iter in 1:max_linesearch_iter
-                x_candidate = x_k - α * step
-                logp_cand = prior_quadratic(prior, x_candidate).logp_ref
-                obj_candidate = -logp_cand - loglik(x_candidate, obs_lik)
-                if obj_candidate <= obj_current
-                    α = sqrt(α)
-                    step_accepted = true
-                    verbose && ls_iter > 1 &&
-                        println("    Accepted at α=$(round(α^2, digits = 3)) after $ls_iter backtracks")
-                    break
-                else
-                    α *= 0.1
-                    verbose && println("    Backtrack: α=$(round(α, digits = 4))")
-                    if α * norm(step, Inf) < newton_dec_tol / 1000
-                        step_accepted = true
-                        break
-                    end
-                end
-            end
-            x_new = step_accepted ? x_candidate : (x_k - α * step)
+            x_new, α = _ga_line_search(
+                prior, Q_p, h, energy_k, obs_lik, x_k, step, α;
+                max_linesearch_iter, newton_dec_tol, verbose,
+            )
         else
             x_new = x_k - step
         end
@@ -288,12 +289,15 @@ end
 # Refresh ws.Q to Q_post(x_final) so the snapshot used by `_build_result`
 # reflects the converged iterate (the loop's last `_update_hessian!` may
 # have happened at `x_k`, not `x_new`; line-search reload of Q_prior via
-# `ensure_loaded!` could also have left ws.Q out of sync).
+# `ensure_loaded!` could also have left ws.Q out of sync). We set the
+# precision VALUES but deliberately do NOT eagerly factorize (#167):
+# `_update_hessian!` resets `ws.loaded_version` to 0, so the first consumer
+# of the returned posterior reloads the snapshot and refactorizes on
+# demand. An eager `ensure_numeric!` would just be discarded and rebuilt.
 function _workspace_build_result(prior, ws, obs_lik, constraints, x_final, diag_idx, sparse_hess_map)
-    lq_final = prior_quadratic(prior, x_final)
+    Q_p, = _prior_local(prior, x_final)
     H_final = loghessian(x_final, obs_lik)
-    _update_hessian!(ws, H_final, lq_final.Q.nzval, diag_idx, sparse_hess_map)
-    ensure_numeric!(ws)
+    _update_hessian!(ws, H_final, Q_p.nzval, diag_idx, sparse_hess_map)
     return _build_result(ws, x_final, constraints)
 end
 

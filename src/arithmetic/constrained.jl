@@ -158,11 +158,19 @@ mean(d::ConstrainedGMRF) = d.constrained_mean
 """
     precision_map(d::ConstrainedGMRF)
 
-Return the precision map of the constrained GMRF.
-Note: This is singular due to the constraints, but we return it for interface compliance.
-In practice, this should rarely be used directly due to singularity.
+Return the precision map of the *unconstrained* base GMRF.
+
+The precision of the constrained distribution `x | Ax = e` is rank-deficient
+(its null space is spanned by the columns of `A'`), so there is no canonical
+non-singular precision matrix to return. The base precision is what the
+unnormalised log-density on the constraint manifold uses,
+
+    log p(x | Ax = e) ∝ -0.5 (x - μ)' Q (x - μ)   for x with Ax = e,
+
+so generic methods like `sqmahal` and `gradlogpdf` give the correct values
+when evaluated at points that satisfy the constraint.
 """
-precision_map(d::ConstrainedGMRF) = precision_map(d.base_gmrf)  # TODO: Return constrained precision
+precision_map(d::ConstrainedGMRF) = precision_map(d.base_gmrf)
 
 """
     _rand!(rng::AbstractRNG, d::ConstrainedGMRF, x::AbstractVector)

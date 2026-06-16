@@ -53,6 +53,42 @@ All observation models should implement this method. The default returns an empt
 """
 hyperparameters(obs_model::ObservationModel) = ()
 
+# ---------------------------------------------------------------------------
+# Shared helpers for observation models whose components (e.g. a design matrix
+# or a residual function) may optionally depend on hyperparameters θ. These
+# back the "resolve θ at the materialization seam" pattern: a model declares
+# the extra θ-names a parameterized component consumes, merges them into its
+# `hyperparameters`, and projects the materialization kwargs onto them.
+# ---------------------------------------------------------------------------
+
+# Ordered union of two hyperparameter-name tuples: entries of `a` first, then
+# any of `b` not already present. The empty-`b` method returns `a` unchanged
+# (no allocation) so the fixed, non-parameterized path is a no-op.
+_merge_hyperparameter_names(a::Tuple{Vararg{Symbol}}, ::Tuple{}) = a
+function _merge_hyperparameter_names(a::Tuple{Vararg{Symbol}}, b::Tuple{Vararg{Symbol}})
+    out = collect(Symbol, a)
+    for s in b
+        s in out || push!(out, s)
+    end
+    return Tuple(out)
+end
+
+# Project the materialization kwargs `θ` onto the `names` a parameterized
+# component declared, erroring with a clear message if any are missing. The
+# empty-`names` method returns the empty NamedTuple with no work, keeping the
+# fixed path allocation-free.
+_project_hyperparameters(::Tuple{}, ::NamedTuple) = NamedTuple()
+function _project_hyperparameters(names::Tuple{Vararg{Symbol}}, θ::NamedTuple)
+    missing_names = filter(n -> !haskey(θ, n), names)
+    isempty(missing_names) || throw(
+        ArgumentError(
+            "Missing hyperparameter(s) $(missing_names) required by a parameterized " *
+                "observation-model component. Supplied keys: $(keys(θ))."
+        )
+    )
+    return NamedTuple{names}(θ)
+end
+
 """
     latent_dimension(obs_model::ObservationModel, y::AbstractVector) -> Union{Int, Nothing}
 
@@ -113,6 +149,8 @@ y = rand(dist)  # Sample observations
 # Implementation
 All observation models should implement this method. The default throws an error.
 """
+# COV_EXCL_START
 function conditional_distribution(obs_model::ObservationModel, x; kwargs...)
-    error("conditional_distribution not implemented for observation model type $(typeof(obs_model))")
+    throw(MethodError(conditional_distribution, (obs_model, x)))
 end
+# COV_EXCL_STOP

@@ -97,4 +97,64 @@ using Distributions
         manual = sum(logpdf.(Normal.(yhat, σ), y_sample))
         @test logpdf(d, y_sample) ≈ manual atol = 1.0e-10
     end
+
+    @testset "σ validation" begin
+        model = NonlinearLeastSquaresModel(f, 2)
+        y = [1.0, 0.5, 2.0]
+        x = [0.2, -0.1]
+
+        # Materialization: σ must be positive
+        @test_throws DomainError model(y; σ = 0.0)
+        @test_throws DomainError model(y; σ = -0.1)
+        @test_throws DomainError model(y; σ = [0.3, -0.1, 0.5])
+
+        # Materialization: σ-vector length must match y length
+        @test_throws DimensionMismatch model(y; σ = [0.3, 0.4])
+
+        # Materialization: σ must be a number or a vector
+        @test_throws ArgumentError model(y; σ = "0.3")
+
+        # conditional_distribution: σ-vector length must match f(x)
+        @test_throws DimensionMismatch conditional_distribution(model, x; σ = [0.3, 0.4])
+
+        # conditional_distribution: σ must be a number or a vector
+        @test_throws ArgumentError conditional_distribution(model, x; σ = "0.3")
+    end
+
+    @testset "Parameterized residual (hyperparameter-dependent f)" begin
+        # residual depends on a hyperparameter α via the signature f(x; α)
+        f_param = (x; α) -> [α * (x[1] + 2x[2]), sin(α * x[1]), x[2]^2]
+        α0 = 1.3
+
+        @testset "Hyperparameter declaration & merging" begin
+            model = NonlinearLeastSquaresModel(f_param, 2; hyperparams = (:α,))
+            @test hyperparameters(model) == (:σ, :α)   # σ first, then residual θ
+            @test latent_dimension(model, [1.0, 0.5, 2.0]) == 2
+        end
+
+        @testset "Parameterized == manually-bound residual at same α" begin
+            model_param = NonlinearLeastSquaresModel(f_param, 2; hyperparams = (:α,))
+            model_fixed = NonlinearLeastSquaresModel(x -> f_param(x; α = α0), 2)
+            y = [1.0, 0.5, 2.0]
+            x = [0.2, -0.1]
+            lik_param = model_param(y; σ = 0.3, α = α0)
+            lik_fixed = model_fixed(y; σ = 0.3)
+            @test loglik(x, lik_param) ≈ loglik(x, lik_fixed)
+            @test loggrad(x, lik_param) ≈ loggrad(x, lik_fixed)
+            @test loghessian(x, lik_param) ≈ loghessian(x, lik_fixed)
+        end
+
+        @testset "Conditional distribution with α" begin
+            model = NonlinearLeastSquaresModel((x; α) -> α .* x, 2; hyperparams = (:α,))
+            x = [0.2, -0.1]
+            d = conditional_distribution(model, x; σ = 0.7, α = 2.0)
+            yhat = 2.0 .* x
+            @test mean(d) ≈ yhat
+        end
+
+        @testset "Missing hyperparameter errors clearly" begin
+            model = NonlinearLeastSquaresModel((x; α) -> α .* x, 2; hyperparams = (:α,))
+            @test_throws ArgumentError model([1.0, 2.0]; σ = 0.3)   # α missing
+        end
+    end
 end

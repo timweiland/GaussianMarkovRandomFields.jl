@@ -85,10 +85,17 @@ using SparseArrays
         ws_gmrf = WorkspaceGMRF(μ_prior, Q_prior)
         ws_result = gaussian_approximation(ws_gmrf, obs_lik)
 
-        # The workspace should hold Q_post's factorization, so var/logdet should work
+        # #162: the final factorization is deferred. The unconstrained path sets
+        # Q_post's *values* but does not eagerly refactorize (the first consumer
+        # would reload + refactorize the snapshot anyway), so right after GA the
+        # numeric factorization is not yet valid...
+        @test !ws_result.workspace.numeric_valid
+
+        # ...and the first consumer builds it on demand from the exact snapshot.
         v = var(ws_result)
         @test all(v .> 0)
         @test length(v) == n
+        @test ws_result.workspace.numeric_valid
 
         ld = logdetcov(ws_result)
         @test isfinite(ld)

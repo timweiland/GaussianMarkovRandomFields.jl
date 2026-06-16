@@ -66,6 +66,13 @@ Hyperparameter values may be passed splatted (`τ = 1.0`) or as a
 priors don't have a canonical mean, so `x0` defaults to
 `zeros(length(prior))` — pass it explicitly for problems where zero is a
 poor starting point (e.g. priors with reflection symmetry through zero).
+
+When a `ws::GMRFWorkspace` is supplied, it must be seeded with the **full
+structural sparsity pattern** that `local_quadratic(prior, x; θ...)`
+produces across all Newton iterates (the workspace reuses one symbolic
+factorisation, and the per-iterate precision values are copied onto it
+positionally). Seeding from a generic, non-degenerate `x` is the safe way
+to capture every structural coupling.
 """
 function gaussian_approximation(
         prior::NonGaussianLatentPrior,
@@ -89,7 +96,7 @@ function gaussian_approximation(
     x_init = x0 === nothing ? zeros(length(prior)) : copy(x0)
 
     if ws === nothing
-        Q_seed = prior_quadratic(lp, x_init).Q
+        Q_seed, = _prior_local(lp, x_init)
         cache = deepcopy(linsolve_cache(GMRF(zeros(length(x_init)), Q_seed)))
         return _newton_loop(
             lp, obs_lik, cache, constraints_nt, x_init;

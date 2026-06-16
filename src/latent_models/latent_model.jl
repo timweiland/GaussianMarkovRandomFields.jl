@@ -69,16 +69,14 @@ abstract type NonGaussianLatentPrior <: AbstractLatentPrior end
 
 Number of latent variables in the prior.
 """
-Base.length(prior::AbstractLatentPrior) =
-    error("length not implemented for $(typeof(prior))")
+Base.length(prior::AbstractLatentPrior) = throw(MethodError(length, (prior,)))
 
 """
     hyperparameters(prior::AbstractLatentPrior) -> NamedTuple
 
 `NamedTuple` describing the hyperparameter names and their expected types.
 """
-hyperparameters(prior::AbstractLatentPrior) =
-    error("hyperparameters not implemented for $(typeof(prior))")
+hyperparameters(prior::AbstractLatentPrior) = throw(MethodError(hyperparameters, (prior,)))
 
 """
     constraints(prior::AbstractLatentPrior; θ...) -> Union{Nothing, Tuple}
@@ -87,8 +85,7 @@ Linear-equality constraint information for the prior at hyperparameters
 `θ`. Either `nothing` (unconstrained) or a tuple `(A, e)` such that
 `A x = e` is enforced.
 """
-constraints(prior::AbstractLatentPrior; kwargs...) =
-    error("constraints not implemented for $(typeof(prior))")
+constraints(prior::AbstractLatentPrior; kwargs...) = throw(MethodError(constraints, (prior,)))
 
 """
     model_name(prior::AbstractLatentPrior) -> Symbol
@@ -97,24 +94,21 @@ Symbol used as a parameter-name suffix when this prior is composed with
 others in a `CombinedModel` (so e.g. `τ` from two priors becomes
 `τ_ar1` and `τ_besag`).
 """
-model_name(prior::AbstractLatentPrior) =
-    error("model_name not implemented for $(typeof(prior))")
+model_name(prior::AbstractLatentPrior) = throw(MethodError(model_name, (prior,)))
 
 """
     precision_matrix(model::LatentModel; θ...) -> AbstractMatrix
 
 Precision matrix of the Gaussian latent prior at hyperparameters `θ`.
 """
-precision_matrix(model::LatentModel; kwargs...) =
-    error("precision_matrix not implemented for $(typeof(model))")
+precision_matrix(model::LatentModel; kwargs...) = throw(MethodError(precision_matrix, (model,)))
 
 """
     mean(model::LatentModel; θ...) -> AbstractVector
 
 Mean vector of the Gaussian latent prior at hyperparameters `θ`.
 """
-mean(model::LatentModel; kwargs...) =
-    error("mean not implemented for $(typeof(model))")
+mean(model::LatentModel; kwargs...) = throw(MethodError(mean, (model,)))
 
 """
     (model::LatentModel)(; θ...) -> AbstractGMRF

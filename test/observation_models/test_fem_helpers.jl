@@ -1,4 +1,4 @@
-using GaussianMarkovRandomFields, Ferrite, Tensors, Distributions, SparseArrays
+using GaussianMarkovRandomFields, Ferrite, Distributions, SparseArrays
 
 @testset "FEM Observation Model Helpers" begin
     # Setup common FEM discretization

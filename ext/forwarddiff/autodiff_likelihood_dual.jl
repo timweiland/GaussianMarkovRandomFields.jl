@@ -1,28 +1,6 @@
-# IFT path for AutoDiffLikelihood with Dual-valued hyperparameters.
-#
-# When a hyperparameter stored on the likelihood carries `ForwardDiff.Dual`
-# partials (typical for outer-AD callers wrapping `gaussian_approximation`
-# in a `hyperparameter_logpdf(θ)` function), the standard
-# `gaussian_approximation` Newton iteration would try to mutate the
-# workspace's `Float64`-typed `Q.nzval` with Dual values. We sidestep by:
-#
-#   1. Stripping Duals from `obs_lik.hyperparams` and running primal Newton
-#      to convergence on a plain Float64 likelihood.
-#   2. Computing ∂(∇_x loglik)/∂θ at the converged x* via *exact AD*: lift
-#      x* to a `Dual{outer_tag, Float64, N}` with zero outer-partials, call
-#      `loggrad`, and read partials off the result. The closure carries
-#      Dual hyperparams so the output naturally captures θ-direction
-#      partials.
-#   3. Solving the IFT linear system Q_post · dx*/dθ_j = grad_dθ_j with the
-#      primal posterior Cholesky for each partial direction.
-#   4. Assembling a Dual posterior mean from primal x_star + IFT-derived
-#      partials. Computing the *total* `dH/dθ` via one `loghessian` call on
-#      Dual x* (carrying dx/dθ partials) + Dual hyperparams. Writing into
-#      the primal Q's exact sparse structure (preserves `colptr`/`rowval`
-#      bit-for-bit so workspace pattern checks aren't tripped).
-#
-# This path uses no finite differences anywhere — all derivatives are
-# computed via AD.
+# Helpers for AutoDiffLikelihood values whose hyperparameters carry
+# ForwardDiff.Dual partials. The unified workspace IFT implementation
+# (which consumes these helpers) lives in autodiff_likelihood_ift.jl.
 
 # ----------------------------------------------------------------------------
 # Strip / detect helpers — extend the main-src defaults to recognise Dual
@@ -52,15 +30,19 @@ function _outer_tag_and_npartials(hp::NamedTuple)
         if Tag === nothing
             Tag, N = T_v, N_v
         elseif T_v !== Tag || N_v != N
-            error(
-                "AutoDiffLikelihood IFT path: hyperparams carry Duals from " *
-                    "different outer-AD passes (entry `$k` has Tag=$T_v / N=$N_v, " *
-                    "expected Tag=$Tag / N=$N). All Dual hyperparams must come " *
-                    "from a single outer ForwardDiff pass."
+            # COV_EXCL_START
+            throw(
+                ArgumentError(
+                    "AutoDiffLikelihood IFT path: hyperparams carry Duals from " *
+                        "different outer-AD passes (entry `$k` has Tag=$T_v / N=$N_v, " *
+                        "expected Tag=$Tag / N=$N). All Dual hyperparams must come " *
+                        "from a single outer ForwardDiff pass."
+                )
             )
+            # COV_EXCL_STOP
         end
     end
-    Tag === nothing && error("no Dual hyperparam in $(keys(hp))")
+    Tag === nothing && throw(ArgumentError("no Dual hyperparam in $(keys(hp))")) # COV_EXCL_LINE
     return Tag, N
 end
 
@@ -86,9 +68,77 @@ function _rebuild_autodiff_likelihood(lik::GMRFs.AutoDiffLikelihood, hp::NamedTu
         grad_backend = lik.grad_backend,
         hessian_backend = lik.hess_backend,
         pointwise_loglik_func = lik.pointwise_loglik_func,
+        diagonal_hessian_safe = lik.diagonal_hessian_safe,
     )
 end
 
 # Primal-stripped likelihood: AD partials removed from each hyperparam.
 _primal_autodiff_likelihood(lik::GMRFs.AutoDiffLikelihood) =
     _rebuild_autodiff_likelihood(lik, GMRFs._strip_ad_partials_hyperparams(lik.hyperparams))
+
+# Extend `_primal_obs_lik` (defined in common.jl for the per-channel Dual
+# likelihoods) to recognise AutoDiffLikelihood and CompositeLikelihood. The
+# unified IFT path uses this to strip the Dual-bearing lik down to a Float64
+# version for the primal Newton pass.
+_primal_obs_lik(lik::GMRFs.AutoDiffLikelihood) =
+    _is_dual_autodifflik(lik) ? _primal_autodiff_likelihood(lik) : lik
+
+function _primal_obs_lik(lik::GMRFs.CompositeLikelihood)
+    return GMRFs.CompositeLikelihood(map(_primal_obs_lik, lik.components))
+end
+
+function _primal_obs_lik(lik::GMRFs.LinearlyTransformedLikelihood)
+    return GMRFs.LinearlyTransformedLikelihood(
+        _primal_obs_lik(lik.base_likelihood),
+        _strip_matrix_partials(lik.design_matrix),
+        _strip_offset_partials(lik.offset),
+    )
+end
+
+# Strip Dual partials from a (possibly θ-dependent) design matrix.
+_strip_matrix_partials(A::AbstractMatrix{<:ForwardDiff.Dual}) = ForwardDiff.value.(A)
+_strip_matrix_partials(A::AbstractMatrix) = A
+
+# Strip Dual partials from a (possibly θ-dependent) affine offset.
+_strip_offset_partials(::Nothing) = nothing
+_strip_offset_partials(b::AbstractVector{<:ForwardDiff.Dual}) = ForwardDiff.value.(b)
+_strip_offset_partials(b::AbstractVector) = b
+
+# Issue #157: when the latent field is Dual-valued (differentiating through
+# `gaussian_approximation` w.r.t. hyperparameters), `hess_η = loghessian(η, base)` is
+# `Diagonal{<:ForwardDiff.Dual}`, and the generic `Symmetric(A' * hess_η * A)` — with a
+# lazy `Adjoint` `A'` — drops into an allocation-heavy generic fallback that is ~70–90×
+# slower than materializing the transpose and right-associating. This Dual-specialized
+# method does the latter. It is numerically identical to the generic form up to
+# floating-point reassociation, and the offset is folded in identically via
+# `_linear_predictor` (η = A·x + b is affine in x, so ∂η/∂x = A and the offset only
+# shifts the point at which `hess_η` is evaluated). The `Float64` generic method is left
+# untouched on purpose: there the lazy `Adjoint` already hits an optimized `SparseArrays`
+# kernel and materializing would be marginally slower.
+function GMRFs.loghessian(
+        x_full::AbstractVector{<:ForwardDiff.Dual},
+        ltlik::GMRFs.LinearlyTransformedLikelihood,
+    )
+    η = GMRFs._linear_predictor(ltlik.design_matrix, x_full, ltlik.offset)
+    hess_η = GMRFs.loghessian(η, ltlik.base_likelihood)
+    A = ltlik.design_matrix
+    return Symmetric(sparse(transpose(A)) * (hess_η * A))
+end
+
+# NonlinearLeastSquaresLikelihood: strip the σ-derived numeric fields (Dual when σ
+# carried partials) and the stored residual hyperparameters (Dual when an `f(x; θ...)`
+# hyperparameter carried partials). `f` and the cached backends (`jac_backend`,
+# `hess_backend`) are unchanged; they already hold primal-detected sparsity patterns, so
+# they are valid for the primal pass.
+function _primal_obs_lik(lik::GMRFs.NonlinearLeastSquaresLikelihood)
+    (GMRFs._hp_carries_ad_partials(lik.hyperparams) || GMRFs._carries_ad_partials(lik.inv_σ²)) || return lik
+    return GMRFs.NonlinearLeastSquaresLikelihood(
+        lik.f,
+        ForwardDiff.value.(lik.y),
+        ForwardDiff.value.(lik.inv_σ²),
+        ForwardDiff.value(lik.log_const),
+        lik.jac_backend,
+        lik.hess_backend,
+        GMRFs._strip_ad_partials_hyperparams(lik.hyperparams),
+    )
+end

@@ -116,11 +116,61 @@ using ForwardDiff
         @test loggrad(x0, obs_lik) ≈ -(exp.(x0) .- 2)
     end
 
+    @testset "Nested AD through the y payload (issue #142)" begin
+        # The prep cache keyed only on `eltype(x)`, so an outer AD pass entering through
+        # the `y` payload (with `x` left primal) reused the Float64-typed result buffers,
+        # which can't hold the resulting Duals. The key is now the *compute* eltype, which
+        # also accounts for AD data carried via `y`/hyperparams. The fix is backend-agnostic
+        # (it concerns the prep's buffer eltype), so it covers a dense `AutoForwardDiff`
+        # Hessian and a fixed-pattern `AutoSparse(…; KnownHessianSparsityDetector)` equally.
+        #
+        # We test the dense backend here (self-contained, no sparse-AD extension needed).
+        # Note: the *default* sparse Hessian backend uses a `TracerSparsityDetector`, which
+        # cannot trace a captured `Dual` y at all (a `Dual`×`Tracer` method ambiguity at
+        # sparsity-detection time — a separate limitation, of the same class as the NLSQ
+        # residual-curvature detection workaround); that is outside this buffer-eltype fix.
+        # Inner backend pinned to ForwardDiff so the outer ForwardDiff nests cleanly.
+        x = [0.3, -0.2, 0.5]
+        y0 = [1.0, 2.0, -1.0]
+        # H = Diagonal(-1 .- 0.6 .* y .* x), g = (y .- x) .- 0.3 .* y .* x .^ 2, with y = c .* y0.
+        loglik_func = (x; y) -> -0.5 * sum((y .- x) .^ 2) - 0.1 * sum(y .* x .^ 3)
+        ∂H = -0.6 * sum(y0 .* x)                  # d/dc sum(loghessian) at c = 1
+        ∂G = sum(y0) - 0.3 * sum(y0 .* x .^ 2)    # d/dc sum(loggrad) at c = 1
+        model = AutoDiffObservationModel(
+            loglik_func; n_latent = 3,
+            grad_backend = DI.AutoForwardDiff(), hessian_backend = DI.AutoForwardDiff(),
+        )
+
+        @test ForwardDiff.derivative(c -> sum(loghessian(x, model(c .* y0))), 1.0) ≈ ∂H
+        @test ForwardDiff.derivative(c -> sum(loggrad(x, model(c .* y0))), 1.0) ≈ ∂G
+
+        # Primal path is unaffected (still Float64, correct values).
+        @test eltype(loghessian(x, model(y0))) == Float64
+        @test eltype(loggrad(x, model(y0))) == Float64
+        @test sum(loghessian(x, model(y0))) ≈ -3 - 0.6 * sum(y0 .* x)
+    end
+
+    @testset "Abstractly-typed y payload stays concrete" begin
+        # The compute-eltype widening must not produce a non-concrete eltype: an
+        # abstractly-typed numeric payload (e.g. Vector{Any}/Vector{Real}) holding primals
+        # must fall back to eltype(x), not attempt `zeros(Any, …)` (issue #142 follow-up).
+        x = [0.1, 0.2, 0.3]
+        loglik_func = (x; y) -> -0.5 * sum((y .- x) .^ 2)   # ∇ = y .- x
+        @testset "eltype $(eltype(yp)) payload" for yp in (Any[1.0, 2.0, 3.0], Real[1.0, 2.0, 3.0])
+            model = AutoDiffObservationModel(
+                loglik_func; n_latent = 3,
+                grad_backend = DI.AutoForwardDiff(), hessian_backend = DI.AutoForwardDiff(),
+            )
+            lik = model(yp)
+            @test eltype(loggrad(x, lik)) == Float64
+            @test eltype(loghessian(x, lik)) == Float64
+            @test loggrad(x, lik) ≈ Float64.(yp) .- x
+        end
+    end
+
     @testset "Pointwise Hessian fast path returns Diagonal" begin
-        # When `pointwise_loglik_func` is set, loghessian short-circuits to
-        # a per-element 1D second-derivative path that returns `Diagonal`
-        # directly — bypassing DI.hessian entirely. Doubles as the
-        # nested-AD-friendly route since 1D second derivatives nest cleanly.
+        # With both `pointwise_loglik_func` set and `diagonal_hessian_safe = true`,
+        # loghessian returns a `Diagonal` via per-element 1D second derivatives.
         using LinearAlgebra: Diagonal
 
         function loglik_sum(x; y, σ)
@@ -137,6 +187,7 @@ using ForwardDiff
             grad_backend = DI.AutoForwardDiff(),
             hessian_backend = DI.AutoForwardDiff(),
             pointwise_loglik_func = loglik_pointwise,
+            diagonal_hessian_safe = true,
         )
 
         y_data = [1.0, 2.0, 3.0, 4.0]
@@ -154,5 +205,60 @@ using ForwardDiff
         v = [1.0, 0.0, 0.0, 0.0]
         val = ForwardDiff.derivative(t -> sum(loghessian(x .+ t .* v, obs_lik)), 0.0)
         @test val ≈ 0.0  # H is constant in x for the Gaussian case
+    end
+
+    @testset "Diagonal-Hessian shortcut is opt-in (issue #102)" begin
+        # `y[i] ~ Normal(Aᵢᵀ x, σ)`: pointwise term `i` mixes latent components,
+        # so the Hessian is `-A'A/σ²`, not diagonal.
+        using LinearAlgebra: Diagonal
+
+        A = [
+            1.0 0.5;
+            0.5 1.0;
+            0.7 0.3;
+        ]
+
+        function lp_loglik(x; y, σ, A)
+            r = y .- A * x
+            return -0.5 * sum(r .^ 2) / σ^2
+        end
+        function lp_pointwise(x; y, σ, A)
+            r = y .- A * x
+            return -0.5 .* (r .^ 2) ./ σ^2
+        end
+
+        obs_model_unsafe = AutoDiffObservationModel(
+            lp_loglik;
+            n_latent = 2,
+            hyperparams = (:σ, :A),
+            grad_backend = DI.AutoForwardDiff(),
+            hessian_backend = DI.AutoForwardDiff(),
+            pointwise_loglik_func = lp_pointwise,
+        )
+
+        y_data = [1.0, 2.0, 1.5]
+        σ = 0.5
+        x = [0.7, 1.1]
+        obs_lik_unsafe = obs_model_unsafe(y_data; σ = σ, A = A)
+
+        H_full = loghessian(x, obs_lik_unsafe)
+        H_expected = -A' * A / σ^2
+
+        @test !(H_full isa Diagonal)
+        @test H_full ≈ H_expected
+        @test abs(H_full[1, 2]) > 1.0e-3
+        @test H_full[1, 1] ≈ -sum(A[:, 1] .^ 2) / σ^2
+
+        obs_model_optedin = AutoDiffObservationModel(
+            lp_loglik;
+            n_latent = 2,
+            hyperparams = (:σ, :A),
+            grad_backend = DI.AutoForwardDiff(),
+            hessian_backend = DI.AutoForwardDiff(),
+            pointwise_loglik_func = lp_pointwise,
+            diagonal_hessian_safe = true,
+        )
+        obs_lik_optedin = obs_model_optedin(y_data; σ = σ, A = A)
+        @test loghessian(x, obs_lik_optedin) isa Diagonal
     end
 end

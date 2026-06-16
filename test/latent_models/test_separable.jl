@@ -19,7 +19,7 @@ using SparseArrays
         @test length(sep3.components) == 3
 
         # Invalid: single component
-        @test_throws ErrorException SeparableModel(rw1)
+        @test_throws ArgumentError SeparableModel(rw1)
 
         # Custom algorithm
         sep_alg = SeparableModel(rw1, iid; alg = :cg)

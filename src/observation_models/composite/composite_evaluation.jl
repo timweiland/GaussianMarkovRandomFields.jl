@@ -47,16 +47,11 @@ Each component contributes its Hessian with respect to the full latent field `x`
 For overlapping dependencies, Hessians are automatically summed element-wise.
 """
 function loghessian(x, composite_lik::CompositeLikelihood)
-    # Start with zero Hessian - let first component determine type/structure
-    first_hess = loghessian(x, composite_lik.components[1])
-    total_hess = copy(first_hess)
-
-    # Sum contributions from remaining components
-    for i in 2:length(composite_lik.components)
-        total_hess .+= loghessian(x, composite_lik.components[i])
-    end
-
-    return total_hess
+    # Use out-of-place `+` so the accumulator type follows the promotion of the
+    # component Hessians (e.g. `Diagonal` + `SparseMatrixCSC` -> `SparseMatrixCSC`).
+    # In-place `.+=` would either error or silently drop contributions outside
+    # the first component's sparsity pattern.
+    return sum(comp -> loghessian(x, comp), composite_lik.components)
 end
 
 """
@@ -74,10 +69,14 @@ function _pointwise_loglik(::ConditionallyIndependent, x, composite_lik::Composi
     # Check all components are conditionally independent
     for comp in composite_lik.components
         if observation_independence(comp) != ConditionallyIndependent()
-            error(
-                "CompositeLikelihood contains component with ConditionallyDependent trait.\n"
-                    * "All components must have ConditionallyIndependent observations for pointwise_loglik."
+            # COV_EXCL_START
+            throw(
+                ArgumentError(
+                    "CompositeLikelihood contains component with ConditionallyDependent trait.\n"
+                        * "All components must have ConditionallyIndependent observations for pointwise_loglik."
+                )
             )
+            # COV_EXCL_STOP
         end
     end
 
@@ -98,10 +97,14 @@ function _pointwise_loglik!(::ConditionallyIndependent, result, x, composite_lik
     # Check all components are conditionally independent
     for comp in composite_lik.components
         if observation_independence(comp) != ConditionallyIndependent()
-            error(
-                "CompositeLikelihood contains component with ConditionallyDependent trait.\n"
-                    * "All components must have ConditionallyIndependent observations for pointwise_loglik!."
+            # COV_EXCL_START
+            throw(
+                ArgumentError(
+                    "CompositeLikelihood contains component with ConditionallyDependent trait.\n"
+                        * "All components must have ConditionallyIndependent observations for pointwise_loglik!."
+                )
             )
+            # COV_EXCL_STOP
         end
     end
 

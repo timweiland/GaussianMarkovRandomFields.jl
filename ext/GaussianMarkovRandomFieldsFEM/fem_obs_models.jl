@@ -1,7 +1,3 @@
-using Distributions
-
-export PointEvaluationObsModel, PointDerivativeObsModel, PointSecondDerivativeObsModel
-
 """
     PointEvaluationObsModel(fem::FEMDiscretization, points::AbstractMatrix, family::Type{<:Distribution}) -> LinearlyTransformedObservationModel
 

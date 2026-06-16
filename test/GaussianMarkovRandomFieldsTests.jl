@@ -1,6 +1,9 @@
 module GaussianMarkovRandomFieldsTests
 
 using GaussianMarkovRandomFields
+# Load FEM weakdeps so the GaussianMarkovRandomFieldsFEM extension and the
+# GaussianMarkovRandomFieldsLibGEOS extension are active during testing.
+import Ferrite, FerriteGmsh, Gmsh, LibGEOS
 using ReTest
 using Aqua
 
@@ -25,6 +28,7 @@ include("spdes/fem/test_fem_discretization.jl")
 include("spdes/fem/test_fem_derivatives.jl")
 include("mesh/test_scattered.jl")
 include("spdes/test_matern.jl")
+include("spdes/fem/test_barrier_model.jl")
 include("solvers/variance/test_rbmc.jl")
 include("test_linearsolve_architecture.jl")
 include("test_gmrf_arithmetic.jl")
@@ -46,5 +50,7 @@ include("workspace/runtests.jl")
     Aqua.test_all(GaussianMarkovRandomFields; ambiguities = false, piracies = false)
     @test length(Test.detect_ambiguities(GaussianMarkovRandomFields)) == 0
 end
+
+include("test_jet.jl")
 
 end

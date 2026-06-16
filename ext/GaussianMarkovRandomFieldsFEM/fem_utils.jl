@@ -1,12 +1,3 @@
-using Ferrite, LinearAlgebra, SparseArrays
-
-export assemble_mass_matrix,
-    assemble_diffusion_matrix,
-    assemble_advection_matrix,
-    lump_matrix,
-    assemble_streamline_diffusion_matrix,
-    apply_soft_constraints!
-
 """
     lump_matrix(A::AbstractMatrix, ::Lagrange{S, 1}) where {S}
 

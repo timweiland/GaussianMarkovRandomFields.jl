@@ -8,9 +8,11 @@ export AutoDiffLikelihood, AutoDiffObservationModel
 
 Mutable, eltype-keyed cache of `DI.prepare_gradient` / `DI.prepare_hessian`
 results. A single `AutoDiffLikelihood` holds one of these so repeated calls
-with the same input eltype reuse the prep (the common case), while
-unexpected eltypes (e.g. AD-tagged scalars from a nested-AD caller) trigger
-a one-time prep on first miss instead of failing.
+with the same *compute* eltype (`eltype(x)` widened by any AD-tagged scalars
+the likelihood carries through `y`/`hyperparams`; see `_ad_compute_eltype`)
+reuse the prep (the common case), while a new eltype — e.g. `Dual`s from an
+outer AD pass arriving through `x`, `y`, or a hyperparameter — triggers a
+one-time prep on first miss instead of failing.
 
 `get!` on the underlying `Dict`s isn't safe under concurrent mutation, so
 the cache holds a `ReentrantLock`. The prep itself can be expensive; we
@@ -83,6 +85,9 @@ it via dispatch and route `gaussian_approximation` through a primal-Newton
 - `pointwise_loglik_func::PF`: Optional pointwise log-likelihood, signature `(x; y, hyperparam_kwargs...) -> Vector{Real}`.
 - `y::Y`: Stored observation data.
 - `hyperparams::HP`: Stored hyperparameter values.
+- `diagonal_hessian_safe::Bool`: When `true`, gates the per-element 1D
+  second-derivative shortcut in `loghessian`. Only set this when each
+  pointwise term `i` depends solely on `x[i]`.
 """
 struct AutoDiffLikelihood{F, B, SB, PF, Y, HP <: NamedTuple} <: GaussianMarkovRandomFields.ObservationLikelihood
     loglik_func::F
@@ -92,6 +97,7 @@ struct AutoDiffLikelihood{F, B, SB, PF, Y, HP <: NamedTuple} <: GaussianMarkovRa
     pointwise_loglik_func::PF
     y::Y
     hyperparams::HP
+    diagonal_hessian_safe::Bool
 end
 
 """
@@ -115,6 +121,9 @@ materializes a likelihood that holds those values explicitly.
 - `hess_backend::SB`: AD backend for Hessians.
 - `hyperparams::H`: Tuple of hyperparameter names.
 - `pointwise_loglik_func::PF`: Optional pointwise log-likelihood.
+- `diagonal_hessian_safe::Bool`: When `true`, opts into the diagonal-Hessian
+  shortcut in `loghessian`. Only valid when each pointwise term `i`
+  depends solely on `x[i]`.
 
 # Usage
 ```julia
@@ -135,39 +144,61 @@ struct AutoDiffObservationModel{F, B, SB, H, PF} <: GaussianMarkovRandomFields.O
     hess_backend::SB
     hyperparams::H
     pointwise_loglik_func::PF
+    diagonal_hessian_safe::Bool
 end
 
 const AD_PREFERRED_ORDER = (DI.AutoEnzyme(), DI.AutoMooncake(), DI.AutoZygote(), DI.AutoForwardDiff())
 function default_grad_backend()
     ad_idx = findfirst(DI.check_available, AD_PREFERRED_ORDER)
     if ad_idx === nothing
-        error(
-            "None of the default AD backends are available."
-                * " Please specify your own grad_backend."
+        # COV_EXCL_START
+        throw(
+            ArgumentError(
+                "None of the default AD backends are available."
+                    * " Please specify your own grad_backend."
+            )
         )
+        # COV_EXCL_STOP
     end
     return AD_PREFERRED_ORDER[ad_idx]
 end
 
 """
-    AutoDiffObservationModel(loglik_func; n_latent, hyperparams=(), grad_backend, hessian_backend, pointwise_loglik_func=nothing)
+    AutoDiffObservationModel(loglik_func; n_latent, hyperparams=(), grad_backend, hessian_backend, pointwise_loglik_func=nothing, diagonal_hessian_safe=false)
 
 Construct an `AutoDiffObservationModel`.
 
 `loglik_func` should have signature `(x; y, hyperparam_kwargs...) -> Real`.
 `hyperparams` is a tuple of hyperparameter names (`Symbol`s) the model expects.
+
+## Differentiating through `y` or the hyperparameters
+
+`loggrad`/`loghessian` compose with an outer AD pass even when a `Dual` enters through `x`,
+the `y` payload, or a hyperparameter — the AD operator is prepared at the resulting compute
+eltype. The AD-carrying value must reach the likelihood as a `Number` or array of `Number`s;
+`Dual`s buried inside an opaque `y` (a `Tuple`/`NamedTuple`/struct) are not detected. For an
+outer pass that enters through `y`, use a dense or fixed-pattern
+(`KnownHessianSparsityDetector`) Hessian backend — the default `TracerSparsityDetector`
+sparse backend cannot trace a `Dual` captured through `y`.
+
+## `diagonal_hessian_safe`
+
+When both `pointwise_loglik_func` is provided AND `diagonal_hessian_safe = true`,
+`loghessian` returns a `Diagonal` via per-element 1D second derivatives.
+Only valid when the linear predictor of observation `i` is literally `x[i]`;
+models like `y[i] ~ Family(Aᵢᵀ x)` must keep the default `false`.
 """
-function AutoDiffObservationModel(loglik_func; n_latent, hyperparams = (), grad_backend = default_grad_backend(), hessian_backend = default_hessian_backend(grad_backend), pointwise_loglik_func = nothing)
+function AutoDiffObservationModel(loglik_func; n_latent, hyperparams = (), grad_backend = default_grad_backend(), hessian_backend = default_hessian_backend(grad_backend), pointwise_loglik_func = nothing, diagonal_hessian_safe::Bool = false)
     if hessian_backend === nothing
         hessian_backend = grad_backend
         @warn "Hessian backend has type $(typeof(hessian_backend)) which may produce dense Hessians!!"
     end
-    return AutoDiffObservationModel(loglik_func, n_latent, grad_backend, hessian_backend, hyperparams, pointwise_loglik_func)
+    return AutoDiffObservationModel(loglik_func, n_latent, grad_backend, hessian_backend, hyperparams, pointwise_loglik_func, diagonal_hessian_safe)
 end
 
 """
-    AutoDiffLikelihood(loglik_func; n_latent, y, hyperparams, grad_backend, hessian_backend, pointwise_loglik_func)
-    AutoDiffLikelihood(closure;     n_latent, grad_backend, hessian_backend, pointwise_loglik_func)
+    AutoDiffLikelihood(loglik_func; n_latent, y, hyperparams, grad_backend, hessian_backend, pointwise_loglik_func, diagonal_hessian_safe)
+    AutoDiffLikelihood(closure;     n_latent, grad_backend, hessian_backend, pointwise_loglik_func, diagonal_hessian_safe)
 
 Direct construction of an `AutoDiffLikelihood`.
 
@@ -182,6 +213,9 @@ Two forms:
    `y`/`hyperparams` arguments. Stored with empty `y` and empty `hyperparams`.
    Convenient for one-off uses but loses the nested-AD-friendly dispatch
    route — prefer form (1) when differentiating through a hyperparameter.
+
+`diagonal_hessian_safe` (default `false`) is independent of
+`pointwise_loglik_func`. See `AutoDiffObservationModel` for the contract.
 """
 function AutoDiffLikelihood(
         loglik_func;
@@ -191,14 +225,20 @@ function AutoDiffLikelihood(
         grad_backend = default_grad_backend(),
         hessian_backend = default_hessian_backend(grad_backend),
         pointwise_loglik_func = nothing,
+        diagonal_hessian_safe::Bool = false,
     )
     if hessian_backend === nothing
         hessian_backend = grad_backend
         @warn "Hessian backend has type $(typeof(hessian_backend)) which may produce dense Hessians!!"
     end
+    if pointwise_loglik_func !== nothing && !diagonal_hessian_safe
+        @info "AutoDiffLikelihood: `pointwise_loglik_func` provided without `diagonal_hessian_safe=true`. " *
+            "`loghessian` will compute the full Hessian via `DI.hessian`. Set `diagonal_hessian_safe=true` only " *
+            "if every pointwise term `i` depends solely on `x[i]` (e.g. `y[i] ~ Family(x[i])`)." maxlog = 1
+    end
     obs_lik = AutoDiffLikelihood(
         loglik_func, grad_backend, hessian_backend, _ADPrepCache(n_latent),
-        pointwise_loglik_func, y, hyperparams
+        pointwise_loglik_func, y, hyperparams, diagonal_hessian_safe
     )
     # Eagerly populate the Float64 prep entry. Construction and runtime calls
     # both go through `_build_call(obs_lik)` so the prep is keyed on the same
@@ -247,6 +287,7 @@ function (obs_model::AutoDiffObservationModel)(y; kwargs...)
         grad_backend = obs_model.grad_backend,
         hessian_backend = obs_model.hess_backend,
         pointwise_loglik_func = obs_model.pointwise_loglik_func,
+        diagonal_hessian_safe = obs_model.diagonal_hessian_safe,
     )
 end
 
@@ -304,30 +345,67 @@ function loglik(x, obs_lik::AutoDiffLikelihood)
     return _build_call(obs_lik)(x)
 end
 
+# Element type at which to prepare (and run) the gradient/Hessian operator. The DI prep's
+# result buffers are sized from the *input* eltype, but the output also depends on any
+# AD-tagged scalars the likelihood carries through its `y` payload or `hyperparams`. Under
+# an outer AD pass those arrive as `Dual`s while `x` stays primal, so we widen `eltype(x)`
+# by their value eltypes; preparing (and calling) at this type gives buffers that can hold
+# the result. On the common primal path this is just `eltype(x)`, so nothing changes.
+function _ad_compute_eltype(x, obs_lik::AutoDiffLikelihood)
+    S = promote_type(
+        eltype(x), _value_eltype(obs_lik.y), map(_value_eltype, values(obs_lik.hyperparams))...,
+    )
+    # Widening can land on a non-concrete type (an abstractly-typed numeric payload, e.g.
+    # `y::Vector{Real}`); we can't `zeros(S, …)` then. Fall back to `eltype(x)` — the right
+    # compute type whenever such a payload actually holds primals (the common case).
+    return isconcretetype(S) ? S : eltype(x)
+end
+
+# Value (scalar) eltype contributed by a stored payload/hyperparameter. `Union{}` is the
+# identity of `promote_type`, so `nothing` and non-numeric payloads (incl. arrays whose
+# eltype isn't a `Number`, like `Vector{Any}`) don't widen. AD data must reach the
+# likelihood as a `Number` or array of `Number`s through `x`, `y`, or a `hyperparams` value
+# to be seen here. `Dual`s hidden inside an opaque `y` (a `Tuple`/`NamedTuple`/struct, or an
+# abstractly-typed array) are NOT detected — the prep stays primal-typed and an outer AD
+# pass through such a `y` would still hit the issue-#142 buffer mismatch.
+_value_eltype(::Nothing) = Union{}
+_value_eltype(v::Number) = typeof(v)
+_value_eltype(v::AbstractArray{<:Number}) = eltype(v)
+_value_eltype(::Any) = Union{}
+
+# Promote `x` to element type `S` for the AD call. Identity (no allocation) on the common
+# primal path, where `x` already has eltype `S`; otherwise widen (e.g. a primal `x` lifted
+# to `Dual` so it matches an outer pass that entered through `y`/a hyperparameter).
+_as_eltype(::Type{S}, x::AbstractArray{S}) where {S} = x
+_as_eltype(::Type{S}, x::AbstractArray) where {S} = convert.(S, x)
+
 function loggrad(x, obs_lik::AutoDiffLikelihood)
     f = _build_call(obs_lik)
-    prep = _get_or_prepare_grad!(obs_lik.prep_cache, f, obs_lik.grad_backend, eltype(x))
-    return DI.gradient(f, prep, obs_lik.grad_backend, x)
+    S = _ad_compute_eltype(x, obs_lik)
+    prep = _get_or_prepare_grad!(obs_lik.prep_cache, f, obs_lik.grad_backend, S)
+    return DI.gradient(f, prep, obs_lik.grad_backend, _as_eltype(S, x))
 end
 
 function loghessian(x, obs_lik::AutoDiffLikelihood)
-    if obs_lik.pointwise_loglik_func !== nothing
+    if obs_lik.diagonal_hessian_safe && obs_lik.pointwise_loglik_func !== nothing
         return _diagonal_hessian_via_pointwise(x, obs_lik)
     end
     f = _build_call(obs_lik)
-    prep = _get_or_prepare_hess!(obs_lik.prep_cache, f, obs_lik.hess_backend, eltype(x))
-    return DI.hessian(f, prep, obs_lik.hess_backend, x)
+    S = _ad_compute_eltype(x, obs_lik)
+    prep = _get_or_prepare_hess!(obs_lik.prep_cache, f, obs_lik.hess_backend, S)
+    return DI.hessian(f, prep, obs_lik.hess_backend, _as_eltype(S, x))
 end
 
-# Pointwise structured-Hessian fast path. For conditionally-independent
-# observation likelihoods (which `pointwise_loglik_func` declares):
+# Pointwise structured-Hessian fast path. Gated on the user's
+# `diagonal_hessian_safe` assertion: only valid when each pointwise term
+# `i` depends solely on `x[i]`, so
 #
 #   loglik(x) = sum_i pointwise[i](x_i; y_i, θ)
 #
-# the Hessian is diagonal with `H[i,i] = ∂²pointwise[i]/∂x_i²`. Each entry
-# is a 1D second derivative — the cleanest case for nested AD — so this
-# path also doubles as the friction-free route for outer-AD callers (no
-# DI nested-Dual prep machinery to navigate).
+# and the Hessian is diagonal with `H[i,i] = ∂²pointwise[i]/∂x_i²`. Each
+# entry is a 1D second derivative — the cleanest case for nested AD —
+# so this path also doubles as the friction-free route for outer-AD
+# callers (no DI nested-Dual prep machinery to navigate).
 function _diagonal_hessian_via_pointwise(x, obs_lik::AutoDiffLikelihood)
     pf = _build_pointwise_call(obs_lik)
     n = length(x)
@@ -363,15 +441,17 @@ autodiff_hessian_prep(obs_lik::AutoDiffLikelihood) = obs_lik.prep_cache.hess_pre
 
 function _pointwise_loglik(::ConditionallyIndependent, x, obs_lik::AutoDiffLikelihood)
     if obs_lik.pointwise_loglik_func === nothing
-        error(
-            "pointwise_loglik not available for this AutoDiffLikelihood.\n"
-                * "To enable pointwise log-likelihood computation, provide the `pointwise_loglik_func` keyword argument\n"
-                * "when constructing AutoDiffObservationModel:\n\n"
-                * "    obs_model = AutoDiffObservationModel(loglik_func;\n"
-                * "                                          n_latent=...,\n"
-                * "                                          pointwise_loglik_func=my_pointwise_func)\n\n"
-                * "The pointwise function should have signature `(x; y, hyperparam_kwargs...) -> Vector{Real}` where\n"
-                * "result[i] = log p(yᵢ | xᵢ) and sum(result) ≈ loglik_func(x; y, hyperparam_kwargs...)."
+        throw(
+            ArgumentError(
+                "pointwise_loglik not available for this AutoDiffLikelihood.\n"
+                    * "To enable pointwise log-likelihood computation, provide the `pointwise_loglik_func` keyword argument\n"
+                    * "when constructing AutoDiffObservationModel:\n\n"
+                    * "    obs_model = AutoDiffObservationModel(loglik_func;\n"
+                    * "                                          n_latent=...,\n"
+                    * "                                          pointwise_loglik_func=my_pointwise_func)\n\n"
+                    * "The pointwise function should have signature `(x; y, hyperparam_kwargs...) -> Vector{Real}` where\n"
+                    * "result[i] = log p(yᵢ | xᵢ) and sum(result) ≈ loglik_func(x; y, hyperparam_kwargs...)."
+            )
         )
     end
     return _build_pointwise_call(obs_lik)(x)
