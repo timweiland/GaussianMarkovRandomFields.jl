@@ -25,6 +25,10 @@ include("workspace/gaussian_approximation.jl")
 # (not from latent_models/) because it dispatches on `ObservationLikelihood` and
 # drives both the arithmetic and workspace Newton loops defined above.
 include("latent_models/gaussian_approximation.jl")
+# AD-defined (TMB-style) latent prior. Loaded after observation_models because it
+# reuses the AutoDiffLikelihood machinery (_ADPrepCache, default AD backends, the
+# eltype helpers) defined there.
+include("latent_models/autodiff_latent_prior.jl")
 include("workspace/latent_model_integration.jl")
 include("workspace/workspace_pool.jl")
 include("autodiff/autodiff.jl")

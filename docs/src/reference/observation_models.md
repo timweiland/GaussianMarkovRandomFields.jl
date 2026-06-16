@@ -503,6 +503,7 @@ posterior comes out of `gaussian_approximation`).
 ```@docs
 ObservationModel
 ObservationLikelihood
+ZeroLikelihood
 hyperparameters(::ObservationModel)
 latent_dimension
 loglik

@@ -19,8 +19,24 @@ function marginal_loglikelihood(
     )
     θ = NamedTuple(kwargs)
     x_star = mean(posterior)
-    lq_star = local_quadratic(prior, x_star; θ...)
-    return lq_star.logp_ref + loglik(x_star, obs_lik) - logpdf(posterior, x_star)
+    # Use the scalar `prior_logdensity` hook rather than `local_quadratic(...).logp_ref`:
+    # it avoids rebuilding the (sparse) Hessian just to read a number, and — for an
+    # AutoDiffLatentPrior under an outer ForwardDiff θ-pass — it evaluates `log p` as
+    # plain arithmetic, so it doesn't trip the sparsity tracer on Dual inputs.
+    return prior_logdensity(prior, x_star; θ...) + loglik(x_star, obs_lik) - logpdf(posterior, x_star)
+end
+
+# Implicit-Function-Theorem hyperparameter-gradient path for non-Gaussian latent priors.
+# The real implementation (currently for `AutoDiffLatentPrior`) lives in the ForwardDiff
+# extension; this stub fires only when θ already carries Dual partials but the extension
+# isn't loaded — which can't normally happen — so it's a guard, not a user-facing error.
+function _nongaussian_dualhp_ift(prior, obs_lik, θ_full, ws; kwargs...)
+    throw(
+        ArgumentError(
+            "Hyperparameter (θ) gradients for $(typeof(prior)) require the ForwardDiff " *
+                "extension to be loaded (`using ForwardDiff`)."
+        )
+    )
 end
 
 """
@@ -89,6 +105,19 @@ function gaussian_approximation(
         hp_kwargs...,
     )
     θ_full = isempty(hp_kwargs) ? θ : merge(θ, NamedTuple(hp_kwargs))
+
+    # Hyperparameter-gradient pass: when θ carries ForwardDiff.Dual partials, running the
+    # Newton loop with Duals is impossible (CHOLMOD can't factorize a Dual matrix, and the
+    # sparsity tracer can't coexist with Dual θ). Route to the Implicit Function Theorem
+    # path (primal Newton + analytic θ-tangent), provided by the ForwardDiff extension.
+    if _hp_carries_ad_partials(θ_full)
+        return _nongaussian_dualhp_ift(
+            prior, obs_lik, θ_full, ws;
+            x0, max_iter, mean_change_tol, newton_dec_tol,
+            adaptive_stepsize, max_linesearch_iter, verbose,
+        )
+    end
+
     lp = LatentPrior(prior, θ_full)
     constraint_info = constraints(prior; θ_full...)
     constraints_nt = constraint_info === nothing ? nothing :

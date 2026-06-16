@@ -1,6 +1,7 @@
 include("observation_model.jl")
 include("observation_independence.jl")
 include("observation_likelihood.jl")
+include("zero_likelihood.jl")
 include("exponential_family/base.jl")
 include("composite/composite.jl")
 include("linearly_transformed.jl")

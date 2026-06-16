@@ -81,7 +81,7 @@ fit `GMRFWorkspace`'s "one sparse precision, one factorization" shape —
 for example, a model whose joint precision is a block structure across
 several per-block factorizations rather than a single global factor.
 
-!!! warning "Experimental API (pre v0.5)"
+!!! warning "Experimental API"
     The [`AbstractLatentWorkspace`](@ref) /
     [`AbstractLatentWorkspacePool`](@ref) protocol is experimental. Surface
     may shift until validated against at least two downstream

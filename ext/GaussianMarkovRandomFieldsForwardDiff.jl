@@ -7,6 +7,7 @@ module GaussianMarkovRandomFieldsForwardDiff
 import GaussianMarkovRandomFields as GMRFs
 import GaussianMarkovRandomFields: GMRF, ADJacobianMap
 import Distributions: logdetcov
+import DifferentiationInterface as DI
 
 using ForwardDiff
 using LinearAlgebra
@@ -30,5 +31,6 @@ include("forwarddiff/workspace_gaussian_approximation.jl")
 include("forwarddiff/logdetcov.jl")
 include("forwarddiff/autodiff_likelihood_dual.jl")
 include("forwarddiff/autodiff_likelihood_ift.jl")
+include("forwarddiff/autodiff_latent_prior_ift.jl")
 
 end
