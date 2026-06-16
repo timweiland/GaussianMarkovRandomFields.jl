@@ -35,6 +35,14 @@ likelihood) works equally well by composing this prior with any
     Inline the closed form (`-0.5*((y-x)/σ)^2 - log(σ) - 0.5log(2π)`), or pass a
     dense / `KnownHessianSparsityDetector` `hessian_backend`.
 
+# Hyperparameter gradients
+With the ForwardDiff extension loaded, the Laplace marginal likelihood is
+differentiable in the hyperparameters: `ForwardDiff.gradient(θ -> marginal_loglikelihood(
+prior, obs_lik, gaussian_approximation(prior, obs_lik; θ...); θ...), θ₀)` is exact.
+When θ carries `Dual` partials, `gaussian_approximation` runs primal Newton and applies
+the Implicit Function Theorem (CHOLMOD can't factorize Dual matrices, and the sparsity
+tracer can't see Dual θ), so the returned posterior carries `dx*/dθ` and `dQ/dθ`.
+
 # Fields
 - `logp_func::F`: log-density with signature `(x; θ...) -> Real`.
 - `n::Int`: number of latent variables.

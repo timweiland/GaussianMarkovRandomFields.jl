@@ -194,4 +194,44 @@ _qd_logp_kw(x; τ, a) = _qd_logp(x, τ, a)
         ml_joint = marginal_loglikelihood(joint_prior, ZeroLikelihood(), post_joint; τ = τ, a = a)
         @test ml_joint ≈ ml_structured atol = 1.0e-6
     end
+
+    @testset "θ-gradients of the marginal likelihood via IFT match finite differences" begin
+        # Exact ForwardDiff θ-gradients of the Laplace marginal, through the IFT path
+        # (primal Newton + analytic θ-tangent), validated against central differences.
+        Random.seed!(11)
+        n = 4; σ = 0.5
+        y = [0.4, 0.7, 1.0, 1.1]
+        prior = AutoDiffLatentPrior(_qd_logp_kw; n = n, hyperparams = (:τ, :a))
+        obs_lik = ExponentialFamily(Normal)(y; σ = σ)
+
+        function ml(θvec)
+            τ, a = θvec[1], θvec[2]
+            post = gaussian_approximation(prior, obs_lik; τ = τ, a = a)
+            return marginal_loglikelihood(prior, obs_lik, post; τ = τ, a = a)
+        end
+
+        θ0 = [2.0, 0.5]
+        g_ad = ForwardDiff.gradient(ml, θ0)
+
+        h = 1.0e-6
+        g_fd = similar(θ0)
+        for i in 1:2
+            θp = copy(θ0); θp[i] += h
+            θm = copy(θ0); θm[i] -= h
+            g_fd[i] = (ml(θp) - ml(θm)) / (2h)
+        end
+        @test g_ad ≈ g_fd rtol = 1.0e-4
+
+        # The IFT also yields a Dual posterior whose mean carries the mode sensitivity
+        # dx*/dθ; check that Jacobian against finite differences (uses a proper AD tag).
+        mode(θvec) = mean(gaussian_approximation(prior, obs_lik; τ = θvec[1], a = θvec[2]))
+        J_ad = ForwardDiff.jacobian(mode, θ0)
+        J_fd = similar(J_ad)
+        for i in 1:2
+            θp = copy(θ0); θp[i] += h
+            θm = copy(θ0); θm[i] -= h
+            J_fd[:, i] .= (mode(θp) .- mode(θm)) ./ (2h)
+        end
+        @test J_ad ≈ J_fd rtol = 1.0e-4
+    end
 end
