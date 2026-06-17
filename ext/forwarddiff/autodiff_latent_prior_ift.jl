@@ -23,13 +23,6 @@
 function GMRFs._nongaussian_dualhp_ift(
         prior::GMRFs.AutoDiffLatentPrior, obs_lik, θ_full::NamedTuple, ws; kwargs...
     )
-    ws === nothing || throw(
-        ArgumentError(
-            "θ-gradients for AutoDiffLatentPrior with a GMRFWorkspace are not supported " *
-                "yet; omit `ws` for the hyperparameter-gradient pass."
-        )
-    )
-
     Tag, N = _outer_tag_and_npartials(θ_full)
     V = Float64
     DualT = ForwardDiff.Dual{Tag, V, N}
@@ -38,7 +31,13 @@ function GMRFs._nongaussian_dualhp_ift(
     # Step 1: primal Newton on stripped θ + stripped obs_lik.
     θ_primal = GMRFs._strip_ad_partials_hyperparams(θ_full)
     primal_obs = _primal_obs_lik(obs_lik)
-    posterior_primal = GMRFs.gaussian_approximation(prior, primal_obs; θ = θ_primal, kwargs...)
+    # Forward the workspace (#174): the primal Newton then reuses ws's symbolic factorization
+    # (one symbolic factor across the whole θ-grid), and its converged Q_post factor backs the
+    # IFT solves below. With ws === nothing this is the original fresh-cache path. Returns a
+    # WorkspaceGMRF when ws is supplied, a (Constrained)GMRF otherwise.
+    posterior_primal = GMRFs.gaussian_approximation(
+        prior, primal_obs; θ = θ_primal, ws = ws, kwargs...
+    )
     x_star = GMRFs.mean(posterior_primal)
     n = length(x_star)
 
@@ -55,18 +54,37 @@ function GMRFs._nongaussian_dualhp_ift(
     g_lik = GMRFs.loggrad(x_star, obs_lik)   # Float64 for a primal obs_lik; Dual if it carries θ
     neg_grad_dual = (-g_prior_dual) .- g_lik
 
-    # Step 3: IFT solves, reusing the primal posterior factorization.
-    cache = GMRFs.linsolve_cache(GMRFs._base_gmrf(posterior_primal))
-    b_saved = copy(cache.b)
+    # Step 3: IFT solves Q_post · dx[:, j] = -∂(neg_score)/∂θ_j, reusing the primal
+    # factorization. `alg` (for the Dual posterior in Step 6) comes from that same factor source.
     dx = Matrix{V}(undef, n, N)
-    for j in 1:N
-        for i in 1:n
-            cache.b[i] = -ForwardDiff.partials(neg_grad_dual[i], j)
+    alg = if ws === nothing
+        cache = GMRFs.linsolve_cache(GMRFs._base_gmrf(posterior_primal))
+        b_saved = copy(cache.b)
+        for j in 1:N
+            for i in 1:n
+                cache.b[i] = -ForwardDiff.partials(neg_grad_dual[i], j)
+            end
+            step = copy(solve!(cache).u)
+            dx[:, j] .= GMRFs._constrain_step(step, cache, constraints_nt)
         end
-        step = copy(solve!(cache).u)
-        dx[:, j] .= GMRFs._constrain_step(step, cache, constraints_nt)
+        cache.b .= b_saved
+        cache.alg
+    else
+        # Reuse the workspace's Q_post factorization. The primal build leaves it
+        # unfactorized (by design — #167), so the first `workspace_solve` refactorizes once
+        # and the remaining N-1 partials (plus the constraint Schur solves) reuse that factor.
+        rhs = Vector{V}(undef, n)
+        for j in 1:N
+            for i in 1:n
+                rhs[i] = -ForwardDiff.partials(neg_grad_dual[i], j)
+            end
+            step = GMRFs.workspace_solve(ws, rhs)
+            dx[:, j] .= GMRFs._workspace_constrain_step(step, ws, constraints_nt)
+        end
+        # The workspace's CHOLMOD factor is Float64-only, so build the Dual posterior with the
+        # default solver — which is what the no-ws path's `alg` resolves to anyway.
+        nothing
     end
-    cache.b .= b_saved
 
     # Step 4: Dual x* carrying dx*/dθ.
     x_star_dual = [
@@ -85,8 +103,7 @@ function GMRFs._nongaussian_dualhp_ift(
     H_lik_dual = GMRFs.loghessian(x_star_dual, obs_lik)
     Q_post_dual = (-H_prior_dual) - H_lik_dual
 
-    # Step 6: result.
-    alg = GMRFs.linsolve_cache(GMRFs._base_gmrf(posterior_primal)).alg
+    # Step 6: result. `alg` was taken from the primal factor source in Step 3.
     base = GMRF(x_star_dual, Q_post_dual, alg)
     return constraints_nt === nothing ? base :
         GMRFs.ConstrainedGMRF(base, constraints_nt.A, constraints_nt.e)
