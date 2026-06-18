@@ -1,4 +1,4 @@
-using Test
+using ReTest: @testset, @test
 using GaussianMarkovRandomFields
 using ForwardDiff   # activates the DI ForwardDiff backend the factor assembler uses
 using SparseConnectivityTracer, SparseMatrixColorings
