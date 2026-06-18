@@ -81,7 +81,7 @@ end
 # block factor stays sparse instead of needing a dense block). Local detection handles the
 # value-dependent branches inside distribution constructors (e.g. `check_args`).
 function GaussianMarkovRandomFields._factor_group_sparsity(
-        grp::GaussianMarkovRandomFields.LatentFactorGroup{K}, θ
+        grp::GaussianMarkovRandomFields.LatentFactorGroup{K}, θ, ::DI.AbstractADType
     ) where {K}
     try
         x_probe = Float64[0.5 + i for i in 1:K]

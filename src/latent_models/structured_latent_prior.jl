@@ -64,20 +64,18 @@ function _nzpos(pat::SparseMatrixCSC{Bool}, i::Int, j::Int)
 end
 
 # Structural sparsity (K×K Bool) of a group's factor Hessian — shared by every factor in the group,
-# since they use the same `logp`. The SparseConnectivityTracer extension provides the real
-# structural detection (via `DI.hessian_sparsity`); without it loaded we conservatively assume a
-# dense K×K block (so the pattern must then contain the full block).
-function _factor_group_sparsity end
-function _factor_sparsity_mask(grp::LatentFactorGroup{K}, θ) where {K}
-    return applicable(_factor_group_sparsity, grp, θ) ? _factor_group_sparsity(grp, θ) : fill(true, K, K)
-end
+# since they use the same `logp`. Core falls back to a dense block; the SparseConnectivityTracer
+# extension adds a more specific method (keyed on the AD backend type) that detects the true
+# structure via `DI.hessian_sparsity`. Threading the backend (rather than leaving an empty core
+# function) keeps a concrete fallback method here, so the call below always resolves.
+_factor_group_sparsity(grp::LatentFactorGroup{K}, θ, backend) where {K} = fill(true, K, K)
 
 # Per-factor K×K block of nzval positions, mapped ONLY for the factor Hessian's structural nonzeros;
 # structural zeros get position 0 and are skipped at scatter time. So the pattern carries only the
 # real coupling — a diagonal-covariance block factor stays sparse rather than needing a dense K×K
 # block. A structural nonzero missing from the pattern still errors loudly via `_nzpos`.
 function _factor_positions(grp::LatentFactorGroup{K}, pat::SparseMatrixCSC{Bool}, θ) where {K}
-    mask = _factor_sparsity_mask(grp, θ)
+    mask = _factor_group_sparsity(grp, θ, DI.AutoForwardDiff())
     return [
         ntuple(li -> ntuple(lj -> mask[li, lj] ? _nzpos(pat, vars[li], vars[lj]) : 0, Val(K)), Val(K))
             for vars in grp.vars
