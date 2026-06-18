@@ -30,6 +30,7 @@ include("latent_models/gaussian_approximation.jl")
 # eltype helpers) defined there.
 include("latent_models/autodiff_latent_prior.jl")
 include("latent_models/structured_latent_prior.jl")
+include("observation_models/structured_observation_model.jl")
 include("workspace/latent_model_integration.jl")
 include("workspace/workspace_pool.jl")
 include("autodiff/autodiff.jl")

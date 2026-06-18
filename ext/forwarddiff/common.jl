@@ -47,6 +47,15 @@ function _primal_obs_lik(lik::GMRFs.GammaLikelihood)
     return GMRFs.GammaLikelihood(lik.link, lik.y, ForwardDiff.value(lik.phi), lik.indices)
 end
 
+# Structured observation likelihood: strip Dual partials from each hyperparameter value so the
+# primal Newton runs in Float64 (the factor functions read θ directly).
+_primal_scalar(v) = v isa ForwardDiff.Dual ? ForwardDiff.value(v) : v
+function _primal_obs_lik(lik::GMRFs.StructuredObservationLikelihood)
+    return GMRFs.StructuredObservationLikelihood(
+        lik.n_latent, lik.groups, lik.y, map(_primal_scalar, lik.θ)
+    )
+end
+
 function _primal_obs_lik(lik::GMRFs.StudentTLikelihood)
     return GMRFs.StudentTLikelihood(
         lik.link, lik.y, ForwardDiff.value(lik.σ), ForwardDiff.value(lik.ν),
