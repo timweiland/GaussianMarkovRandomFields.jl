@@ -62,4 +62,34 @@ using Distributions: Poisson, Normal, logpdf
         end
     end
 
+    @testset "pointwise_loglik, accessors, and multiple factor groups" begin
+        # Two groups with different factor forms (Poisson on x[1:3], Normal on x[4:5] with a σ
+        # hyperparameter), exercising the heterogeneous-group recursion, the accessors, and the
+        # per-factor pointwise log-likelihood.
+        Random.seed!(5)
+        n = 5
+        y = [1.0, 0.0, 2.0, 0.3, -0.5]   # y[1:3]: Poisson counts; y[4:5]: Normal observations
+        g_pois = ObsFactorGroup(
+            [(k,) for k in 1:3], [1, 2, 3],
+            (vals, yk, θ) -> logpdf(Poisson(exp(vals[1])), yk),
+        )
+        g_norm = ObsFactorGroup(
+            [(4,), (5,)], [4, 5],
+            (vals, yk, θ) -> logpdf(Normal(vals[1], θ.σ), yk),
+        )
+        m = StructuredObservationModel(n, (g_pois, g_norm); hyperparams = (:σ,))
+
+        @test latent_dimension(m, y) == n
+        @test hyperparameters(m) == (:σ,)
+
+        lik = m(y; σ = 0.7)
+        x = randn(n) .* 0.3
+        pw = pointwise_loglik(x, lik)
+        @test length(pw) == 5            # 3 Poisson + 2 Normal factors
+        @test sum(pw) ≈ loglik(x, lik) atol = 1.0e-10
+        # The per-factor values match direct evaluation of each factor.
+        @test pw[1] ≈ logpdf(Poisson(exp(x[1])), y[1]) atol = 1.0e-10
+        @test pw[4] ≈ logpdf(Normal(x[4], 0.7), y[4]) atol = 1.0e-10
+    end
+
 end

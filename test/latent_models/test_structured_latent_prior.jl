@@ -1,5 +1,6 @@
-using ReTest: @testset, @test
+using ReTest: @testset, @test, @test_throws
 using GaussianMarkovRandomFields
+import DifferentiationInterface as DI
 using ForwardDiff   # activates the DI ForwardDiff backend the factor assembler uses
 # Loading these activates the SparseADLikelihoods extension, so factor-group Hessian sparsity is
 # detected structurally (SparseConnectivityTracer) rather than assumed dense.
@@ -115,6 +116,88 @@ end
             @test Matrix(lqd.Q) ≈ Qref atol = 1.0e-10
             @test nnz(lqs.Q) < nnz(lqd.Q)   # the sparse pattern genuinely drops the structural zeros
         end
+    end
+
+    @testset "pattern omitting a real coupling errors at construction" begin
+        # A transition factor couples (t, t-1), so its Hessian has off-diagonal structure. A
+        # diagonal-only pattern omits those entries, which must error loudly at construction rather
+        # than silently drop curvature.
+        n = 4
+        g_trans = LatentFactorGroup(
+            [(t, t - 1) for t in 2:n],
+            (vals, θ) -> logpdf(Normal(0.5 * vals[2]^2, 1.0), vals[1]),
+        )
+        diag_pat = SparseMatrixCSC{Bool, Int}(sparse(1:n, 1:n, trues(n), n, n))
+        @test_throws ErrorException StructuredLatentPrior(n, (g_trans,), diag_pat)
+    end
+
+    @testset "untraceable factor falls back to a dense Hessian block" begin
+        # When a factor's log-density can't be structurally traced, sparsity detection must fall
+        # back to a dense K×K block instead of propagating the error.
+        bad = LatentFactorGroup([(1, 2)], (vals, θ) -> error("not traceable"))
+        mask = GaussianMarkovRandomFields._factor_group_sparsity(bad, NamedTuple(), DI.AutoForwardDiff())
+        @test mask == trues(2, 2)
+    end
+
+    @testset "θ-gradients of the marginal likelihood via IFT match finite differences" begin
+        # The Dual-θ IFT path (primal Newton + analytic θ-tangent) for a StructuredLatentPrior,
+        # paired with a StructuredObservationModel likelihood, validated against central differences.
+        # Exercises the IFT hooks (_dual_prior_gradient/_dual_prior_hessian) and the structured
+        # likelihood's primal stripping.
+        Random.seed!(13)
+        n = 4; τ = 1.5; a = 0.4
+        y = [0.4, 0.7, 1.0, 1.1]
+
+        g_init = LatentFactorGroup([(1,)], (vals, θ) -> logpdf(Normal(0.0, 1 / sqrt(θ.τ)), vals[1]))
+        g_trans = LatentFactorGroup(
+            [(t, t - 1) for t in 2:n],
+            (vals, θ) -> logpdf(Normal(θ.a * vals[2]^2, 1 / sqrt(θ.τ)), vals[1]),
+        )
+        rows = Int[]; cols = Int[]
+        for i in 1:n
+            push!(rows, i); push!(cols, i)
+        end
+        for t in 2:n
+            push!(rows, t); push!(cols, t - 1); push!(rows, t - 1); push!(cols, t)
+        end
+        pat = SparseMatrixCSC{Bool, Int}(sparse(rows, cols, trues(length(rows)), n, n))
+        prior = StructuredLatentPrior(n, (g_init, g_trans), pat; hyperparams = (:τ, :a))
+
+        # Structured Gaussian observation y_k ~ N(x_k, σ); σ a (fixed) factor hyperparameter, so the
+        # IFT also strips the structured likelihood to primal.
+        obs_grp = ObsFactorGroup(
+            [(k,) for k in 1:n], collect(1:n),
+            (vals, yk, θ) -> logpdf(Normal(vals[1], θ.σ), yk),
+        )
+        obs_lik = StructuredObservationModel(n, (obs_grp,); hyperparams = (:σ,))(y; σ = 0.5)
+
+        ml(θvec) = marginal_loglikelihood(
+            prior, obs_lik,
+            gaussian_approximation(prior, obs_lik; τ = θvec[1], a = θvec[2]);
+            τ = θvec[1], a = θvec[2],
+        )
+
+        θ0 = [τ, a]
+        g_ad = ForwardDiff.gradient(ml, θ0)
+        h = 1.0e-6
+        g_fd = similar(θ0)
+        for i in 1:2
+            θp = copy(θ0); θp[i] += h
+            θm = copy(θ0); θm[i] -= h
+            g_fd[i] = (ml(θp) - ml(θm)) / (2h)
+        end
+        @test g_ad ≈ g_fd rtol = 1.0e-4
+
+        # The IFT Dual posterior's mean carries dx*/dθ; check that Jacobian against finite diffs too.
+        post_mode(θvec) = mean(gaussian_approximation(prior, obs_lik; τ = θvec[1], a = θvec[2]))
+        J_ad = ForwardDiff.jacobian(post_mode, θ0)
+        J_fd = similar(J_ad)
+        for i in 1:2
+            θp = copy(θ0); θp[i] += h
+            θm = copy(θ0); θm[i] -= h
+            J_fd[:, i] .= (post_mode(θp) .- post_mode(θm)) ./ (2h)
+        end
+        @test J_ad ≈ J_fd rtol = 1.0e-4
     end
 
 end
