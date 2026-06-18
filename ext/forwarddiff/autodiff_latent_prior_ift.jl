@@ -20,8 +20,22 @@
 # The nested derivative passes use AutoForwardDiff explicitly (it nests under the outer
 # Dual; the prior's own grad/hess backends may be reverse-mode and would not).
 
+# IFT hooks for AutoDiffLatentPrior: differentiate the opaque whole-model `logp_func`.
+# Forward-mode (nests under the outer Dual); the Hessian uses a known-pattern backend taken from
+# the prior's primal local quadratic (the structural pattern is θ-independent).
+GMRFs._dual_prior_gradient(prior::GMRFs.AutoDiffLatentPrior, x_dual, θ_full::NamedTuple) =
+    DI.gradient(z -> prior.logp_func(z; θ_full...), DI.AutoForwardDiff(), x_dual)
+
+function GMRFs._dual_prior_hessian(
+        prior::GMRFs.AutoDiffLatentPrior, x_dual, x_primal, θ_full::NamedTuple, θ_primal::NamedTuple
+    )
+    Q_prior_primal = GMRFs.local_quadratic(prior, x_primal; θ_primal...).Q
+    known_backend = GMRFs.known_pattern_hessian_backend(Q_prior_primal)
+    return DI.hessian(z -> prior.logp_func(z; θ_full...), known_backend, x_dual)
+end
+
 function GMRFs._nongaussian_dualhp_ift(
-        prior::GMRFs.AutoDiffLatentPrior, obs_lik, θ_full::NamedTuple, ws; kwargs...
+        prior::GMRFs.AbstractLatentPrior, obs_lik, θ_full::NamedTuple, ws; kwargs...
     )
     Tag, N = _outer_tag_and_npartials(θ_full)
     V = Float64
@@ -50,7 +64,7 @@ function GMRFs._nongaussian_dualhp_ift(
     # Lift x* to Dual-with-zero-partials so the AD operator's buffers can hold the
     # θ-Dual-valued output; the outer partials of the result are ∂(neg_score)/∂θ.
     x_star_dual0 = DualT.(x_star)
-    g_prior_dual = DI.gradient(z -> prior.logp_func(z; θ_full...), DI.AutoForwardDiff(), x_star_dual0)
+    g_prior_dual = GMRFs._dual_prior_gradient(prior, x_star_dual0, θ_full)
     g_lik = GMRFs.loggrad(x_star, obs_lik)   # Float64 for a primal obs_lik; Dual if it carries θ
     neg_grad_dual = (-g_prior_dual) .- g_lik
 
@@ -97,9 +111,7 @@ function GMRFs._nongaussian_dualhp_ift(
     # re-tracing `logp_func`: that reuses whatever Hessian backend the prior was built with,
     # so it works even when the density can't be traced (e.g. it solves an ODE). The
     # structural pattern is θ-independent, so detecting it at the primal point is exact.
-    Q_prior_primal = GMRFs.local_quadratic(prior, x_star; θ_primal...).Q
-    known_backend = GMRFs.known_pattern_hessian_backend(Q_prior_primal)
-    H_prior_dual = DI.hessian(z -> prior.logp_func(z; θ_full...), known_backend, x_star_dual)
+    H_prior_dual = GMRFs._dual_prior_hessian(prior, x_star_dual, x_star, θ_full, θ_primal)
     H_lik_dual = GMRFs.loghessian(x_star_dual, obs_lik)
     Q_post_dual = (-H_prior_dual) - H_lik_dual
 
