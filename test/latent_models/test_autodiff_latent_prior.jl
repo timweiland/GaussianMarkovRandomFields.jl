@@ -281,4 +281,32 @@ _qd_logp_kw(x; τ, a) = _qd_logp(x, τ, a)
         θ1 = [3.0, 0.3]
         @test ForwardDiff.gradient(ml_ws, θ1) ≈ ForwardDiff.gradient(ml_nows, θ1) rtol = 1.0e-6
     end
+
+    @testset "IFT θ-gradients with a dense Hessian backend (fallback pattern path)" begin
+        # With a non-sparse Hessian backend, the IFT Hessian pattern can't be read from a sparsity
+        # detector, so it falls back to the prior's local-quadratic Q. Check that path still yields
+        # correct θ-gradients.
+        Random.seed!(11)
+        n = 4; σ = 0.5
+        y = [0.4, 0.7, 1.0, 1.1]
+        prior = AutoDiffLatentPrior(
+            _qd_logp_kw; n = n, hyperparams = (:τ, :a), hessian_backend = DI.AutoForwardDiff(),
+        )
+        obs_lik = ExponentialFamily(Normal)(y; σ = σ)
+        ml(θ) = marginal_loglikelihood(
+            prior, obs_lik,
+            gaussian_approximation(prior, obs_lik; τ = θ[1], a = θ[2]);
+            τ = θ[1], a = θ[2],
+        )
+        θ0 = [2.0, 0.5]
+        g_ad = ForwardDiff.gradient(ml, θ0)
+        h = 1.0e-6
+        g_fd = similar(θ0)
+        for i in 1:2
+            θp = copy(θ0); θp[i] += h
+            θm = copy(θ0); θm[i] -= h
+            g_fd[i] = (ml(θp) - ml(θm)) / (2h)
+        end
+        @test g_ad ≈ g_fd rtol = 1.0e-4
+    end
 end
