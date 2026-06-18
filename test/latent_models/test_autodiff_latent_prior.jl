@@ -238,4 +238,47 @@ _qd_logp_kw(x; τ, a) = _qd_logp(x, τ, a)
         end
         @test J_ad ≈ J_fd rtol = 1.0e-4
     end
+
+    @testset "θ-gradients via IFT reuse a GMRFWorkspace and match the no-ws path (#174)" begin
+        # The IFT hyperparameter-gradient path accepts a seeded workspace: the primal Newton
+        # reuses ws's symbolic factorisation and its converged Q_post factor backs the IFT
+        # solves, so one workspace serves the whole θ-grid instead of re-running the symbolic
+        # analysis every gradient evaluation. The result must match the fresh-cache no-ws path.
+        Random.seed!(11)
+        n = 4; σ = 0.5
+        y = [0.4, 0.7, 1.0, 1.1]
+        prior = AutoDiffLatentPrior(_qd_logp_kw; n = n, hyperparams = (:τ, :a))
+        obs_lik = ExponentialFamily(Normal)(y; σ = σ)
+        ws = make_workspace(prior; τ = 2.0, a = 0.5)
+
+        ml_ws(θ) = marginal_loglikelihood(
+            prior, obs_lik,
+            gaussian_approximation(prior, obs_lik; τ = θ[1], a = θ[2], ws = ws);
+            τ = θ[1], a = θ[2],
+        )
+        ml_nows(θ) = marginal_loglikelihood(
+            prior, obs_lik,
+            gaussian_approximation(prior, obs_lik; τ = θ[1], a = θ[2]);
+            τ = θ[1], a = θ[2],
+        )
+
+        θ0 = [2.0, 0.5]
+        g_ws = ForwardDiff.gradient(ml_ws, θ0)      # previously threw: ws unsupported on the IFT path
+        @test g_ws ≈ ForwardDiff.gradient(ml_nows, θ0) rtol = 1.0e-6
+
+        # ...and still matches central differences of the (workspace) marginal likelihood.
+        h = 1.0e-6
+        g_fd = similar(θ0)
+        for i in 1:2
+            θp = copy(θ0); θp[i] += h
+            θm = copy(θ0); θm[i] -= h
+            g_fd[i] = (ml_ws(θp) - ml_ws(θm)) / (2h)
+        end
+        @test g_ws ≈ g_fd rtol = 1.0e-4
+
+        # One seeded workspace is reusable across the θ-grid: a gradient at a second θ also
+        # matches no-ws (sequential reuse is valid — the structural pattern is θ-independent).
+        θ1 = [3.0, 0.3]
+        @test ForwardDiff.gradient(ml_ws, θ1) ≈ ForwardDiff.gradient(ml_nows, θ1) rtol = 1.0e-6
+    end
 end
