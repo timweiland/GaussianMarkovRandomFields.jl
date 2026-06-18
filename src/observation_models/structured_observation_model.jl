@@ -41,7 +41,10 @@ end
 
 (m::StructuredObservationModel)(y; kwargs...) =
     StructuredObservationLikelihood(m.n_latent, m.groups, y, NamedTuple(kwargs))
-latent_dimension(m::StructuredObservationModel, y) = m.n_latent
+# `y::AbstractVector` (not the looser `y`) so this is strictly more specific than the
+# `ObservationModel` fallback `latent_dimension(::ObservationModel, ::AbstractVector)` — otherwise
+# the two are ambiguous for a `StructuredObservationModel` with a vector `y`.
+latent_dimension(m::StructuredObservationModel, y::AbstractVector) = m.n_latent
 hyperparameters(m::StructuredObservationModel) = m.hyperparams
 
 # --- type-stable recursion over the heterogeneous tuple of obs groups ---
