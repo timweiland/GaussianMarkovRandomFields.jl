@@ -187,7 +187,7 @@ function _hess_one(grp::LatentFactorGroup{K}, pos, x, θ, nzv, s) where {K}
     return nzv
 end
 
-_pattern_csc(pat, nzv) =
+_pattern_csc(pat::SparseMatrixCSC, nzv::AbstractVector) =
     SparseMatrixCSC(pat.m, pat.n, copy(pat.colptr), copy(pat.rowval), nzv)
 
 function local_quadratic(m::StructuredLatentPrior, x_ref::AbstractVector; θ...)
@@ -195,7 +195,10 @@ function local_quadratic(m::StructuredLatentPrior, x_ref::AbstractVector; θ...)
     T = _structured_eltype(x_ref, θnt)
     xS = _as_eltype(T, x_ref)
     g = zeros(T, m.n)
-    nzv = zeros(T, nnz(m.pattern))
+    # Explicit 1-D Vector construction: `zeros(T, n)` with a non-concrete eltype `T` lets type
+    # inference widen the result to `Array{T, N}` (a `Matrix` branch), which the SparseMatrixCSC
+    # constructor in `_pattern_csc` rejects. `Vector{T}(undef, n)` pins it to a vector.
+    nzv = fill!(Vector{T}(undef, nnz(m.pattern)::Int), zero(T))
     lp = _accum_full(m.groups, m.posmaps, xS, θnt, g, nzv, -one(T), zero(T))  # Q = -H
     Q = _pattern_csc(m.pattern, nzv)
     return LocalLatentQuadratic(Q, g + Q * xS, lp, xS)
@@ -218,7 +221,7 @@ function _dual_prior_hessian(
         m::StructuredLatentPrior, x_dual, x_primal, θ_full::NamedTuple, θ_primal::NamedTuple
     )
     T = eltype(x_dual)
-    nzv = zeros(T, nnz(m.pattern))
+    nzv = fill!(Vector{T}(undef, nnz(m.pattern)::Int), zero(T))
     _accum_hess(m.groups, m.posmaps, x_dual, θ_full, nzv, one(T))  # H (the IFT negates downstream)
     return _pattern_csc(m.pattern, nzv)
 end
