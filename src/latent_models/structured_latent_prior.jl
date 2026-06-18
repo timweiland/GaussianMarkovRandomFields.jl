@@ -63,11 +63,23 @@ function _nzpos(pat::SparseMatrixCSC{Bool}, i::Int, j::Int)
     error("StructuredLatentPrior: Hessian entry ($i, $j) lies outside the declared pattern")
 end
 
-# Per-factor K×K block of nzval positions for a group (so the K² Hessian entries scatter
-# straight into the sparse Q.nzval).
-function _factor_positions(grp::LatentFactorGroup{K}, pat::SparseMatrixCSC{Bool}) where {K}
+# Structural sparsity (K×K Bool) of a group's factor Hessian — shared by every factor in the group,
+# since they use the same `logp`. The SparseConnectivityTracer extension provides the real
+# structural detection (via `DI.hessian_sparsity`); without it loaded we conservatively assume a
+# dense K×K block (so the pattern must then contain the full block).
+function _factor_group_sparsity end
+function _factor_sparsity_mask(grp::LatentFactorGroup{K}, θ) where {K}
+    return applicable(_factor_group_sparsity, grp, θ) ? _factor_group_sparsity(grp, θ) : fill(true, K, K)
+end
+
+# Per-factor K×K block of nzval positions, mapped ONLY for the factor Hessian's structural nonzeros;
+# structural zeros get position 0 and are skipped at scatter time. So the pattern carries only the
+# real coupling — a diagonal-covariance block factor stays sparse rather than needing a dense K×K
+# block. A structural nonzero missing from the pattern still errors loudly via `_nzpos`.
+function _factor_positions(grp::LatentFactorGroup{K}, pat::SparseMatrixCSC{Bool}, θ) where {K}
+    mask = _factor_sparsity_mask(grp, θ)
     return [
-        ntuple(li -> ntuple(lj -> _nzpos(pat, vars[li], vars[lj]), Val(K)), Val(K))
+        ntuple(li -> ntuple(lj -> mask[li, lj] ? _nzpos(pat, vars[li], vars[lj]) : 0, Val(K)), Val(K))
             for vars in grp.vars
     ]
 end
@@ -76,8 +88,10 @@ function StructuredLatentPrior(
         n::Int, groups::Tuple, pattern::SparseMatrixCSC{Bool};
         hyperparams = (), name::Symbol = :structured, constraints = nothing,
     )
-    posmaps = map(g -> _factor_positions(g, pattern), groups)
-    return StructuredLatentPrior(n, groups, pattern, posmaps, Tuple(hyperparams), name, constraints)
+    hp = Tuple(hyperparams)
+    θ_probe = NamedTuple{hp}(ntuple(_ -> 1.0, length(hp)))
+    posmaps = map(g -> _factor_positions(g, pattern, θ_probe), groups)
+    return StructuredLatentPrior(n, groups, pattern, posmaps, hp, name, constraints)
 end
 
 Base.length(m::StructuredLatentPrior) = m.n
@@ -130,7 +144,8 @@ function _full_one(grp::LatentFactorGroup{K}, pos, x, θ, g, nzv, s, lp) where {
         for li in 1:K
             g[vars[li]] += gl[li]
             for lj in 1:K
-                nzv[pf[li][lj]] += s * Hl[li, lj]
+                p = pf[li][lj]
+                p == 0 || (nzv[p] += s * Hl[li, lj])
             end
         end
     end
@@ -167,7 +182,8 @@ function _hess_one(grp::LatentFactorGroup{K}, pos, x, θ, nzv, s) where {K}
         Hl = DI.hessian(fθ, DI.AutoForwardDiff(), [x[vars[k]] for k in 1:K])
         pf = pos[fi]
         for li in 1:K, lj in 1:K
-            nzv[pf[li][lj]] += s * Hl[li, lj]
+            p = pf[li][lj]
+            p == 0 || (nzv[p] += s * Hl[li, lj])
         end
     end
     return nzv
