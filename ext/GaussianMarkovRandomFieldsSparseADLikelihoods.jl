@@ -83,9 +83,15 @@ end
 function GaussianMarkovRandomFields._factor_group_sparsity(
         grp::GaussianMarkovRandomFields.LatentFactorGroup{K}, θ
     ) where {K}
-    x_probe = Float64[0.5 + i for i in 1:K]
-    H = DI.hessian_sparsity(v -> grp.logp(v, θ), x_probe, TracerLocalSparsityDetector())
-    return collect(Bool, H .!= 0)
+    try
+        x_probe = Float64[0.5 + i for i in 1:K]
+        H = DI.hessian_sparsity(v -> grp.logp(v, θ), x_probe, TracerLocalSparsityDetector())
+        return collect(Bool, H .!= 0)
+    catch
+        # A factor whose log-density can't be traced falls back to a dense block (then the pattern
+        # must contain the full K×K block, as before this detection existed).
+        return fill(true, K, K)
+    end
 end
 
 end # module
