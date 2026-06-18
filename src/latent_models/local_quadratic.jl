@@ -77,6 +77,30 @@ override `prior_logdensity` with a direct, allocation-light evaluation of
 prior_logdensity(m::AbstractLatentPrior, x::AbstractVector; θ...) =
     local_quadratic(m, x; θ...).logp_ref
 
+# --- IFT hooks (hyperparameter-gradient path) ---
+# The Implicit Function Theorem path needs the prior's latent gradient and Hessian evaluated at
+# a `ForwardDiff.Dual`-valued `x` (and Dual `θ`). Routing these through hooks — rather than
+# hard-coding `DI.gradient`/`DI.hessian` over an opaque `logp_func` — lets a structured
+# (factor-graph) prior assemble them from small per-factor derivatives instead of differentiating
+# the whole-model closure (which is what makes the per-model compile cost large).
+
+"""
+    _dual_prior_gradient(m::NonGaussianLatentPrior, x_dual, θ::NamedTuple) -> ∇ₓ log p(x | θ)
+
+IFT hook: latent-gradient of the prior log-density at a Dual-valued `x_dual` (Dual `θ`), forming
+the score's θ-tangent. Must nest cleanly under an outer Dual (forward-mode AD).
+"""
+function _dual_prior_gradient end
+
+"""
+    _dual_prior_hessian(m::NonGaussianLatentPrior, x_dual, x_primal, θ::NamedTuple, θ_primal::NamedTuple) -> ∇²ₓ log p
+
+IFT hook: latent-Hessian of the prior log-density at the Dual-valued `x_dual`, returned sparse
+with the prior's structural pattern (detected at the primal `x_primal`/`θ_primal`). Builds the
+Dual posterior precision in the IFT path.
+"""
+function _dual_prior_hessian end
+
 # Internal adapter: bundles an `AbstractLatentPrior` with its
 # hyperparameter `NamedTuple` so the Newton loops can dispatch the prior
 # side on a single argument.

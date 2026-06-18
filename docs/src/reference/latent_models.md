@@ -69,6 +69,21 @@ backends and sparse-Hessian machinery.
 AutoDiffLatentPrior
 ```
 
+## Factor-graph (structured) priors
+
+`StructuredLatentPrior` represents a non-Gaussian latent prior as a *factor graph*: a
+tuple of [`LatentFactorGroup`](@ref)s, each a group of conditional factors that share one
+small per-factor log-density. The gradient and sparse Hessian are assembled by
+differentiating those small factor functions and scattering the contributions, so AD
+specialises only on the tiny factor functions rather than one opaque whole-model closure.
+It carries the same interface as [`AutoDiffLatentPrior`](@ref) (`local_quadratic`,
+`prior_logdensity`), so the rest of the pipeline treats them identically.
+
+```@docs
+StructuredLatentPrior
+LatentFactorGroup
+```
+
 ## Available Models
 
 ### Temporal Models

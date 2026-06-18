@@ -76,4 +76,22 @@ function GaussianMarkovRandomFields.residual_curvature(
     return sparse(DI.hessian(g, lik.hess_backend, x_star))
 end
 
+# Structural sparsity of a `StructuredLatentPrior` factor group's K×K Hessian, traced once per group
+# at construction so the per-factor scatter only touches the real coupling (a diagonal-covariance
+# block factor stays sparse instead of needing a dense block). Local detection handles the
+# value-dependent branches inside distribution constructors (e.g. `check_args`).
+function GaussianMarkovRandomFields._factor_group_sparsity(
+        grp::GaussianMarkovRandomFields.LatentFactorGroup{K}, θ, ::DI.AbstractADType
+    ) where {K}
+    try
+        x_probe = Float64[0.5 + i for i in 1:K]
+        H = DI.hessian_sparsity(v -> grp.logp(v, θ), x_probe, TracerLocalSparsityDetector())
+        return collect(Bool, H .!= 0)
+    catch
+        # A factor whose log-density can't be traced falls back to a dense block (then the pattern
+        # must contain the full K×K block, as before this detection existed).
+        return fill(true, K, K)
+    end
+end
+
 end # module

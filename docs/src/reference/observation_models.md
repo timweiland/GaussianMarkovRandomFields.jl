@@ -277,6 +277,20 @@ NonlinearLeastSquaresModel
 NonlinearLeastSquaresLikelihood
 ```
 
+## Factor-graph (structured) observations
+
+`StructuredObservationModel` represents the likelihood as a *factor graph*: a tuple of
+[`ObsFactorGroup`](@ref)s, each a group of per-observation factors that share one small
+log-likelihood `logpdf(Dist(params(x, θ)), y_k)`. The log-likelihood, gradient, and sparse
+Hessian are assembled from the small per-observation derivatives, so it is family-general
+(Poisson / Binomial / Normal / …) and AD specialises only on the small factor functions —
+the observation-side analogue of [`StructuredLatentPrior`](@ref).
+
+```@docs
+StructuredObservationModel
+ObsFactorGroup
+```
+
 ## Advanced Features
 
 ### Linear Transformations and Design Matrices
