@@ -29,9 +29,15 @@ term (`1e-6 * I`) is added for numerical stability.
 [`sparse_approximate_cholesky`](@ref), [`approximate_gmrf_kl`](@ref)
 """
 function sparse_approximate_cholesky!(Θ::AbstractMatrix, L::SparseMatrixCSC)
+    # Compute (and store) in the promotion of Θ's and L's eltypes so the routine is
+    # AD-transparent: with Float64 inputs the dense `cholesky!`/`ldiv!` stay on LAPACK, while a
+    # ForwardDiff.Dual-valued Θ (and matching Dual L) flows through the generic factorisation —
+    # the local block Cholesky + unit-RHS solve are smooth in Θ's entries (the sparsity pattern,
+    # fixed from the point geometry, is what stays constant under AD).
+    T = promote_type(eltype(Θ), eltype(L))
     max_buffer_size = maximum(length(rowvals(L)[nzrange(L, k)]) for k in 1:size(L, 2))
-    cho_buf = Vector{Float64}(undef, max_buffer_size^2)
-    x_buf = Vector{Float64}(undef, max_buffer_size)
+    cho_buf = Vector{T}(undef, max_buffer_size^2)
+    x_buf = Vector{T}(undef, max_buffer_size)
     for k in 1:size(L, 2)
         nz_idcs = reverse(nzrange(L, k))
         S = rowvals(L)[nz_idcs]
@@ -49,7 +55,9 @@ function sparse_approximate_cholesky!(Θ::AbstractMatrix, L::SparseMatrixCSC)
     return
 end
 
-function _build_supernodal_sparsity_pattern(sc::GaussianMarkovRandomFields.SupernodeClustering)
+function _build_supernodal_sparsity_pattern(
+        sc::GaussianMarkovRandomFields.SupernodeClustering, ::Type{T} = Float64
+    ) where {T}
     Is = Int[]
     Js = Int[]
     for s in 1:length(sc)
@@ -60,17 +68,20 @@ function _build_supernodal_sparsity_pattern(sc::GaussianMarkovRandomFields.Super
             end
         end
     end
-    return spzeros(Float64, Is, Js)
+    return spzeros(T, Is, Js)
 end
 
 function sparse_approximate_cholesky(Θ::AbstractMatrix, sc::SupernodeClustering)
+    # Result/buffer eltype promoted with Θ's so a Dual-valued Θ produces a Dual factor (see
+    # `sparse_approximate_cholesky!`); Float64 inputs are unchanged.
+    T = promote_type(eltype(Θ), Float64)
     max_pattern_len = mapreduce(length, max, sc.row_indices)
     max_column_len = mapreduce(length, max, sc.column_indices)
-    cho_buf = Vector{Float64}(undef, max_pattern_len^2)
-    x_buf = Vector{Float64}(undef, max_pattern_len * max_column_len)
+    cho_buf = Vector{T}(undef, max_pattern_len^2)
+    x_buf = Vector{T}(undef, max_pattern_len * max_column_len)
     pattern_buf = Vector{Int}(undef, max_pattern_len)
 
-    L = _build_supernodal_sparsity_pattern(sc)
+    L = _build_supernodal_sparsity_pattern(sc, T)
 
     N_sn = length(sc)
     for s in 1:N_sn
@@ -141,6 +152,10 @@ function sparse_approximate_cholesky(Θ::AbstractMatrix, X::AbstractMatrix; ρ =
     if λ === nothing
         # Non-supernodal version
         L, P, _ = reverse_maximin_ordering_and_sparsity_pattern(X, ρ)
+        # The maximin pattern carries Float64 placeholder values; widen it to Θ's eltype so a
+        # Dual-valued Θ yields a Dual factor (the pattern itself is geometry-only, AD-invariant).
+        T = promote_type(eltype(Θ), eltype(L))
+        T === eltype(L) || (L = SparseMatrixCSC{T, Int}(L))
         Θ_P = PermutedMatrix(Θ, P)
         sparse_approximate_cholesky!(Θ_P, L)
         return L, P

@@ -1,5 +1,6 @@
 using GaussianMarkovRandomFields
 using LinearAlgebra, SparseArrays, Random
+using ForwardDiff
 using ReTest
 
 # Helper function to compute covariance approximation from L and P
@@ -122,5 +123,47 @@ end
         L, P = sparse_approximate_cholesky(K_small, X_small; ρ = 2.0)
         @test size(L) == (2, 2)
         @test isperm(P)
+    end
+
+    @testset "ForwardDiff: AD through the factor w.r.t. covariance values" begin
+        # The factorisation is a fixed-pattern sweep of small dense block-Choleskys + unit-RHS
+        # solves, smooth in Θ's entries; with eltype-generic buffers a ForwardDiff.Dual flows
+        # Θ -> L. (The ordering / sparsity pattern come from the points X, which are AD-invariant.)
+        X = hcat([[x, y] for x in 0:0.25:1, y in 0:0.25:1]...)
+        n = size(X, 2)
+        kern(ℓ) = [exp(-norm(X[:, i] - X[:, j])^2 / (2ℓ^2)) for i in 1:n, j in 1:n] + 1.0e-4 * I
+        f(ℓ; λ) = sum(abs2, nonzeros(sparse_approximate_cholesky(kern(ℓ), X; ρ = 2.0, λ = λ)[1]))
+
+        ℓ0 = 0.4
+        # Gradient matches central differences on both the supernodal and column-by-column paths.
+        for λ in (nothing, 1.5)
+            d_ad = ForwardDiff.derivative(ℓ -> f(ℓ; λ = λ), ℓ0)
+            d_fd = (f(ℓ0 + 1.0e-6; λ = λ) - f(ℓ0 - 1.0e-6; λ = λ)) / 2.0e-6
+            @test d_ad ≈ d_fd rtol = 1.0e-5
+        end
+
+        # The Dual-eltype factor has the same pattern and the same primal values as the Float64
+        # factor (the partials ride along without perturbing the value).
+        L_d, P_d = sparse_approximate_cholesky(kern(ForwardDiff.Dual(ℓ0, 1.0)), X; ρ = 2.0)
+        L_f, P_f = sparse_approximate_cholesky(kern(ℓ0), X; ρ = 2.0)
+        @test eltype(L_d) <: ForwardDiff.Dual
+        @test P_d == P_f
+        @test L_d.colptr == L_f.colptr && rowvals(L_d) == rowvals(L_f)
+        @test ForwardDiff.value.(nonzeros(L_d)) ≈ nonzeros(L_f) rtol = 1.0e-10
+        # Float64 inputs are untouched: promote_type collapses to Float64 (the LAPACK path).
+        @test eltype(L_f) == Float64
+    end
+
+    @testset "ForwardDiff: in-place sparse_approximate_cholesky! with a Dual factor" begin
+        Θ = [2.0 0.5 0.1; 0.5 2.0 0.3; 0.1 0.3 2.0]   # SPD
+        pat = sparse([1.0 0 0; 1.0 1.0 0; 1.0 1.0 1.0])
+        function g(s)
+            L = SparseMatrixCSC{typeof(s), Int}(pat)
+            sparse_approximate_cholesky!(s .* Θ, L)
+            return sum(abs2, nonzeros(L))
+        end
+        d_ad = ForwardDiff.derivative(g, 1.0)
+        d_fd = (g(1.0 + 1.0e-6) - g(1.0 - 1.0e-6)) / 2.0e-6
+        @test d_ad ≈ d_fd rtol = 1.0e-5
     end
 end
