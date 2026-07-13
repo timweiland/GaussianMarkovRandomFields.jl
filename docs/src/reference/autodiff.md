@@ -7,6 +7,7 @@ GaussianMarkovRandomFields.jl provides automatic differentiation support for gra
 We support the following AD backends:
 
 - **Zygote.jl**: General-purpose, good first choice, works in most cases
+- **Mooncake.jl**: Modern reverse-mode AD; requires the CliqueTrees linear solver (see below)
 - **Enzyme.jl**: Often 2-5× faster than Zygote, but requires attention to type stability
 - **ForwardDiff.jl**: Fast in the right situations (i.e. for functions with few inputs)
 
@@ -21,6 +22,52 @@ The package provides custom AD rules for the following operations:
 3. **Gaussian approximation**: `gaussian_approximation(prior_gmrf, obs_lik)` - uses Implicit Function Theorem to avoid differentiating through the optimization loop
 
 All three operations work with both regular `GMRF` and `ConstrainedGMRF` priors (e.g. from `RW1Model`, `BesagModel`). Constrained GMRF support is available for Zygote and ForwardDiff.
+
+## Mooncake and the CliqueTrees Backend
+
+Mooncake support is provided through the pure-Julia CliqueTrees solver backend.
+Construct your GMRFs with `LinearSolve.CliqueTreesFactorization()` and load
+`Mooncake` together with `MooncakeSparse`:
+
+```julia
+using GaussianMarkovRandomFields, LinearSolve
+using DifferentiationInterface
+using Mooncake, MooncakeSparse
+
+function objective(θ)
+    Q = build_precision(θ)
+    prior = GMRF(build_mean(θ), Q, CliqueTreesFactorization())
+    posterior = gaussian_approximation(prior, obs_lik)
+    return logpdf(posterior, y)
+end
+
+grad = DifferentiationInterface.gradient(objective, AutoMooncake(), θ)
+```
+
+Supported operations under Mooncake: GMRF construction, `logpdf`, `var`
+(marginal variances via selected inversion), and `gaussian_approximation`
+(including the conjugate Normal paths). The same support is available for
+[`ChordalGMRF`](@ref), which wraps the same factorization outside the
+LinearSolve interface.
+
+The workspace path is supported as well: construct the workspace with the
+CliqueTrees backend and reuse it across gradient evaluations —
+
+```julia
+ws = GMRFWorkspace(Q_pattern, CliqueTreesBackend)
+
+function objective(θ)
+    prior = WorkspaceGMRF(build_mean(θ), build_precision(θ), ws)
+    posterior = gaussian_approximation(prior, obs_lik)
+    return logpdf(posterior, y)
+end
+```
+
+Linear equality constraints (e.g. sum-to-zero) are fully supported under
+Mooncake on both constrained paths — `ConstrainedGMRF` over a
+CliqueTrees-backed `GMRF`, and constrained `WorkspaceGMRF`s: `logpdf`, `var`,
+and `gaussian_approximation` all differentiate, including through
+`mean(posterior)`.
 
 ## Linear Solver Type Stability
 
