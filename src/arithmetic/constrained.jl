@@ -138,16 +138,8 @@ function _constraint_info(
         A_tilde_T::AbstractMatrix, L_c
     )
     μ_base = mean(base_gmrf)
-    residual = A_dense * μ_base - e_vec
-    correction = A_tilde_T * (L_c \ residual)
-    constrained_mean = μ_base - correction
-
-    resid_e = e_vec - A_dense * μ_base
-    r = length(resid_e)
-    log_constraint_correction =
-        0.5 * (r * log(2π) + logdet(L_c) + dot(resid_e, L_c \ resid_e)) -
-        0.5 * logdet(cholesky(Symmetric(A_dense * A_dense')))
-
+    constrained_mean = μ_base - _constraint_shift(A_tilde_T, L_c, A_dense * μ_base - e_vec)
+    log_constraint_correction = _constraint_log_correction(A_dense, e_vec, μ_base, L_c)
     return constrained_mean, log_constraint_correction
 end
 
@@ -183,7 +175,7 @@ Given an unconstrained sample x, the constrained sample is:
 function _rand!(rng::AbstractRNG, d::ConstrainedGMRF{T}, x::AbstractVector{T}) where {T}
     _rand!(rng, d.base_gmrf, x)
     residual = d.constraint_matrix * x - d.constraint_vector
-    x .-= d.A_tilde_T * (d.L_c \ residual)
+    x .-= _constraint_shift(d.A_tilde_T, d.L_c, residual)
     return x
 end
 
@@ -198,15 +190,8 @@ Uses the efficient formula:
 where B = Ã^T * L_c^(-T) and σ is the unconstrained marginal variance.
 """
 function var(d::ConstrainedGMRF{T}) where {T}
-    # Get unconstrained variances
     σ_base = var(d.base_gmrf)
-
-    B_T = d.L_c.L \ d.A_tilde_T'
-    # Compute diagonal of B*B^T efficiently as row-wise sum of squares
-    B_squared_rowsums = vec(sum(abs2, B_T, dims = 1))
-
-    # Constrained variance = unconstrained variance - correction
-    σ_constrained = σ_base - B_squared_rowsums
+    σ_constrained = σ_base - _constraint_var_correction(d.A_tilde_T, d.L_c)
 
     # Ensure non-negative (numerical precision can cause tiny negative values)
     σ_constrained .= max.(σ_constrained, zero(T))

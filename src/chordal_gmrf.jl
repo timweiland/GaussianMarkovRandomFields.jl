@@ -14,9 +14,14 @@ A `GMRF` backed by a chordal Cholesky factorization (via
 The pure-Julia chordal factorization composes naturally with `Mooncake`'s
 reverse-mode AD through the rrules shipped by `MooncakeSparse`, so `logpdf`
 and `gaussian_approximation` give correct gradients with respect to the
-hyperparameters that produced `Q`. This is the recommended GMRF type for
-Mooncake-based hyperparameter optimization (e.g. L-BFGS / Adam on the
-marginal likelihood).
+hyperparameters that produced `Q`.
+
+The same factorization is also available as a standard `GMRF` backend via
+`GMRF(μ, Q, LinearSolve.CliqueTreesFactorization())`, which offers the same
+Mooncake support plus the full LinearSolve-based feature set (information
+vector constructors, conjugate conditioning, RBMC fallbacks). Prefer the
+backend form unless you specifically want to manage the `ChordalCholesky`
+factorization yourself.
 
 # Fields
 - `μ::AbstractVector`: Mean.
