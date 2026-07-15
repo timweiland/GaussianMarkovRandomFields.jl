@@ -110,37 +110,6 @@ function _barrier_precision_only(fem, τ, range, range_fraction)
 end
 
 """
-    _pad_scaled_to_pattern(Q::SparseMatrixCSC, scale, pattern) -> SparseMatrixCSC
-
-Materialize `scale * Q` on the fixed sparsity `pattern` (a `(; colptr, rowval)`
-NamedTuple), keeping explicit zeros at pattern positions that `Q` does not
-store. All stored entries of `Q` must lie inside `pattern`.
-"""
-function _pad_scaled_to_pattern(Q::SparseMatrixCSC, scale, pattern)
-    nzval = zeros(typeof(zero(eltype(Q)) * scale), length(pattern.rowval))
-    rows = rowvals(Q)
-    vals = nonzeros(Q)
-    for col in 1:size(Q, 2)
-        ptr = pattern.colptr[col]
-        stop = pattern.colptr[col + 1] - 1
-        for k in nzrange(Q, col)
-            row = rows[k]
-            while ptr <= stop && pattern.rowval[ptr] < row
-                ptr += 1
-            end
-            (ptr <= stop && pattern.rowval[ptr] == row) || throw(
-                ArgumentError(
-                    "Q has an entry at ($row, $col) outside the structural pattern."
-                )
-            )
-            nzval[ptr] = scale * vals[k]
-            ptr += 1
-        end
-    end
-    return SparseMatrixCSC(Q.m, Q.n, copy(pattern.colptr), copy(pattern.rowval), nzval)
-end
-
-"""
     BarrierModel(disc::FEMDiscretization; barrier_cells = Int[], range_fraction = 0.1,
                  alg = CHOLMODFactorization(), constraint = nothing,
                  observation_points = nothing)

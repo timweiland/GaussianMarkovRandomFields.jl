@@ -1,5 +1,6 @@
 using GaussianMarkovRandomFields
 using LinearAlgebra
+using SparseArrays
 using Ferrite
 
 @testset "MaternModel" begin
@@ -326,6 +327,52 @@ using Ferrite
                 Q_fresh = τ * GaussianMarkovRandomFields.matern_precision_only(disc, smoothness, κ)
                 @test Matrix(Q_cached) == Matrix(Q_fresh)  # bit-identical
             end
+        end
+    end
+
+    @testset "sparsity pattern is range-invariant (#183)" begin
+        # Same phantom-fill mechanism as BarrierModel (#183): fill entries of
+        # the precision products whose true value is zero evaluate to exact
+        # 0.0 for some ranges (then dropped by sparse scalar `*`) and to
+        # roundoff for others (then kept). On this mesh the stored nnz used to
+        # flip between 10315 and 10317 across the ranges below. The precision
+        # is now padded to a precomputed structural pattern.
+        grid = generate_grid(Triangle, (24, 24))
+        disc = FEMDiscretization(grid, Lagrange{RefTriangle, 1}(), QuadratureRule{RefTriangle}(2))
+        ranges = [0.05, 0.1, 0.2, 0.3, 0.5, 0.8, 1.3, 2.0]
+        for smoothness in [0, 1]
+            model = MaternModel(disc; smoothness = smoothness)
+            Qs = [sparse(precision_matrix(model; τ = τ, range = r)) for τ in (0.3, 1.0) for r in ranges]
+            @test all(Q.colptr == Qs[1].colptr for Q in Qs)
+            @test all(Q.rowval == Qs[1].rowval for Q in Qs)
+
+            # The crash path: a workspace fixes its pattern at θ_ref and must
+            # accept the precision produced at every other θ.
+            ws = make_workspace(model; τ = 1.0, range = 0.3)
+            for r in ranges
+                x = model(ws; τ = 1.0, range = r)
+                @test x isa GaussianMarkovRandomFields.AbstractGMRF
+            end
+        end
+
+        # Constrained discretizations stay pattern-invariant too, including
+        # the affine-constraint path (which inserts entries into K).
+        grid_1d = generate_grid(Line, (20,))
+        ip_1d = Lagrange{RefLine, 1}()
+        qr_1d = QuadratureRule{RefLine}(2)
+        disc_dbc = FEMDiscretization(
+            grid_1d, ip_1d, qr_1d, ((:u, nothing),),
+            ((_get_dirichlet_constraint(grid_1d, 0.0, 0.0), 1.0e-4),),
+        )
+        disc_per = FEMDiscretization(
+            grid_1d, ip_1d, qr_1d, ((:u, nothing),),
+            ((_get_periodic_constraint(grid_1d), 1.0e-4),),
+        )
+        for (disc_c, smoothness) in [(disc_dbc, 0), (disc_dbc, 1), (disc_per, 1)]
+            model = MaternModel(disc_c; smoothness = smoothness)
+            Qs = [sparse(precision_matrix(model; τ = 1.0, range = r)) for r in ranges]
+            @test all(Q.colptr == Qs[1].colptr for Q in Qs)
+            @test all(Q.rowval == Qs[1].rowval for Q in Qs)
         end
     end
 

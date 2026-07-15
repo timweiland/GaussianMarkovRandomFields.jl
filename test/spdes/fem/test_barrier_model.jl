@@ -47,11 +47,10 @@ using ForwardDiff
         Q = sparse(precision_matrix(bm; τ = 1.0, range = 0.5))
         Qm = sparse(precision_matrix(mm; τ = 1.0, range = 0.5))
         @test cholesky(Symmetric(Q)) isa SparseArrays.CHOLMOD.Factor
-        # Barrier keeps the stationary Matérn sparsity/cost and is far from
-        # dense. Its stored pattern is the full structural pattern of
-        # Aᵀ C̃⁻¹ A (padded for range-invariance, #183), which sits a few
-        # percent above Matérn's value-pruned nnz.
-        @test abs(nnz(Q) - nnz(Qm)) < 0.1 * nnz(Qm)
+        # Barrier and stationary Matérn are both padded to the structural
+        # pattern of the same product (#183), so their stored patterns — and
+        # hence sparsity/cost — coincide exactly. Far from dense.
+        @test nnz(Q) == nnz(Qm)
         @test nnz(Q) < 0.05 * length(Q)
         x = bm(τ = 1.0, range = 0.5)
         @test x isa GaussianMarkovRandomFields.AbstractGMRF

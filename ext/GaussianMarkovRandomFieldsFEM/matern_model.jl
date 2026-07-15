@@ -19,7 +19,14 @@ function MaternModel(discretization::F; smoothness::S, alg = CHOLMODFactorizatio
     processed_constraint = _process_constraint(constraint, n)
     # Assemble the κ-independent FEM matrices once; reused on every precision_matrix call.
     C, G = assemble_matern_C_G(discretization)
-    fem_matrices = (; C, G)
+    # Precompute the κ-invariant structural precision pattern (#183); every
+    # precision_matrix call is padded to it.
+    D = ndim(discretization)
+    α_val = Integer(smoothness_to_ν(smoothness, D) + D // 2)
+    Q_pattern = _matern_structural_pattern(
+        G, discretization.constraint_handler, discretization.constraint_noise, α_val
+    )
+    fem_matrices = (; C, G, Q_pattern)
     return MaternModel{F, S, typeof(alg), typeof(processed_constraint), typeof(observation_points), typeof(fem_matrices)}(discretization, smoothness, alg, processed_constraint, observation_points, fem_matrices)
 end
 
@@ -102,9 +109,13 @@ function precision_matrix(model::MaternModel{F, S}; τ::Real, range::Real, kwarg
     D = ndim(model.discretization)
     ν = smoothness_to_ν(model.smoothness, D)
     κ = range_to_κ(range, ν)
-    (; C, G) = model.fem_matrices
+    (; C, G, Q_pattern) = model.fem_matrices
     Q_unscaled = matern_precision_only(model.discretization, model.smoothness, κ, C, G)
-    return τ * Q_unscaled
+    # Scatter τ·Q into the fixed structural pattern instead of `τ * Q_unscaled`:
+    # sparse scalar `*` drops fill entries that cancel to exact 0.0 at the
+    # current range but not at others, which made the stored pattern
+    # range-dependent and broke fixed-pattern workspaces (#183).
+    return Symmetric(_pad_scaled_to_pattern(parent(Q_unscaled), τ, Q_pattern))
 end
 
 function mean(model::MaternModel; kwargs...)

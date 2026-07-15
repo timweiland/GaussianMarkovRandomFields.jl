@@ -231,6 +231,40 @@ function _matern_precision_only(
 end
 
 """
+    _matern_structural_pattern(G::SparseMatrixCSC, ch, constraint_noise, α::Integer)
+
+κ-invariant structural sparsity pattern of the precision produced by
+[`_matern_precision_only`](@ref), as a `(; colptr, rowval)` NamedTuple.
+
+Runs the α-recursion's product chain once with all-ones matrices: every
+structurally reachable entry stays strictly positive, so sparse arithmetic
+cannot drop any of them, and the numeric precision's stored pattern at any κ
+is a subset of this pattern (issue #183). `K = κ²C + G` carries the pattern
+`diag ∪ G` at every κ (`C` is lumped/diagonal); constraint handling can insert
+entries for affine constraints, so it is mirrored on the ones matrix and
+unioned with the unconstrained pattern (the inner recursion multiplies
+unconstrained `K`s).
+"""
+function _matern_structural_pattern(G::SparseMatrixCSC, ch, constraint_noise, α::Integer)
+    n = size(G, 1)
+    S = spdiagm(0 => ones(n)) + _ones_pattern(G)
+    if ch !== nothing && !isempty(ch.prescribed_dofs)
+        S_con = copy(S)
+        apply_soft_constraints!(ch, constraint_noise; K = S_con)
+        S = _ones_pattern(S) + _ones_pattern(S_con)
+    end
+    P = _pattern_product_recursion(S, α)
+    return (colptr = P.colptr, rowval = P.rowval)
+end
+
+# Pattern of the α-recursion products: α=1 → K, α=2 → Kᵀ·diag·K, α≥3 → Kᵀ·P_{α-2}·K.
+function _pattern_product_recursion(S::SparseMatrixCSC, α::Integer)
+    α == 1 && return S
+    α == 2 && return S' * S
+    return S' * _pattern_product_recursion(S, α - 2) * S
+end
+
+"""
     assemble_matern_C_G(disc::FEMDiscretization{D}) where {D}
 
 Assemble the κ-independent FEM matrices for a Matérn discretization: the lumped
