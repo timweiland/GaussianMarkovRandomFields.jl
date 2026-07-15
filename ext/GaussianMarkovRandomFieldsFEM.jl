@@ -15,7 +15,7 @@ using GaussianMarkovRandomFields:
     precision_map, to_matrix, make_chunks,
     SymmetricBlockTridiagonalMap, SSMBidiagonalMap, ZeroMap,
     temporal_block_gauss_seidel,
-    _process_constraint
+    _process_constraint, _ones_pattern
 
 import GaussianMarkovRandomFields:
     ndim, evaluation_matrix, node_selection_matrix,

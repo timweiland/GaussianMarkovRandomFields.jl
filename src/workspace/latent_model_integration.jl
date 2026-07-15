@@ -122,9 +122,11 @@ function GMRFWorkspace(model::LatentModel, obs_lik::ObservationLikelihood; kwarg
     H = loghessian(x_dummy, obs_lik)
     H_sparse = _ensure_sparse_hessian(H, n)
 
-    # Joint pattern: Q_prior + |H| (using absolute values to get the union pattern)
-    # Then copy Q_prior's actual values into the joint pattern
-    Q_joint_pattern = Q_prior + _abs_pattern(H_sparse)
+    # Joint pattern: structural union of Q_prior and H, built from all-ones
+    # copies so that sparse `+` (which drops exact-zero results, including
+    # stored zeros of the operands) cannot lose any position of either pattern.
+    # Then copy Q_prior's actual values into the joint pattern.
+    Q_joint_pattern = _ones_pattern(Q_prior) + _ones_pattern(H_sparse)
     # Reset values to Q_prior (the observation entries become zero)
     _copy_values_into!(Q_joint_pattern, Q_prior)
 
@@ -177,9 +179,10 @@ _ensure_sparse_hessian(H::Diagonal, n::Int) = sparse(H)
 _ensure_sparse_hessian(H::SparseMatrixCSC, ::Int) = H
 _ensure_sparse_hessian(H::AbstractMatrix, ::Int) = sparse(H)
 
-"""Create a sparse matrix with absolute values of nonzeros (for pattern union)."""
-function _abs_pattern(H::SparseMatrixCSC{T}) where {T}
-    return SparseMatrixCSC(H.m, H.n, H.colptr, H.rowval, abs.(H.nzval))
+"""Create a sparse matrix with `A`'s stored pattern and all-ones values.
+Used for cancellation-free pattern unions and structural pattern products."""
+function _ones_pattern(A::SparseMatrixCSC)
+    return SparseMatrixCSC(A.m, A.n, A.colptr, A.rowval, ones(length(A.rowval)))
 end
 
 """

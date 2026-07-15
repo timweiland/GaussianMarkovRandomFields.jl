@@ -47,9 +47,11 @@ using ForwardDiff
         Q = sparse(precision_matrix(bm; τ = 1.0, range = 0.5))
         Qm = sparse(precision_matrix(mm; τ = 1.0, range = 0.5))
         @test cholesky(Symmetric(Q)) isa SparseArrays.CHOLMOD.Factor
-        # Barrier keeps the stationary Matérn sparsity/cost (same pattern up to
-        # Adjoint/Symmetric bookkeeping) and is far from dense.
-        @test abs(nnz(Q) - nnz(Qm)) < 0.01 * nnz(Qm)
+        # Barrier keeps the stationary Matérn sparsity/cost and is far from
+        # dense. Its stored pattern is the full structural pattern of
+        # Aᵀ C̃⁻¹ A (padded for range-invariance, #183), which sits a few
+        # percent above Matérn's value-pruned nnz.
+        @test abs(nnz(Q) - nnz(Qm)) < 0.1 * nnz(Qm)
         @test nnz(Q) < 0.05 * length(Q)
         x = bm(τ = 1.0, range = 0.5)
         @test x isa GaussianMarkovRandomFields.AbstractGMRF
@@ -88,6 +90,29 @@ using ForwardDiff
         @test a_b < 0.2 * w_b          # barrier: across strongly suppressed vs within
         @test a_s > 0.5 * w_s          # stationary: across ≈ within (same distance)
         @test a_b < 0.2 * a_s          # barrier suppresses across vs stationary
+    end
+
+    @testset "sparsity pattern is range-invariant (#183)" begin
+        bcells = barrier_triangles(disc, strip)
+        bm = BarrierModel(disc; barrier_cells = bcells, range_fraction = 0.1)
+        # Fill entries of Aᵀ C̃⁻¹ A whose true value is zero evaluate to exact
+        # 0.0 for some ranges (then dropped by sparse scalar `*`) and to
+        # roundoff for others (then kept), so the stored pattern used to be
+        # range-dependent — on this mesh e.g. ranges 0.2 and 0.3 differed by
+        # 6 stored entries. The precision is now padded to the precomputed
+        # structural pattern, which must make all patterns identical.
+        ranges = [0.05, 0.1, 0.2, 0.3, 0.5, 0.8, 1.3, 2.0]
+        Qs = [sparse(precision_matrix(bm; τ = τ, range = r)) for τ in (0.3, 1.0) for r in ranges]
+        @test all(Q.colptr == Qs[1].colptr for Q in Qs)
+        @test all(Q.rowval == Qs[1].rowval for Q in Qs)
+
+        # The crash path from #183: a workspace fixes its pattern at θ_ref and
+        # must accept the precision produced at every other θ.
+        ws = make_workspace(bm; τ = 1.0, range = 0.3)
+        for r in ranges
+            x = bm(ws; τ = 1.0, range = r)
+            @test x isa GaussianMarkovRandomFields.AbstractGMRF
+        end
     end
 
     @testset "argument validation" begin

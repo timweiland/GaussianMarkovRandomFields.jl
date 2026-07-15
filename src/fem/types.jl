@@ -231,7 +231,9 @@ across them — useful for e.g. coastlines/islands blocking a marine field.
 
 The precision keeps the same sparsity and cost as the stationary model and is
 assembled per region. With no barrier triangles it reduces exactly to
-`MaternModel(disc; smoothness = 0)` (the stationary ν = 1 Matérn).
+`MaternModel(disc; smoothness = 0)` (the stationary ν = 1 Matérn). Its sparsity
+pattern is padded to a precomputed structural pattern, so it is identical for
+all hyperparameter values — as required by fixed-pattern workspaces.
 
 Validated user-facing constructors live in the `GaussianMarkovRandomFieldsFEM`
 extension. The range-independent per-region FEM matrices are assembled once at
