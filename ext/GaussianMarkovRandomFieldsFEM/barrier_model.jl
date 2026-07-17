@@ -29,6 +29,8 @@ whose ids are in `barrier_cells`). Returns a `NamedTuple`:
 - `G_regions = (G_normal, G_barrier)`: stiffness `∫_{Ω_k} ∇φ_i·∇φ_j` per region
   (`G_normal + G_barrier =` full stiffness).
 - `c_regions = (c_normal, c_barrier)`: lumped mass `∫_{Ω_k} φ_i` per region.
+- `Q_pattern = (; colptr, rowval)`: the range-invariant structural sparsity
+  pattern of the precision `Aᵀ C̃⁻¹ A`; every assembly is padded to it.
 """
 function assemble_barrier_fem(disc::FEMDiscretization{D}, barrier_cells) where {D}
     D == 2 || throw(ArgumentError("BarrierModel currently supports 2D discretizations only"))
@@ -71,19 +73,71 @@ function assemble_barrier_fem(disc::FEMDiscretization{D}, barrier_cells) where {
     c_normal = Vector{Tv}(vec(sum(M_normal, dims = 2)))
     c_barrier = Vector{Tv}(vec(sum(M_barrier, dims = 2)))
     C = c_normal .+ c_barrier
-    return (; C = C, G_regions = (G_normal, G_barrier), c_regions = (c_normal, c_barrier))
+
+    # Range-invariant structural pattern of Aᵀ C̃⁻¹ A, where A carries the union
+    # pattern diag ∪ G_normal ∪ G_barrier at every range. All-ones values keep
+    # every structurally reachable entry of the product strictly positive, so
+    # sparse arithmetic cannot drop any of them as numerical zeros; the numeric
+    # product's stored pattern at any range is a subset of this pattern.
+    S = spdiagm(0 => ones(Tv, length(C))) + _ones_pattern(G_normal) + _ones_pattern(G_barrier)
+    P = S' * S
+    Q_pattern = (colptr = P.colptr, rowval = P.rowval)
+
+    return (;
+        C = C, G_regions = (G_normal, G_barrier),
+        c_regions = (c_normal, c_barrier), Q_pattern = Q_pattern,
+    )
 end
 
-# Factorization-free barrier precision (unscaled by τ). Supports ForwardDiff.Dual
-# `range` since it never factorizes.
-function _barrier_precision_only(fem, range, range_fraction)
-    (; C, G_regions, c_regions) = fem
+# Factorization-free barrier precision (scaled by τ). Supports ForwardDiff.Dual
+# τ/range since it never factorizes.
+#
+# The product's fill entries between second-order mesh neighbors can cancel to
+# zero, and whether a given entry evaluates to exact 0.0 or to roundoff depends
+# on the range. Sparse scalar `*` drops exact-zero stored entries, so scaling a
+# raw sparse result makes the stored pattern range-dependent, which breaks
+# fixed-pattern workspaces (issue #183). Instead, the result is scattered into
+# the precomputed structural pattern with the τ·2/π scaling folded into the
+# scatter, so the stored pattern is identical for every θ.
+function _barrier_precision_only(fem, τ, range, range_fraction)
+    (; C, G_regions, c_regions, Q_pattern) = fem
     r1 = range
     r2 = range_fraction * range
     Cdiag = r1^2 .* c_regions[1] .+ r2^2 .* c_regions[2]
     Cinv = spdiagm(0 => inv.(Cdiag))
     A = spdiagm(0 => C) + (r1^2 / 8) * G_regions[1] + (r2^2 / 8) * G_regions[2]
-    return Symmetric((2 / π) * (A' * Cinv * A))
+    return Symmetric(_pad_scaled_to_pattern(A' * Cinv * A, τ * (2 / π), Q_pattern))
+end
+
+"""
+    _pad_scaled_to_pattern(Q::SparseMatrixCSC, scale, pattern) -> SparseMatrixCSC
+
+Materialize `scale * Q` on the fixed sparsity `pattern` (a `(; colptr, rowval)`
+NamedTuple), keeping explicit zeros at pattern positions that `Q` does not
+store. All stored entries of `Q` must lie inside `pattern`.
+"""
+function _pad_scaled_to_pattern(Q::SparseMatrixCSC, scale, pattern)
+    nzval = zeros(typeof(zero(eltype(Q)) * scale), length(pattern.rowval))
+    rows = rowvals(Q)
+    vals = nonzeros(Q)
+    for col in 1:size(Q, 2)
+        ptr = pattern.colptr[col]
+        stop = pattern.colptr[col + 1] - 1
+        for k in nzrange(Q, col)
+            row = rows[k]
+            while ptr <= stop && pattern.rowval[ptr] < row
+                ptr += 1
+            end
+            (ptr <= stop && pattern.rowval[ptr] == row) || throw(
+                ArgumentError(
+                    "Q has an entry at ($row, $col) outside the structural pattern."
+                )
+            )
+            nzval[ptr] = scale * vals[k]
+            ptr += 1
+        end
+    end
+    return SparseMatrixCSC(Q.m, Q.n, copy(pattern.colptr), copy(pattern.rowval), nzval)
 end
 
 """
@@ -138,8 +192,7 @@ end
 
 function precision_matrix(model::BarrierModel; τ::Real, range::Real, kwargs...)
     _validate_barrier_parameters(; τ = τ, range = range)
-    Q_unscaled = _barrier_precision_only(model.fem_matrices, range, model.range_fraction)
-    return τ * Q_unscaled
+    return _barrier_precision_only(model.fem_matrices, τ, range, model.range_fraction)
 end
 
 mean(model::BarrierModel; kwargs...) = zeros(length(model))
