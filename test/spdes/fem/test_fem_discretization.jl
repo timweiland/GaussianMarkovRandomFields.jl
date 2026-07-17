@@ -30,6 +30,23 @@ using GaussianMarkovRandomFields, Ferrite, SparseArrays
     @test_throws ArgumentError evaluation_matrix(f, X_oob)
     @test_throws ArgumentError evaluation_matrix(f, [0.5 0.45; 5.0 5.0])
 
+    # Points exactly on cell boundaries: point location may return local
+    # coordinates a roundoff outside the reference cell (does so on
+    # Ferrite ≥ 1.5), and the affine weights must still land in [0, 1].
+    # This mesh has grid lines at multiples of 0.1.
+    X_edge = [Vec(0.5, 0.45), Vec(0.5, 0.5), Vec(-1.0, -1.0), Vec(0.3, 0.3)]
+    A_edge = evaluation_matrix(f, X_edge)
+    @test all(A_edge .>= 0)
+    @test all(A_edge .<= 1)
+    @test sum(A_edge, dims = 2) ≈ ones(length(X_edge))
+
+    # Quadratic shape functions legitimately take negative values inside a
+    # cell; the [0, 1] snap must not apply to them.
+    f2 = FEMDiscretization(grid, Lagrange{RefTriangle, 2}(), QuadratureRule{RefTriangle}(4))
+    A2 = evaluation_matrix(f2, [Vec(0.53, 0.415)])  # strictly inside a cell
+    @test minimum(A2) < -0.01
+    @test sum(A2, dims = 2) ≈ [1.0]
+
 
     node_idcs = [6, 13]
     B = node_selection_matrix(f, node_idcs)

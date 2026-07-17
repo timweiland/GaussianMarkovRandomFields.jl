@@ -146,6 +146,15 @@ function evaluation_matrix(f::FEMDiscretization, X::AbstractVector; field = :def
             Ferrite.reference_shape_value(f.interpolation, peh.local_coords[i], j) for
                 j in 1:getnbasefunctions(f.interpolation)
         ]
+        # Point location tolerates local coordinates slightly outside the
+        # reference cell (Ferrite ≥ 1.5 returns such coordinates for points
+        # exactly on cell boundaries), which puts affine shape values a
+        # roundoff outside [0, 1]. Clamp first-order Lagrange weights, for
+        # which [0, 1] is a true invariant; higher-order shape functions take
+        # legitimate values outside [0, 1] inside the cell and pass through.
+        if f.interpolation isa Lagrange{<:Any, 1}
+            vals = clamp.(vals, 0.0, 1.0)
+        end
         append!(Vs, vals)
     end
     return sparse(Is, Js, Vs, length(X), ndofs(f))
