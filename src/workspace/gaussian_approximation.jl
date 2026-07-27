@@ -148,7 +148,7 @@ function _workspace_constrain_with_matrix(step, ws::GMRFWorkspace, A)
         A_tilde_T[:, i] .= workspace_solve(ws, A[i, :])
     end
     L_c = cholesky(Symmetric(A * A_tilde_T))
-    return step - A_tilde_T * (L_c \ (A * step))
+    return step - _constraint_shift(A_tilde_T, L_c, A * step)
 end
 
 """

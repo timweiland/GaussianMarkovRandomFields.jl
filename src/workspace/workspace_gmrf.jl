@@ -18,6 +18,45 @@ struct ConstraintInfo{T}
     log_constraint_correction::T
 end
 
+# --- Shared constraint formulas (Rue & Held 2005, §2.3.3) ---
+# Single source of truth for the constraint corrections, used by the primal
+# ConstraintInfo / var / rand paths below and recomputed differentiably by the
+# AD extensions (with fresh Schur factors in place of the cached `L_c`).
+
+"""
+    _constraint_shift(A_tilde_T, L_c, v) -> Vector
+
+The constraint-space shift `Ã L_c⁻¹ v` (with `Ã = Q⁻¹Aᵀ` and
+`L_c = chol(AÃ)`): subtracted from a mean/sample given `v = Aμ - e`, or from
+a Newton step given `v = A·step` to project it onto the constraint tangent
+space.
+"""
+_constraint_shift(A_tilde_T, L_c, v) = A_tilde_T * (L_c \ v)
+
+"""
+    _constraint_log_correction(A, e, μ, S_c) -> Real
+
+Log-density correction of a constrained GMRF, where `S_c` is a Cholesky
+factorization of the constraint Schur complement `A Q⁻¹ Aᵀ`.
+"""
+function _constraint_log_correction(A, e, μ, S_c)
+    resid = e - A * μ
+    m = length(e)
+    return 0.5 * (m * log(2π) + logdet(S_c) + dot(resid, S_c \ resid)) -
+        0.5 * logdet(cholesky(Symmetric(A * A')))
+end
+
+"""
+    _constraint_var_correction(A_tilde_T, S_c) -> Vector
+
+Marginal-variance reduction `diag(Ã S_c⁻¹ Ãᵀ)` from conditioning on the
+constraints.
+"""
+function _constraint_var_correction(A_tilde_T, S_c)
+    B_T = S_c.L \ Matrix(A_tilde_T')
+    return vec(sum(abs2, B_T, dims = 1))
+end
+
 function ConstraintInfo(
         ws::GMRFWorkspace, μ::AbstractVector{T},
         A::AbstractMatrix, e::AbstractVector
@@ -43,14 +82,10 @@ function ConstraintInfo(
 
     # Constrained mean
     residual = A_dense * μ - e_vec
-    constrained_mean = μ - A_tilde_T * (L_c \ residual)
+    constrained_mean = μ - _constraint_shift(A_tilde_T, L_c, residual)
 
-    # Log-density correction (Rue & Held 2005, §2.3.3)
-    resid_e = e_vec - A_dense * μ
-    r = length(resid_e)
-    log_constraint_correction =
-        0.5 * (r * log(2π) + logdet(L_c) + dot(resid_e, L_c \ resid_e)) -
-        0.5 * logdet(cholesky(Symmetric(A_dense * A_dense')))
+    # Log-density correction
+    log_constraint_correction = _constraint_log_correction(A_dense, e_vec, μ, L_c)
 
     return ConstraintInfo{T}(
         A_dense, e_vec, A_tilde_T, L_c, constrained_mean, log_constraint_correction
@@ -223,9 +258,7 @@ function var(d::WorkspaceGMRF{T}) where {T}
         return σ_base
     else
         ci = d.constraints
-        B_T = ci.L_c.L \ ci.A_tilde_T'
-        B_squared_rowsums = vec(sum(abs2, B_T, dims = 1))
-        σ_constrained = σ_base - B_squared_rowsums
+        σ_constrained = σ_base - _constraint_var_correction(ci.A_tilde_T, ci.L_c)
         σ_constrained .= max.(σ_constrained, zero(T))
         return σ_constrained
     end
@@ -239,7 +272,7 @@ function _rand!(rng::AbstractRNG, d::WorkspaceGMRF, x::AbstractVector)
     if d.constraints !== nothing
         ci = d.constraints
         residual = ci.matrix * Vector(x) - ci.vector
-        x .-= ci.A_tilde_T * (ci.L_c \ residual)
+        x .-= _constraint_shift(ci.A_tilde_T, ci.L_c, residual)
     end
     return x
 end

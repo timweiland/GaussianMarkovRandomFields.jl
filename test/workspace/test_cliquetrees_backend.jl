@@ -28,6 +28,15 @@ using Random
         @test logdet(ws) ≈ logdet(Q_dense) rtol = 1.0e-10
     end
 
+    @testset "Backward solve" begin
+        ws = GMRFWorkspace(Q, CliqueTreesBackend)
+        # backward_solve maps z ↦ P⁻¹U⁻¹z. Applying it to all identity columns
+        # gives B = P⁻¹U⁻¹, which must satisfy B*Bᵀ = Q⁻¹ — the property
+        # sampling relies on (and which a plain Q⁻¹z solve would violate).
+        B = hcat([backward_solve(ws, Vector{Float64}(I(n)[:, j])) for j in 1:n]...)
+        @test B * B' ≈ Q_inv rtol = 1.0e-8
+    end
+
     @testset "Selected inverse diagonal" begin
         ws = GMRFWorkspace(Q, CliqueTreesBackend)
         d = selinv_diag(ws)
