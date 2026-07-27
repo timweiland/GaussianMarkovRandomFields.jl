@@ -181,11 +181,11 @@ function GMRF(
 
     # Set up LinearSolve cache
     if linsolve_cache === nothing
-        # Configure algorithm with optimal defaults for GMRF operations
-        configured_alg = configure_algorithm(alg)
-        # Prepare matrix for LinearSolve based on algorithm requirements
-        prob = LinearProblem(prepare_for_linsolve(precision, configured_alg), copy(mean))
-        linsolve_cache = init(prob, configured_alg)
+        # Prepare the matrix for LinearSolve and resolve the algorithm, falling back to
+        # LinearSolve's default when `alg` cannot handle this precision's storage type
+        A_linsolve, resolved_alg = resolve_linsolve(precision, alg)
+        prob = LinearProblem(A_linsolve, copy(mean))
+        linsolve_cache = init(prob, resolved_alg)
     end
 
     return GMRF{T, typeof(mean), Nothing, typeof(precision), typeof(Q_sqrt), typeof(linsolve_cache), typeof(rbmc_strategy)}(mean, nothing, precision, Q_sqrt, linsolve_cache, rbmc_strategy)
@@ -206,10 +206,13 @@ function GMRF(
 
     # Set up LinearSolve cache and solve for mean
     if linsolve_cache === nothing
-        # Configure algorithm with optimal defaults for GMRF operations
-        configured_alg = configure_algorithm(alg)
-        prob = LinearProblem(prepare_for_linsolve(precision, configured_alg), copy(information.data))
-        linsolve_cache = init(prob, configured_alg)
+        # Prepare the matrix for LinearSolve and resolve the algorithm, falling back to
+        # LinearSolve's default when `alg` cannot handle this precision's storage type.
+        # Conditioning inherits `alg` from the prior, whose precision may be stored
+        # differently than the posterior's (e.g. SymTridiagonal prior -> sparse posterior).
+        A_linsolve, resolved_alg = resolve_linsolve(precision, alg)
+        prob = LinearProblem(A_linsolve, copy(information.data))
+        linsolve_cache = init(prob, resolved_alg)
     else
         # Reuse provided cache but update RHS for solving
         linsolve_cache.b .= information.data

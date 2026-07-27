@@ -83,8 +83,30 @@ end
 # `_ga_solve` solves against it. Splitting refactor from solve lets the
 # final `_build_posterior` refresh the factorization without a wasted
 # triangular solve.
-_ga_init_solver(gmrf::GMRF) = deepcopy(linsolve_cache(gmrf))
-_ga_init_solver(gmrf::ChordalGMRF) = copy(gmrf.F)
+_ga_init_solver(gmrf::ChordalGMRF, _prior, _obs_lik, _x_init) = copy(gmrf.F)
+
+function _ga_init_solver(gmrf::GMRF, prior, obs_lik::ObservationLikelihood, x_init)
+    Q_p, = _prior_local(prior, x_init)
+    return _ga_resolve_cache(linsolve_cache(gmrf), Q_p - loghessian(x_init, obs_lik))
+end
+
+# The Newton loop factorizes `Q_prior - H`, whose storage type need not match the prior
+# precision the cache was built for: a `SymTridiagonal` AR(1)/RW(1) prior against a sparse
+# observation Hessian gives a sparse posterior precision, and the prior's
+# `LDLtFactorization` cannot factorize that (`ldlt!` only accepts `SymTridiagonal`).
+#
+# Reuse the prior's cache whenever the storage type carries over — that keeps the fast path
+# for a `SymTridiagonal` prior meeting a `Diagonal` Hessian, which stays `SymTridiagonal`.
+# Otherwise build a fresh cache with an algorithm resolved for the posterior precision.
+# Resolving once here rather than per iteration keeps `solver` concretely typed inside
+# `_newton_loop`; this call is a function barrier, so the union return costs one dispatch.
+function _ga_resolve_cache(cache::LinearSolve.LinearCache, Q_posterior)
+    if typeof(prepare_for_linsolve(Q_posterior, cache.alg)) === typeof(cache.A)
+        return deepcopy(cache)
+    end
+    A_linsolve, resolved_alg = resolve_linsolve(Q_posterior, cache.alg)
+    return init(LinearProblem(A_linsolve, copy(cache.b)), resolved_alg)
+end
 
 function _ga_refactor!(cache::LinearSolve.LinearCache, Q_prior, H)
     Q_new = prepare_for_linsolve(Q_prior - H, cache.alg)
@@ -168,7 +190,7 @@ function gaussian_approximation(
     base_gmrf = _base_gmrf(prior_gmrf)
     constraints = _extract_constraints(prior_gmrf)
     x_init = x0 === nothing ? mean(prior_gmrf) : x0
-    solver = _ga_init_solver(base_gmrf)
+    solver = _ga_init_solver(base_gmrf, prior_gmrf, obs_lik, x_init)
     return _newton_loop(
         prior_gmrf, obs_lik, solver, constraints, x_init;
         max_iter, mean_change_tol, newton_dec_tol,
