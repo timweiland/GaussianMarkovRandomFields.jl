@@ -9,7 +9,7 @@ all the others take for granted: latent models, observation models, and
 posteriors. If you have not used the package before, read that one first —
 everything else will make more sense afterwards.
 
-## Getting started
+## Start here
 
 - [Getting started](@ref) runs through the whole workflow twice, once on a time
   series and once on a spatial field.
