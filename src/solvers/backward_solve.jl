@@ -49,8 +49,15 @@ _backward_solve_impl(linsolve, x, alg) = throw(ArgumentError("Backward solve not
 
 function _backward_solve_impl(linsolve, x, ::LinearSolve.CHOLMODFactorization)
     factorization = LinearSolve.@get_cacheval(linsolve, :CHOLMODFactorization)
-    return factorization.UP \ x
+    return factorization.UP \ _dense_rhs(x)
 end
+
+# CHOLMOD defines `FactorComponent \ B` only for dense `Vector`/`Matrix` right-hand sides.
+# Anything else (notably the column `SubArray`s that `rand(d, n)` hands to `_rand!`) falls
+# through to the generic `\`, which tries to index the factor and throws a
+# CanonicalIndexError. Materialize those into a dense array first.
+_dense_rhs(x::VecOrMat) = x
+_dense_rhs(x::AbstractVecOrMat) = collect(x)
 
 function _backward_solve_impl(linsolve, x, ::LinearSolve.CholeskyFactorization)
     factorization = LinearSolve.@get_cacheval(linsolve, :CholeskyFactorization)

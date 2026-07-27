@@ -108,8 +108,14 @@ using GaussianMarkovRandomFields
         # Test custom algorithm
         custom_model = CombinedModel(iid, ar1, alg = LDLtFactorization())
         @test custom_model.alg isa LDLtFactorization
+
+        # A CombinedModel precision is block-diagonal sparse, which LDLtFactorization
+        # cannot factorize (`ldlt!` only accepts SymTridiagonal). The requested algorithm
+        # used to be stored on the cache regardless, yielding a GMRF that threw a
+        # MethodError on the first solve; it is now dropped for a workable default.
         custom_gmrf = custom_model(τ_iid = 1.0, τ_ar1 = 1.0, ρ_ar1 = 0.5)
-        @test custom_gmrf.linsolve_cache.alg isa LDLtFactorization
+        @test !(custom_gmrf.linsolve_cache.alg isa LDLtFactorization)
+        @test var(custom_gmrf) ≈ diag(inv(Matrix(precision_matrix(custom_gmrf))))
     end
 
     @testset "Named component access" begin
