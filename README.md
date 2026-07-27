@@ -19,7 +19,7 @@
 [![Coverage](https://codecov.io/gh/timweiland/GaussianMarkovRandomFields.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/timweiland/GaussianMarkovRandomFields.jl)
 [![Aqua](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 [![code style: runic](https://img.shields.io/badge/code_style-%E1%9A%B1%E1%9A%A2%E1%9A%BE%E1%9B%81%E1%9A%B2-black)](https://github.com/fredrikekre/Runic.jl)
-[![DOI](https://zenodo.org/badge/827801443.svg)](https://doi.org/10.5281/zenodo.18088215)
+[![DOI](https://zenodo.org/badge/827801443.svg)](https://doi.org/10.5281/zenodo.18088214)
 
 </div>
 
@@ -40,6 +40,8 @@ priors.
 
 - [Installation](#installation)
 - [Your first GMRF](#your-first-gmrf)
+- [Getting help](#getting-help)
+- [Citing](#citing)
 - [Contributing](#contributing)
 
 ## Installation
@@ -81,6 +83,40 @@ x_cond = gaussian_approximation(x, obs_likelihood)  # Posterior GMRF!
 ```
 
 Make sure to check the documentation for further examples!
+
+## Getting help
+
+Questions, bug reports and feature requests all belong in the
+[issue tracker](https://github.com/timweiland/GaussianMarkovRandomFields.jl/issues).
+Please open an issue rather than emailing the maintainer, so that answers stay
+searchable for everyone.
+
+See [Getting Help](./CONTRIBUTING.md#getting-help) for what to include, and
+[Support and Governance](./CONTRIBUTING.md#support-and-governance) for what to
+expect regarding response times and project scope.
+
+## Citing
+
+If you use GaussianMarkovRandomFields.jl in your research, please cite it via
+its Zenodo archive. The DOI below always resolves to the latest release; the
+Zenodo page additionally lets you cite a specific version and offers BibTeX and
+other export formats.
+
+> Tim Weiland. *GaussianMarkovRandomFields.jl*. Zenodo. <https://doi.org/10.5281/zenodo.18088214>
+
+```bibtex
+@software{weiland_gmrf_jl,
+  author    = {Weiland, Tim},
+  title     = {{GaussianMarkovRandomFields.jl}},
+  publisher = {Zenodo},
+  year      = {2025},
+  doi       = {10.5281/zenodo.18088214},
+  url       = {https://doi.org/10.5281/zenodo.18088214}
+}
+```
+
+GitHub's *Cite this repository* button exposes the same metadata, which lives in
+[`CITATION.cff`](./CITATION.cff).
 
 ## Contributing
 

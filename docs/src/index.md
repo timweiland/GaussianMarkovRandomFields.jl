@@ -49,3 +49,32 @@ using Pkg
 Pkg.add("GaussianMarkovRandomFields")
 using GaussianMarkovRandomFields
 ```
+
+## Getting Help
+
+Questions, bug reports and feature requests all belong in the
+[issue tracker](https://github.com/timweiland/GaussianMarkovRandomFields.jl/issues).
+Please open an issue rather than emailing the maintainer, so that answers stay
+searchable for everyone.
+
+The [contribution guidelines](https://github.com/timweiland/GaussianMarkovRandomFields.jl/blob/main/CONTRIBUTING.md)
+describe what to include in an issue, how to contribute code, and what to expect
+regarding response times and project scope.
+
+## Citing
+
+If you use GaussianMarkovRandomFields.jl in your research, please cite it via its
+[Zenodo archive](https://doi.org/10.5281/zenodo.18088214). That DOI always
+resolves to the latest release, and the Zenodo page offers BibTeX and other
+export formats as well as per-version DOIs.
+
+```bibtex
+@software{weiland_gmrf_jl,
+  author    = {Weiland, Tim},
+  title     = {{GaussianMarkovRandomFields.jl}},
+  publisher = {Zenodo},
+  year      = {2025},
+  doi       = {10.5281/zenodo.18088214},
+  url       = {https://doi.org/10.5281/zenodo.18088214}
+}
+```
