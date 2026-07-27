@@ -1,0 +1,43 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: GaussianMarkovRandomFields.jl
+abstract: >-
+  A Julia package for flexible and efficient Bayesian inference with Gaussian
+  Markov random fields, including SPDE-based approximations to Gaussian process
+  priors, composable latent and observation models, and sparse automatic
+  differentiation.
+type: software
+authors:
+  - given-names: Tim
+    family-names: Weiland
+    email: hello@timwei.land
+    affiliation: University of Tübingen
+    orcid: "https://orcid.org/0009-0003-7636-5970"
+repository-code: "https://github.com/timweiland/GaussianMarkovRandomFields.jl"
+url: "https://timweiland.github.io/GaussianMarkovRandomFields.jl/stable"
+license: MIT
+doi: 10.5281/zenodo.18088214
+keywords:
+  - Julia
+  - Gaussian Markov random fields
+  - Bayesian inference
+  - spatial statistics
+  - sparse linear algebra
+  - stochastic partial differential equations
+# Once the JOSS paper is published, uncomment the block below (filling in the
+# DOI, volume, issue, pages and year) so that `preferred-citation` points at the
+# paper while the DOI above continues to archive the software itself.
+#
+# preferred-citation:
+#   type: article
+#   title: "GaussianMarkovRandomFields.jl: Flexible Latent Gaussian Modeling with Sparse Precision in Julia"
+#   authors:
+#     - given-names: Tim
+#       family-names: Weiland
+#       orcid: "https://orcid.org/0009-0003-7636-5970"
+#   journal: Journal of Open Source Software
+#   doi: TODO
+#   volume: TODO
+#   issue: TODO
+#   start: TODO
+#   year: TODO

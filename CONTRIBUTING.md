@@ -4,6 +4,26 @@ Thank you for your interest in contributing to **GaussianMarkovRandomFields.jl**
 We appreciate your help in improving and maintaining this package.
 The following guidelines will help you get started.
 
+If you are looking for help rather than looking to contribute, see
+[Getting Help](#getting-help) below.
+
+## Getting Help
+
+**Please use the [issue tracker](https://github.com/timweiland/GaussianMarkovRandomFields.jl/issues)
+for all questions and support requests.** We prefer this over private email so
+that answers remain searchable and benefit other users.
+
+- **Usage questions** ("how do I model X?", "which solver should I pick?"):
+  open an issue and label it `question`. Please include a short description of
+  what you are trying to model.
+- **Bug reports**: see [Reporting Issues](#reporting-issues) below.
+- **Feature requests**: open an issue describing your use case before writing
+  code, so we can discuss the design.
+
+Before opening an issue, it is worth skimming the
+[documentation](https://timweiland.github.io/GaussianMarkovRandomFields.jl/stable),
+which includes tutorials and a full API reference, and searching existing issues.
+
 ## Getting Started
 
 1. **Fork and Clone** the repository:
@@ -71,6 +91,32 @@ If you find a bug or have a feature request, please [open an issue](https://gith
 - Provide a **minimal reproducible example**.
 - Include Julia and GaussianMarkovRandomFields.jl version information.
 - Describe expected vs. actual behavior.
+
+## Support and Governance
+
+GaussianMarkovRandomFields.jl is maintained by
+[Tim Weiland](https://github.com/timweiland), with contributions from the
+community. All development happens in the open on GitHub.
+
+What you can expect:
+
+- Issues and pull requests are triaged on a best-effort basis. The package is
+  developed alongside other research commitments, so please allow a couple of
+  weeks for a response — and do feel free to bump a thread that has gone quiet.
+- Bug reports that affect correctness take priority over feature requests.
+- Breaking changes are signalled by the version number, following the Julia
+  ecosystem's semantic versioning conventions, and described in the
+  [release notes](https://github.com/timweiland/GaussianMarkovRandomFields.jl/releases).
+
+The maintainer has final say over the scope and design of the package. For
+anything substantial, please open an issue first so we can agree on an approach
+before you invest time in an implementation.
+
+## Citing
+
+If you use GaussianMarkovRandomFields.jl in your research, please cite it. See
+[Citing](./README.md#citing) in the README, or use the *Cite this repository*
+button on GitHub, which reads [`CITATION.cff`](./CITATION.cff).
 
 ## License
 
