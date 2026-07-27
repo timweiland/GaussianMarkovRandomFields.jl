@@ -12,7 +12,7 @@ hero:
   actions:
     - theme: brand
       text: "Get Started"
-      link: /tutorials/
+      link: /tutorials/getting_started
     - theme: alt
       text: "View on GitHub"
       link: https://github.com/timweiland/GaussianMarkovRandomFields.jl
@@ -38,7 +38,28 @@ features:
 
 ## What are Gaussian Markov Random Fields?
 
-Gaussian Markov Random Fields (GMRFs) are Gaussian distributions with sparse precision (inverse covariance) matrices. This sparsity structure makes them computationally efficient for large-scale problems while maintaining the expressiveness needed for complex spatial and temporal modeling.
+A Gaussian Markov Random Field (GMRF) is a Gaussian distribution whose
+*precision* matrix — the inverse of the covariance — is sparse.
+
+That sparsity is not a numerical trick, it is a modelling statement. A zero in
+entry $(i, j)$ of the precision matrix says precisely that $x_i$ and $x_j$ are
+conditionally independent given all the other variables. Most quantities we
+model in space and time behave that way: the temperature here depends on the
+temperature next door, and only indirectly on the temperature a hundred
+kilometres away. Encoding that structure in the precision matrix is what makes
+the field *Markov*.
+
+The payoff is computational. The covariance matrix of such a distribution is
+usually completely dense, so working with it directly costs $O(n^3)$ and becomes
+hopeless as $n$ grows. The precision matrix stays sparse, and sparse Cholesky
+factorization takes advantage of that — which is how GMRFs reach problem sizes
+where a naive Gaussian process cannot follow.
+
+The difficulty has always been that the interesting priors are awkward to write
+down in precision form. One answer is the SPDE approach: state the model as a
+stochastic partial differential equation, discretize it with finite elements,
+and obtain a GMRF that approximates it. [Getting started](@ref) walks through
+both a hand-written precision matrix and an SPDE-derived one.
 
 ## Quick Start
 
