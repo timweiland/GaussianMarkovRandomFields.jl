@@ -1,11 +1,9 @@
 # # Getting started
 #
-# Nearly every workflow in this package has the same three steps:
-#
-# 1. choose a *latent model*, which says what we expect the unknown field to
-#    look like before seeing any data,
-# 2. choose an *observation model*, which relates that field to the data,
-# 3. compute the *posterior*.
+# Nearly every workflow in this package has the same three steps. First we choose
+# a *latent model*, which says what we expect the unknown field to look like
+# before seeing any data. Then we choose an *observation model*, which relates
+# that field to the data. Finally we compute the *posterior*.
 #
 # We go through those steps twice below: once on a time series, using nothing
 # but the package itself, and once on a spatial problem, where a handful of
