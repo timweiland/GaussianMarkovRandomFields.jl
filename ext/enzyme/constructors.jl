@@ -1,4 +1,3 @@
-# COV_EXCL_START
 # `GMRF(μ, Q)` and `GMRF(μ, Q, alg)` just store their arguments, so these rules
 # are only plumbing: hand Enzyme a shadow GMRF built from the argument shadows,
 # then drain that shadow back into the arguments on the way out. The reason they
@@ -281,4 +280,3 @@ _zero_precision!(A::Union{Symmetric, Hermitian}) = (_zero_precision!(A.data); A)
 _zero_precision!(A::SymTridiagonal) = (fill!(A.dv, 0); fill!(A.ev, 0); A)
 _zero_precision!(A::Diagonal) = (fill!(A.diag, 0); A)
 _zero_precision!(A) = (fill!(A, 0); A)
-# COV_EXCL_STOP

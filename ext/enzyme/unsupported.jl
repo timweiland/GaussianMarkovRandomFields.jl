@@ -1,4 +1,3 @@
-# COV_EXCL_START
 # Rules whose only job is to stop Enzyme.
 #
 # Without them Enzyme walks into the sparse factorization and produces something
@@ -73,4 +72,3 @@ function EnzymeRules.reverse(
     ) where {RT}
     return (nothing, nothing)
 end
-# COV_EXCL_STOP

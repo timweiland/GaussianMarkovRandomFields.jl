@@ -32,6 +32,8 @@ const GMRFs = GaussianMarkovRandomFields
 const ENZYME_EXT = Base.get_extension(GMRFs, :GaussianMarkovRandomFieldsEnzyme)
 const ENZYME = AutoEnzyme(; function_annotation = Enzyme.Const)
 
+struct EnzymeTestMetadata <: GMRFMetadata end
+
 """
 Precision of a 2D grid Laplacian. Unlike a tridiagonal AR(1) precision, its
 Cholesky factor has fill-in, so the selected inverse is stored on a strictly
@@ -128,6 +130,13 @@ end
         "logpdf (GMRF/Diagonal)" => θ -> logpdf(iid_gmrf(θ), z),
         "diagonal gaussian_approximation → logpdf" =>
             θ -> logpdf(gaussian_approximation(iid_gmrf(θ), poisson), z),
+        # `WorkspaceGMRF` reaches the IFT solve through `workspace_solve` rather
+        # than a `LinearSolve` cache, so it exercises a different branch of the
+        # rule than every case above.
+        "workspace gaussian_approximation → logpdf" =>
+            θ -> logpdf(
+            gaussian_approximation(WorkspaceGMRF(θ[2] * ones(n), Qof(θ)), poisson), z
+        ),
     ]
 
     # `ConstrainedGMRF` mixes a bare `Float64` (`log_constraint_correction`) with
@@ -243,5 +252,195 @@ end
                 @test !occursin("has no field", sprint(showerror, err))
             end
         end
+    end
+
+    # The rules are thin wrappers over the helpers below, and those helpers are
+    # where the subtle mistakes live — a dropped factor of two, a rewritten
+    # sparsity pattern, a wrapper read through the wrong triangle. Exercising them
+    # directly costs no Enzyme compilation, so the arithmetic can be pinned much
+    # more tightly than by inferring it from an end-to-end gradient.
+    E = ENZYME_EXT
+
+    @testset "accumulate_on_pattern! honours each storage convention" begin
+        f(i, j) = 10i + j
+
+        # `:full` — every stored entry is its own variable, so it takes f as-is.
+        full = sparse([1.0 2.0; 2.0 3.0])
+        E.accumulate_on_pattern!(f, full, Val(:full))
+        @test full == [12.0 14.0; 23.0 25.0]
+
+        # `:lower` — the upper triangle is never read, and each sub-diagonal
+        # entry moves two positions of the effective matrix so it doubles.
+        low = sparse([1.0 1.0; 1.0 1.0])
+        E.accumulate_on_pattern!(f, low, Val(:lower))
+        @test low == [12.0 1.0; 1.0 + 2 * 21 23.0]
+
+        up = sparse([1.0 1.0; 1.0 1.0])
+        E.accumulate_on_pattern!(f, up, Val(:upper))
+        @test up == [12.0 1.0 + 2 * 12; 1.0 23.0]
+
+        # Structured targets store only their band and must not be written off it.
+        d = Diagonal([1.0, 2.0])
+        E.accumulate_on_pattern!(f, d, Val(:full))
+        @test d.diag == [12.0, 24.0]
+
+        # `ev[i]` backs both `(i, i+1)` and `(i+1, i)`, so it collects from both.
+        st = SymTridiagonal([1.0, 1.0], [1.0])
+        E.accumulate_on_pattern!(f, st, Val(:full))
+        @test st.dv == [12.0, 23.0]
+        @test st.ev == [1.0 + f(2, 1) + f(1, 2)]
+
+        # Dense targets, for each convention — a dense `Symmetric` precision
+        # unwraps to one of these.
+        dense = zeros(2, 2)
+        E.accumulate_on_pattern!(f, dense, Val(:full))
+        @test dense == [11.0 12.0; 21.0 22.0]
+
+        dense_low = zeros(2, 2)
+        E.accumulate_on_pattern!(f, dense_low, Val(:lower))
+        @test dense_low == [11.0 0.0; 2 * 21 22.0]
+
+        dense_up = zeros(2, 2)
+        E.accumulate_on_pattern!(f, dense_up, Val(:upper))
+        @test dense_up == [11.0 2 * 12; 0.0 22.0]
+
+        wrapped = Symmetric(sparse([1.0 1.0; 1.0 1.0]), :U)
+        E.accumulate_on_pattern!(f, wrapped, Val(:upper))
+        @test wrapped.data[1, 2] == 1.0 + 2 * 12
+        @test wrapped.data[2, 1] == 1.0                # untouched lower triangle
+    end
+
+    @testset "cotangent_matrix inverts accumulate_on_pattern!" begin
+        # The pair has to round-trip: writing a symmetric gradient G into a
+        # triangle-stored buffer and reading it back must return G. Getting this
+        # wrong is a silent factor of two, which is why both directions exist.
+        G = [1.0 2.0 0.0; 2.0 3.0 4.0; 0.0 4.0 5.0]
+        pattern = sparse(ones(3, 3))
+
+        for storage in (Val(:full), Val(:lower), Val(:upper))
+            buf = copy(pattern)
+            fill!(nonzeros(buf), 0.0)
+            E.accumulate_on_pattern!((i, j) -> G[i, j], buf, storage)
+            @test Matrix(E.cotangent_matrix(buf, storage)) ≈ G
+        end
+    end
+
+    @testset "zero_shadow keeps the pattern that zero() throws away" begin
+        Q = Qof(θ)
+        @test nnz(zero(Q)) == 0                        # the trap being avoided
+        s = E.zero_shadow(Q)
+        @test nnz(s) == nnz(Q)
+        @test getcolptr(s) == getcolptr(Q)
+        @test all(iszero, nonzeros(s))
+        # Wrappers keep their uplo, so the convention survives the round trip.
+        @test E.zero_shadow(Symmetric(Q, :U)).uplo == 'U'
+        @test E.zero_shadow(Hermitian(Q, :L)).uplo == 'L'
+        @test E.zero_shadow(Diagonal([1.0, 2.0])).diag == [0.0, 0.0]
+    end
+
+    @testset "add_shadow! never reshapes its destination" begin
+        Q = Qof(θ)
+        dest, src = E.zero_shadow(Q), E.zero_shadow(Q)
+        fill!(nonzeros(src), 2.0)
+        E.add_shadow!(dest, src)
+        @test nnz(dest) == nnz(Q)                      # fast path, same pattern
+        @test all(==(2.0), nonzeros(dest))
+
+        # Mismatched patterns take the projecting path and must still not grow.
+        sparser = sparse(Diagonal(fill(3.0, n)))
+        dest2 = E.zero_shadow(Q)
+        E.add_shadow!(dest2, sparser)
+        @test nnz(dest2) == nnz(Q)
+        @test dest2[1, 1] == 3.0
+
+        # Structured destinations, and a source read through the wrong triangle
+        # would be silently wrong here.
+        dd = Diagonal([0.0, 0.0])
+        E.add_shadow!(dd, [1.0 9.0; 9.0 2.0])
+        @test dd.diag == [1.0, 2.0]
+
+        sd = SymTridiagonal([0.0, 0.0], [0.0])
+        E.add_shadow!(sd, SymTridiagonal([1.0, 2.0], [3.0]))
+        @test sd.dv == [1.0, 2.0] && sd.ev == [3.0]
+
+        v = zeros(2)
+        E.add_shadow!(v, [1.0, 2.0])
+        @test v == [1.0, 2.0]
+
+        m = zeros(2, 2)
+        E.add_shadow!(m, [1.0 2.0; 3.0 4.0])
+        @test m == [1.0 2.0; 3.0 4.0]
+
+        # Wrapped destinations delegate to `.data`, positionally. Built via
+        # `zero_shadow` rather than `sparse(zeros(...))`, which would have no
+        # stored entries at all and silently absorb the write.
+        wrapped_dest = E.zero_shadow(Symmetric(sparse(ones(2, 2)), :U))
+        E.add_shadow!(wrapped_dest, Symmetric(sparse([1.0 2.0; 0.0 4.0]), :U))
+        @test wrapped_dest.data[1, 2] == 2.0
+
+        st_zero = SymTridiagonal([1.0, 2.0], [3.0])
+        E._zero_precision!(st_zero)
+        @test all(iszero, st_zero.dv) && all(iszero, st_zero.ev)
+
+        # A cotangent buffer wrapped in `Symmetric` is not a symmetric matrix —
+        # it must be read positionally, through `.data`.
+        @test E.unwrap_triangle(Symmetric(sparse([1.0 2.0; 3.0 4.0]), :U))[2, 1] == 3.0
+        @test E.unwrap_triangle([1.0 2.0; 3.0 4.0])[2, 1] == 3.0
+    end
+
+    @testset "precision_storage follows the wrapper, not the GMRF type" begin
+        @test E.precision_storage(cholmod_gmrf(θ)) === Val(:full)
+        @test E.precision_storage(chordal_gmrf(θ)) === Val(:lower)
+        @test E._storage_convention(Symmetric(Qof(θ), :U)) === Val(:upper)
+        @test E._storage_convention(Hermitian(Qof(θ), :L)) === Val(:lower)
+        # A `gaussian_approximation` posterior is the `Symmetric(Q, :U)` case that
+        # made the first version of the rule wrong.
+        @test E.precision_storage(gaussian_approximation(cholmod_gmrf(θ), poisson)) ===
+            Val(:upper)
+    end
+
+    @testset "zero_gmrf_shadow zeroes each GMRF type's cotangent slots" begin
+        # The shadow keeps the primal's factorization and pattern but starts at
+        # zero; rebuilding one from a zeroed precision would not be positive
+        # definite, which is why these copy rather than reconstruct.
+        for d in (
+                cholmod_gmrf(θ), chordal_gmrf(θ),
+                WorkspaceGMRF(θ[2] * ones(n), Qof(θ)), constrained_gmrf(θ),
+            )
+            s = E.zero_gmrf_shadow(d)
+            @test typeof(s) === typeof(d)
+            @test all(iszero, E.shadow_mean(s))
+            @test all(iszero, E._nonzeros(E.shadow_precision(s)))
+        end
+    end
+
+    @testset "MetaGMRF inherits its inner GMRF's support" begin
+        inner = cholmod_gmrf(θ)
+        meta = MetaGMRF(inner, EnzymeTestMetadata())
+        @test E.shadow_mean(meta) === E.shadow_mean(inner)
+        @test E.shadow_precision(meta) === E.shadow_precision(inner)
+        @test E.enzyme_selinv(meta) == E.enzyme_selinv(inner)
+        @test E.enzyme_check_supported("logpdf", meta) === nothing
+    end
+
+    @testset "contract matches a dense reference for each Hessian storage" begin
+        G = [1.0 2.0; 2.0 3.0]
+        for H in (Diagonal([4.0, 5.0]), sparse([4.0 1.0; 1.0 5.0]), [4.0 1.0; 1.0 5.0])
+            @test E.contract(G, H) ≈ sum(G .* Matrix(H))
+        end
+    end
+
+    @testset "refusals name the operation and the type" begin
+        # A constrained `WorkspaceGMRF` is refused by content rather than by type:
+        # its `logpdf` carries a correction these rules do not implement.
+        ws = WorkspaceGMRF(θ[2] * ones(n), Qof(θ), GMRFWorkspace(Qof(θ)), A_sum, e_sum)
+        err = try
+            E.enzyme_check_supported("logpdf", ws)
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("constraints", sprint(showerror, err))
+        @test occursin("WorkspaceGMRF", sprint(showerror, err))
     end
 end

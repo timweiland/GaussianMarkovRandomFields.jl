@@ -1,4 +1,3 @@
-# COV_EXCL_START
 # Reverse-mode `logpdf` for a GMRF.
 #
 #     ∂logpdf/∂μ = Q(z - μ)
@@ -112,4 +111,3 @@ function EnzymeRules.reverse(
 
     return (nothing, nothing)
 end
-# COV_EXCL_STOP
