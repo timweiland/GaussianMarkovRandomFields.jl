@@ -4,6 +4,7 @@ using SparseArrays
 using LinearAlgebra
 using LinearSolve
 using Random
+using Statistics: var, std
 
 using DifferentiationInterface
 using FiniteDiff, Zygote, ForwardDiff
@@ -120,6 +121,36 @@ end
             # against finite differences too so a shared-primal bug cannot pass.
             @test g ≈ FiniteDiff.finite_difference_gradient(f, θ) rtol = 1.0e-5
         end
+    end
+
+    @testset "var and std refuse instead of returning a wrong number" begin
+        # No solver makes `var` differentiable under Zygote, so the rule refuses
+        # unconditionally. The point is the message: without it Zygote fails
+        # somewhere in its own internals with an error that names neither the
+        # operation nor the GMRF type.
+        for (name, mk) in gmrf_constructors
+            @testset "$name" begin
+                for (op, f) in (
+                        ("var", θ -> sum(var(mk(θ)))),
+                        ("std", θ -> sum(std(mk(θ)))),
+                    )
+                    err = try
+                        DifferentiationInterface.gradient(f, AutoZygote(), θ)
+                        nothing
+                    catch e
+                        e
+                    end
+                    @test err !== nothing
+                    msg = sprint(showerror, err)
+                    @test occursin("var", msg)
+                    @test occursin("ForwardDiff", msg)
+                end
+            end
+        end
+
+        # The primal is untouched — only differentiation refuses.
+        @test var(GMRF(μof(θ), Qof(θ), LinearSolve.CHOLMODFactorization())) ≈
+            diag(inv(Matrix(Qof(θ)))) rtol = 1.0e-8
     end
 
     @testset "constrained WorkspaceGMRF" begin

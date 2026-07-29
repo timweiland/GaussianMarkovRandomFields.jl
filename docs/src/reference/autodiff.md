@@ -54,6 +54,21 @@ be supported raise rather than falling back to differentiating a sparse
 factorization, because doing the latter produces wrong gradients that no test
 without a finite-difference reference would catch.
 
+## Zygote
+
+Zygote works through the package's ChainRules rules, which cover `logdetcov`,
+`logpdf` and `gaussian_approximation` for every GMRF type in the table. Each one
+uses a selected inverse rather than differentiating the sparse factorization.
+
+`var` and `std` raise an `ArgumentError`. Their tangent needs entries of the
+covariance *outside* the precision's sparsity pattern, which selected inversion
+does not compute, so there is no cheap rule to write and one built on `selinv`
+would be silently wrong. Use ForwardDiff for marginal-variance gradients.
+
+The contrast with `logdetcov` is the whole reason that one is supported:
+`∂logdetcov/∂Q = -Q⁻¹` is only ever contracted against a `dQ` living on `Q`'s own
+pattern, so the selected inverse is exact there, whereas `∂diag(Q⁻¹)/∂Q` is not.
+
 ## Enzyme
 
 Enzyme differentiates the LLVM IR of whatever it is given, so anything it can
