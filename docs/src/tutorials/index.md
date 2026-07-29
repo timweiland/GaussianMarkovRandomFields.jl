@@ -44,6 +44,14 @@ everything else will make more sense afterwards.
 - [Automatic Differentiation and MCMC](@ref) goes a step further and samples the
   hyperparameter posterior with NUTS, via Turing.jl.
 
+!!! tip "Going further"
+    Both tutorials show the mechanics — gradients first, then samples. If you
+    want the whole workflow rather than the building blocks,
+    [Latte.jl](https://lattejl.org) is a probabilistic programming language for
+    latent Gaussian models built on top of this package, providing INLA,
+    TMB-style Laplace approximations and HMC-Laplace behind a model
+    specification syntax. Its documentation has worked examples.
+
 ## Further topics
 
 - [Reusing factorizations across hyperparameters](@ref) shows how to pay the

@@ -71,6 +71,14 @@ Pkg.add("GaussianMarkovRandomFields")
 using GaussianMarkovRandomFields
 ```
 
+## Related packages
+
+[Latte.jl](https://lattejl.org) is a probabilistic programming language for
+latent Gaussian models, built by the same author on top of this package. It
+provides INLA, TMB-style Laplace approximations and HMC-Laplace behind a concise
+model syntax. If you want a complete inference workflow rather than the
+components to build one, start there; this package is what it uses underneath.
+
 ## Getting Help
 
 Questions, bug reports and feature requests all belong in the
