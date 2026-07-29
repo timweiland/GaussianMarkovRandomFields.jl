@@ -147,6 +147,14 @@ end
     if VERSION >= v"1.12"
         append!(
             supported, [
+                # The two-argument constructor picks its solver by runtime
+                # dispatch, so its return type infers as `Any`. Julia 1.12 copes;
+                # 1.10 and 1.11 reject the rule outright with
+                # `AugmentedRuleReturnError: ... a function which returned Any`,
+                # which is the concrete reason the docs tell Enzyme users to name
+                # the algorithm.
+                "logdetcov (GMRF, solver by dispatch)" =>
+                    θ -> logdetcov(GMRF(θ[2] * ones(n), Qof(θ))),
                 "logpdf (ConstrainedGMRF)" => θ -> logpdf(constrained_gmrf(θ), z0),
                 "constrained gaussian_approximation → logpdf" =>
                     θ -> logpdf(gaussian_approximation(constrained_gmrf(θ), poisson), z0),

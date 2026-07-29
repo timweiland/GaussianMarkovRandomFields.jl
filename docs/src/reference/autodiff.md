@@ -103,8 +103,9 @@ Not supported, raising `ArgumentError`:
 ### Specify the linear solver explicitly
 
 The two-argument `GMRF` constructor picks a solver by runtime dispatch on the
-precision matrix type, which is not type-stable and upsets Enzyme. Always name the
-algorithm:
+precision matrix type, so its return type infers as `Any`. Julia 1.12 copes with
+that, but 1.10 and 1.11 reject the rule outright with `AugmentedRuleReturnError:
+... a function which returned Any`. Always name the algorithm:
 
 ```julia
 gmrf = GMRF(μ, Q, LinearSolve.CHOLMODFactorization())  # general sparse

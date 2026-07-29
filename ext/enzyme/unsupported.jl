@@ -42,11 +42,13 @@ end
 
 # --- gaussian_approximation for priors without an IFT rule ------------------
 #
-# `gaussian_approximation.jl` implements the rule for `GMRF` and
-# `ConstrainedGMRF`; this is the less specific fallback every other prior type
-# lands on. `WorkspaceGMRF` and `ChordalGMRF` route their IFT solve through
-# different machinery (`workspace_solve` and the chordal factor respectively) and
-# have not been verified here, so they refuse rather than guess.
+# `gaussian_approximation.jl` covers every prior type the *primal*
+# `gaussian_approximation` currently accepts, so nothing reaches this fallback
+# today — it is excluded from coverage on that basis rather than because it is
+# untested. It earns its place by making the next GMRF type someone adds refuse
+# loudly instead of silently returning a wrong gradient, which is the failure
+# mode this whole extension was rewritten to remove.
+# COV_EXCL_START
 
 function EnzymeRules.augmented_primal(
         config::EnzymeRules.RevConfigWidth{1},
@@ -72,3 +74,4 @@ function EnzymeRules.reverse(
     ) where {RT}
     return (nothing, nothing)
 end
+# COV_EXCL_STOP
