@@ -18,8 +18,9 @@ forward mode's per-parameter cost dominates:
 - **Zygote.jl** for `GMRF` and `WorkspaceGMRF` priors.
 - **Mooncake.jl** for `ChordalGMRF`, which is what the chordal backend is built
   for.
-- **Enzyme.jl** for `logpdf`, `logdetcov` and `gaussian_approximation`. Fast, but
-  it has the most caveats: no `var`/`std`, and constrained models need Julia 1.12.
+- **Enzyme.jl** for `logpdf`, `logdetcov` and `gaussian_approximation` on `GMRF`
+  and `WorkspaceGMRF`. Fast, but it has the most caveats: no `var`/`std`,
+  constrained models need Julia 1.12, and `ChordalGMRF` is unreliable.
 
 ## Support matrix
 
@@ -36,9 +37,9 @@ Mooncake is not in the table; it is covered by the package's own
 | `logdetcov(::GMRF)` | ✅ | ❌ raises | ✅ |
 | `logpdf(::GMRF, z)` | ✅ | ✅ | ✅ |
 | `gaussian_approximation` (`GMRF`) | ✅ | ✅ | ✅ |
-| `logdetcov(::ChordalGMRF)` | ✅ | ❌ raises | ✅ except Julia 1.11 |
-| `logpdf(::ChordalGMRF, z)` | ✅ | ⚠️ **silently wrong** | ✅ except Julia 1.11 |
-| `gaussian_approximation` (`ChordalGMRF`) | ✅ | ⚠️ **silently wrong** | ✅ except Julia 1.11 |
+| `logdetcov(::ChordalGMRF)` | ✅ | ❌ raises | ⚠️ unreliable |
+| `logpdf(::ChordalGMRF, z)` | ✅ | ⚠️ **silently wrong** | ⚠️ unreliable |
+| `gaussian_approximation` (`ChordalGMRF`) | ✅ | ⚠️ **silently wrong** | ⚠️ unreliable |
 | `logdetcov(::WorkspaceGMRF)` | ✅ | ❌ raises | ✅ |
 | `logpdf(::WorkspaceGMRF, z)` | ✅ | ✅ | ✅ |
 | `gaussian_approximation` (`WorkspaceGMRF`) | ✅ | ✅ | ✅ |
@@ -46,8 +47,7 @@ Mooncake is not in the table; it is covered by the package's own
 | `gaussian_approximation` (`ConstrainedGMRF`) | ✅ | ✅ | Julia 1.12 only |
 | `var` / `std` (any type) | ✅ | ❌ raises | ❌ raises |
 
-✅ matches finite differences · ❌ raises an error · ⚠️ returns a plausible but
-incorrect number
+✅ matches finite differences · ❌ raises an error · ⚠️ see the note for that row
 
 Every ❌ in this table is an explicit, actionable error. Combinations that cannot
 be supported raise rather than falling back to differentiating a sparse
@@ -72,9 +72,10 @@ therefore needs an explicit rule, and the package refuses the operations it has 
 rule for.
 
 Supported: `logdetcov`, `logpdf`, and `gaussian_approximation`, for `GMRF`,
-`ChordalGMRF`, `WorkspaceGMRF` and `MetaGMRF` priors, plus `ConstrainedGMRF` on
-Julia 1.12 (see below). Gradients flow to both the prior's hyperparameters and
-the observation likelihood's.
+`WorkspaceGMRF` and `MetaGMRF` priors, plus `ConstrainedGMRF` on Julia 1.12 and
+`ChordalGMRF` where Enzyme manages it (both noted below). Gradients flow to the
+observation likelihood's hyperparameters as well as the prior's, and precisions
+may be sparse, `Diagonal` or `SymTridiagonal`.
 
 `gaussian_approximation` is differentiated with the Implicit Function Theorem
 rather than through the Fisher-scoring loop, matching the backend-agnostic rule
@@ -116,14 +117,18 @@ gmrf = GMRF(μ, Q, LinearSolve.DiagonalFactorization()) # diagonal (IID)
 Enzyme's behaviour varies by Julia version even with identical package versions,
 so the supported set was verified separately on 1.10.10, 1.11.9 and 1.12.6.
 Unconstrained `GMRF` and `WorkspaceGMRF` pipelines behave identically on all
-three. Two differences remain, both of them loud failures rather than wrong
-answers:
+three, including diagonal and `SymTridiagonal` precisions. Two caveats remain,
+both of them loud failures rather than wrong answers:
 
-!!! note "ChordalGMRF is not differentiable with Enzyme on Julia 1.11"
-    `logdetcov`, `logpdf` and `gaussian_approximation` on a `ChordalGMRF` work
-    under Enzyme on Julia 1.10 and 1.12, but fail with `EnzymeNoDerivativeError`
-    on 1.11. Use ForwardDiff or Mooncake there, or run the pipeline on a
-    `GMRF`/`WorkspaceGMRF` instead.
+!!! note "ChordalGMRF under Enzyme is unreliable"
+    Whether Enzyme can differentiate a `ChordalGMRF` depends on the Julia
+    version, the CPU architecture *and* the resolved package versions: the same
+    Julia 1.12.6 succeeds on aarch64 and fails on x86-64 with `EnzymeNoTypeError`,
+    and Julia 1.11 fails with `EnzymeNoDerivativeError`. When it runs it is
+    correct — the package's rules are the same ones the other GMRF types use, and
+    the test suite checks that a wrong answer is never returned — but it cannot be
+    relied on. Use Mooncake (the backend `ChordalGMRF` is built for) or
+    ForwardDiff, or run the pipeline on a `GMRF`/`WorkspaceGMRF`.
 
 The second is the `ConstrainedGMRF` mixed-activity limitation described above,
 which excludes Julia 1.10 and 1.11.
