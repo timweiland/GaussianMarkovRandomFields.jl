@@ -295,13 +295,35 @@ function _rand_impl!(rng::AbstractRNG, d::GMRF, x::AbstractVector, ::Val{false})
     return x
 end
 
+"""
+    var(d::GMRF)
+
+Marginal variances `diag(Q⁻¹)`, as a dense `Vector`.
+
+How they are obtained depends on the GMRF's linear solver:
+
+- Solvers that support selected inversion (`CHOLMODFactorization`,
+  `CholeskyFactorization`, `LDLtFactorization`, `DiagonalFactorization`,
+  `PardisoJL`, and the default solver whenever it resolves to one of these)
+  give **exact** variances.
+- Any other solver falls back to [`RBMCStrategy`](@ref), a **stochastic** Monte
+  Carlo estimator. Repeated calls then return slightly different numbers, and
+  finite-difference checks against them are meaningless.
+
+Only the exact path is differentiable: differentiating `var` through a solver
+without selected inversion throws rather than silently returning a zero
+gradient. Pass a selinv-capable solver explicitly if you need gradients, e.g.
+`GMRF(mean, precision, LinearSolve.CHOLMODFactorization())`.
+"""
 function var(d::GMRF)
     return _var_impl(d, supports_selinv(d.linsolve_cache.alg))
 end
 
 function _var_impl(d::GMRF, ::Val{true})
-    # Use selected inversion
-    return selinv_diag(d.linsolve_cache)
+    # Use selected inversion. `selinv_diag` hands back a `SparseVector` whose
+    # every entry is stored — marginal variances are structurally dense — and a
+    # sparse result breaks `ForwardDiff.jacobian`, so densify.
+    return Vector(selinv_diag(d.linsolve_cache))
 end
 
 function _var_impl(d::GMRF, ::Val{false})
