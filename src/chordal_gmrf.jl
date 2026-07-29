@@ -35,14 +35,31 @@ struct ChordalGMRF{T <: Real, Hrm <: Hermitian, Fac <: ChordalCholesky, Mea <: A
     F::Fac
 end
 
+# `AbstractGMRF{T, L}` requires `L <: AbstractMatrix{T}`, so the mean and the
+# precision must share an element type. Promoting here is what lets a Float64
+# mean be combined with a Dual precision (the shape ForwardDiff produces when
+# only hyperparameters carry partials); without it the struct's type bound
+# rejects the pair outright.
+function _chordal_promote(μ::AbstractVector, Q::SparseMatrixCSC)
+    T = promote_type(eltype(μ), eltype(Q))
+    μ_T = eltype(μ) === T ? μ : convert(AbstractVector{T}, μ)
+    # Rebuild rather than `convert` so the stored sparsity pattern is preserved
+    # exactly, including any structural zeros.
+    Q_T = eltype(Q) === T ? Q :
+        SparseMatrixCSC(Q.m, Q.n, Q.colptr, Q.rowval, convert(Vector{T}, Q.nzval))
+    return μ_T, Q_T
+end
+
 function ChordalGMRF(μ::AbstractVector, Q::SparseMatrixCSC, F::ChordalCholesky)
-    return ChordalGMRF(μ, Hermitian(Q, :L), F)
+    μ_T, Q_T = _chordal_promote(μ, Q)
+    return ChordalGMRF(μ_T, Hermitian(Q_T, :L), F)
 end
 
 function ChordalGMRF(μ::AbstractVector, Q::SparseMatrixCSC; kw...)
-    H = Hermitian(Q, :L)
+    μ_T, Q_T = _chordal_promote(μ, Q)
+    H = Hermitian(Q_T, :L)
     F = cholesky!(ChordalCholesky(H; kw...))
-    return ChordalGMRF(μ, H, F)
+    return ChordalGMRF(μ_T, H, F)
 end
 
 function Base.length(d::ChordalGMRF)
@@ -76,7 +93,9 @@ end
 
 function var(d::ChordalGMRF)
     Σ = mselinv(d.Q, d.F)
-    return diag(Σ)
+    # `diag` of a sparse matrix is a `SparseVector`, but every marginal variance
+    # is stored anyway and a sparse result breaks `ForwardDiff.jacobian`.
+    return Vector(diag(Σ))
 end
 
 function _rand!(rng::AbstractRNG, d::ChordalGMRF{T}, x::AbstractVector) where {T}
