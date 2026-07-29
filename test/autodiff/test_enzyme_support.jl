@@ -105,10 +105,19 @@ end
     constrained_gmrf(θ) = ConstrainedGMRF(cholmod_gmrf(θ), A_sum, e_sum)
     z0 = z .- Statistics.mean(z)                     # satisfies the sum-to-zero constraint
 
+    # A diagonal precision is not just a smaller case: its shadow stores only the
+    # diagonal, so an accumulator that walks every `(i, j)` raises rather than
+    # ignoring the off-band writes. That gap reached CI through a docs tutorial
+    # rather than through here.
+    iid_gmrf(θ) = GMRF(
+        θ[2] * ones(n),
+        precision_matrix(IIDModel(n); τ = exp(θ[1])),
+        LinearSolve.DiagonalFactorization(),
+    )
+
     supported = [
         "logdetcov (GMRF/CHOLMOD)" => θ -> logdetcov(cholmod_gmrf(θ)),
         "logpdf (GMRF/CHOLMOD)" => θ -> logpdf(cholmod_gmrf(θ), z),
-        "logdetcov (ChordalGMRF)" => θ -> logdetcov(chordal_gmrf(θ)),
         # `gaussian_approximation` is the operation the whole hyperparameter
         # pipeline is built on, so it is covered through both the mode and the
         # posterior logpdf.
@@ -116,6 +125,9 @@ end
             θ -> logpdf(gaussian_approximation(cholmod_gmrf(θ), poisson), z),
         "gaussian_approximation → mean" =>
             θ -> sum(abs2, Statistics.mean(gaussian_approximation(cholmod_gmrf(θ), poisson))),
+        "logpdf (GMRF/Diagonal)" => θ -> logpdf(iid_gmrf(θ), z),
+        "diagonal gaussian_approximation → logpdf" =>
+            θ -> logpdf(gaussian_approximation(iid_gmrf(θ), poisson), z),
     ]
 
     # `ConstrainedGMRF` mixes a bare `Float64` (`log_constraint_correction`) with
@@ -191,6 +203,27 @@ end
         # The refusal is specific to differentiating: a plain primal call still
         # has to work.
         @test length(var(cholmod_gmrf(θ))) == n
+    end
+
+    @testset "ChordalGMRF is either correct or raises, never silently wrong" begin
+        # `ChordalGMRF` under Enzyme is not dependable: it works on some
+        # combinations of Julia version, architecture and package resolution and
+        # fails on others (`EnzymeNoDerivativeError` on 1.11,
+        # `EnzymeNoTypeError` on x86-64 Julia 1.12 where aarch64 succeeds). So
+        # assert the invariant this whole file exists for — a wrong number is
+        # never returned — rather than pinning behaviour that moves underneath us.
+        for (name, f) in [
+                "logdetcov" => θ -> logdetcov(chordal_gmrf(θ)),
+                "logpdf" => θ -> logpdf(chordal_gmrf(θ), z),
+            ]
+            reference = DifferentiationInterface.gradient(f, AutoFiniteDiff(), copy(θ))
+            enzyme = try
+                DifferentiationInterface.gradient(f, ENZYME, copy(θ))
+            catch
+                nothing                          # refusing is an acceptable outcome
+            end
+            @test enzyme === nothing || isapprox(enzyme, reference, rtol = 1.0e-5)
+        end
     end
 
     @testset "rules reach GMRF internals through the interface, not field names" begin

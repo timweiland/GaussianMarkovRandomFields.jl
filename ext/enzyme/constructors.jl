@@ -51,6 +51,28 @@ add_shadow!(dest::Union{Symmetric, Hermitian}, src) =
 add_shadow!(dest::AbstractVector, src) = (dest .+= src; dest)
 add_shadow!(dest::AbstractMatrix, src) = (dest .+= unwrap_triangle(src); dest)
 
+# Structured destinations store only their band, and broadcasting a full matrix
+# into one raises rather than dropping the off-band entries.
+function add_shadow!(dest::Diagonal, src)
+    s = unwrap_triangle(src)
+    @inbounds for i in eachindex(dest.diag)
+        dest.diag[i] += s[i, i]
+    end
+    return dest
+end
+
+function add_shadow!(dest::SymTridiagonal, src)
+    s = unwrap_triangle(src)
+    n = length(dest.dv)
+    @inbounds for i in 1:n
+        dest.dv[i] += s[i, i]
+    end
+    @inbounds for i in 1:(n - 1)
+        dest.ev[i] += s[i + 1, i]
+    end
+    return dest
+end
+
 # Cotangent buffers wrapped in `Symmetric`/`Hermitian` are *not* symmetric
 # matrices — they hold one cotangent per stored entry — so they must be read
 # positionally through `.data`, never through the wrapper's mirroring `getindex`.
@@ -249,4 +271,5 @@ end
 _zero_precision!(A::SparseMatrixCSC) = (fill!(nonzeros(A), 0); A)
 _zero_precision!(A::Union{Symmetric, Hermitian}) = (_zero_precision!(A.data); A)
 _zero_precision!(A::SymTridiagonal) = (fill!(A.dv, 0); fill!(A.ev, 0); A)
+_zero_precision!(A::Diagonal) = (fill!(A.diag, 0); A)
 _zero_precision!(A) = (fill!(A, 0); A)

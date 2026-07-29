@@ -200,9 +200,18 @@ for S in (:(Val{:full}), :(Val{:lower}), :(Val{:upper}))
         (accumulate_on_pattern!(f, target.data, storage); target)
 end
 
-# `SymTridiagonal` and dense precisions have no fill-in problem — their storage
-# *is* their pattern — but they still need the parameter-to-entry mapping right:
-# `ev[i]` backs both `(i, i+1)` and `(i+1, i)`.
+# Structured precisions have no fill-in problem — their storage *is* their
+# pattern — but they still need the parameter-to-entry mapping right, and they
+# cannot take the generic every-`(i, j)` loop below: writing off the stored band
+# of a `Diagonal` or `SymTridiagonal` raises rather than being ignored.
+function accumulate_on_pattern!(f, target::Diagonal, ::Val{:full})
+    @inbounds for i in eachindex(target.diag)
+        target.diag[i] += f(i, i)
+    end
+    return target
+end
+
+# `ev[i]` backs both `(i, i+1)` and `(i+1, i)`, so it collects from both.
 function accumulate_on_pattern!(f, target::SymTridiagonal, ::Val{:full})
     n = length(target.dv)
     @inbounds for i in 1:n
