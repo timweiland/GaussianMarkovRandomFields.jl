@@ -188,21 +188,28 @@ If you don't provide `pointwise_loglik_func`, attempting to call `pointwise_logl
 
 ### Automatic Differentiation Requirements
 
-AutoDiff observation models require an automatic differentiation backend. We support and recommend the following backends in order of preference:
+AutoDiff observation models require an automatic differentiation backend:
 
-1. **Enzyme.jl** (recommended for performance)
-2. **Mooncake.jl** (good balance of performance and compatibility)
-3. **Zygote.jl** (reliable fallback)
-4. **ForwardDiff.jl** (for small problems)
+1. **ForwardDiff.jl** — the broadest support, and the right shape for the small
+   parameter vectors typical of hyperparameter optimization
+2. **Mooncake.jl** — reverse mode; the backend `ChordalGMRF` is designed for
+3. **Zygote.jl** — reverse mode for `GMRF` and `WorkspaceGMRF` priors
+4. **Enzyme.jl** — fastest where it applies, but it covers the fewest
+   operations and GMRF types
+
+Backends are **not** interchangeable here: support varies by operation and by GMRF
+type, and one combination (Zygote with `ChordalGMRF`) returns incorrect gradients
+without raising. Check the support matrix in the
+[Automatic Differentiation Reference](@ref) before picking one.
 
 ```julia
 # Load an AD backend (required for AutoDiffObservationModel)
-using Enzyme  # Recommended
+using ForwardDiff
 
 # Or use another supported backend:
 # using Mooncake
 # using Zygote
-# using ForwardDiff
+# using Enzyme
 
 # Now you can use AutoDiff models
 obs_model = AutoDiffObservationModel(my_loglik; n_latent=10)
@@ -216,7 +223,7 @@ AutoDiff observation models can automatically detect and exploit sparsity in Hes
 
 ```julia
 # Load AD backend + sparse AD packages
-using Enzyme  # Or your preferred AD backend
+using ForwardDiff  # Or your preferred AD backend
 using SparseConnectivityTracer, SparseMatrixColorings
 
 # The package extension is automatically activated
