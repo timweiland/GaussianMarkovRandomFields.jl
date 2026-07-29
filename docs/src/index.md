@@ -41,7 +41,7 @@ features:
 A Gaussian Markov Random Field (GMRF) is a Gaussian distribution whose
 *precision* matrix — the inverse of the covariance — is sparse.
 
-That sparsity is not a numerical trick, it is a modelling statement. A zero in
+Sparsity in the precision is a modelling statement. A zero in
 entry $(i, j)$ of the precision matrix says precisely that $x_i$ and $x_j$ are
 conditionally independent given all the other variables. Most quantities we
 model in space and time behave that way: the temperature here depends on the
@@ -49,17 +49,17 @@ temperature next door, and only indirectly on the temperature a hundred
 kilometres away. Encoding that structure in the precision matrix is what makes
 the field *Markov*.
 
-The payoff is computational. The covariance matrix of such a distribution is
+This brings nice computational benefits. The covariance matrix of such a distribution is
 usually completely dense, so working with it directly costs $O(n^3)$ and becomes
-hopeless as $n$ grows. The precision matrix stays sparse, and sparse Cholesky
+hopeless as $n$ grows. The precision matrix is sparse, and sparse Cholesky
 factorization takes advantage of that — which is how GMRFs reach problem sizes
-where a naive Gaussian process cannot follow.
+where a naive Gaussian process cannot keep up.
 
 The difficulty has always been that the interesting priors are awkward to write
-down in precision form. One answer is the SPDE approach: state the model as a
-stochastic partial differential equation, discretize it with finite elements,
-and obtain a GMRF that approximates it. [Getting started](@ref) walks through
-both a hand-written precision matrix and an SPDE-derived one.
+down in precision form. One answer for spatial problems is the SPDE approach:
+state the model as a stochastic partial differential equation, discretize it with
+finite elements, and obtain a GMRF that approximates it.
+[Getting started](@ref) walks through both a hand-written precision matrix and an SPDE-derived one.
 
 ## Quick Start
 
