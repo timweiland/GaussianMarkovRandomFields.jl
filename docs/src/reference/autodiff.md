@@ -42,7 +42,7 @@ Mooncake is not in the table; it is covered by the package's own
 | `logdetcov(::WorkspaceGMRF)` | ✅ | ❌ raises | ✅ |
 | `logpdf(::WorkspaceGMRF, z)` | ✅ | ✅ | ✅ |
 | `gaussian_approximation` (`WorkspaceGMRF`) | ✅ | ✅ | ❌ raises |
-| `var` / `std` (any type) | ❌ raises | ❌ raises | ❌ raises |
+| `var` / `std` (any type) | ✅ | ❌ raises | ❌ raises |
 
 ✅ matches finite differences · ❌ raises an error · ⚠️ returns a plausible but
 incorrect number
@@ -78,8 +78,10 @@ Not supported, raising `ArgumentError`:
   move precision cotangents between the prior and the approximation posterior,
   which store precisions under different conventions; the previous implementation
   got this wrong silently. Use Zygote, Mooncake or ForwardDiff.
-- `var` and `std`. Their tangent is `-(Q⁻¹ Q̇ Q⁻¹)ᵢᵢ`, which needs full rows of
-  `Q⁻¹` rather than the selected inverse, so there is no sparse rule to write.
+- `var` and `std`. Their tangent is `-(Q⁻¹ Q̇ Q⁻¹)ᵢᵢ`, which reaches entries of
+  `Q⁻¹` outside the selected-inverse pattern. ForwardDiff handles this by redoing
+  the selected inversion in Dual arithmetic, which reverse mode has no equivalent
+  of, so use ForwardDiff for marginal-variance gradients.
 - `WorkspaceGMRF` with linear equality constraints, whose `logpdf` carries a
   constraint-correction term that depends on `Q`.
 
@@ -117,10 +119,14 @@ wrong numbers.
 
 ## ForwardDiff
 
-ForwardDiff has Dual-aware paths for every GMRF type. The one exception is
-`var`/`std`, which raises: the LinearSolve cache behind a `GMRF{<:Dual}` is built
-from primal data, so differentiating marginal variances used to return an exactly
-zero gradient rather than an error.
+ForwardDiff has Dual-aware paths for every GMRF type and every operation in the
+table above.
+
+One caveat on `var`/`std`: the GMRF must be built with a solver that supports
+selected inversion (`CHOLMODFactorization`, `CholeskyFactorization`, …). Without
+one, `var` falls back to the stochastic `RBMCStrategy` estimator, whose solves go
+through the primal factorization and would drop every partial, so it raises
+instead.
 
 Second-order derivatives via nested Duals are not supported. For Hessians, use
 finite differences over a ForwardDiff gradient

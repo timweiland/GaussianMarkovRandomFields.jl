@@ -116,23 +116,17 @@ end
     end
 
     @testset "unsupported operations raise instead of returning a wrong number" begin
-        # `var`'s tangent needs full rows of Q⁻¹, not the selected inverse, so
-        # there is no sparse rule to write. It must refuse rather than fall back
-        # to differentiating the factorization.
+        # `var`'s tangent reaches entries of Q⁻¹ outside the selected-inverse
+        # pattern. ForwardDiff can afford to redo the selected inversion in Dual
+        # arithmetic and does (see `ext/forwarddiff/var.jl`); reverse mode cannot,
+        # so Enzyme must refuse rather than differentiate the factorization.
         #
-        # Only "it raises" is asserted, not the exception type: our refusing rule
-        # is registered and fires on Julia 1.10, but `var` returns a
-        # `SparseVector`, and on 1.12 Enzyme's type analysis gives up on
-        # `sum(::SparseVector)` before rule dispatch happens. Both are loud
-        # failures, which is the property under test.
+        # Only "it raises" is asserted, not the exception type: whether our rule
+        # gets to refuse first or Enzyme's own compilation gives up earlier
+        # varies by Julia version. Both are loud failures, which is the property
+        # under test.
         @test_throws Exception DifferentiationInterface.gradient(
             θ -> sum(var(cholmod_gmrf(θ))), ENZYME, copy(θ)
-        )
-
-        # Same operation under ForwardDiff used to silently return a zero
-        # gradient, because the Dual GMRF's LinearSolve cache holds primal data.
-        @test_throws ArgumentError DifferentiationInterface.gradient(
-            θ -> sum(var(cholmod_gmrf(θ))), AutoForwardDiff(), copy(θ)
         )
 
         # The refusal is specific to differentiating: a plain primal call still
