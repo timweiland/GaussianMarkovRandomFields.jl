@@ -18,8 +18,8 @@ forward mode's per-parameter cost dominates:
 - **Zygote.jl** for `GMRF` and `WorkspaceGMRF` priors.
 - **Mooncake.jl** for `ChordalGMRF`, which is what the chordal backend is built
   for.
-- **Enzyme.jl** for `logpdf` and `logdetcov` when its constraints suit you. It is
-  the fastest of the three where it applies, but it applies to the least.
+- **Enzyme.jl** for `logpdf`, `logdetcov` and `gaussian_approximation`. Fast, but
+  it has the most caveats: no `var`/`std`, and constrained models need Julia 1.12.
 
 ## Support matrix
 
@@ -35,13 +35,15 @@ Mooncake is not in the table; it is covered by the package's own
 |---|---|---|---|
 | `logdetcov(::GMRF)` | ✅ | ❌ raises | ✅ |
 | `logpdf(::GMRF, z)` | ✅ | ✅ | ✅ |
-| `gaussian_approximation` (`GMRF`) | ✅ | ✅ | ❌ raises |
+| `gaussian_approximation` (`GMRF`) | ✅ | ✅ | ✅ |
 | `logdetcov(::ChordalGMRF)` | ✅ | ❌ raises | ✅ except Julia 1.11 |
 | `logpdf(::ChordalGMRF, z)` | ✅ | ⚠️ **silently wrong** | ✅ except Julia 1.11 |
-| `gaussian_approximation` (`ChordalGMRF`) | ✅ | ⚠️ **silently wrong** | ❌ raises |
+| `gaussian_approximation` (`ChordalGMRF`) | ✅ | ⚠️ **silently wrong** | ✅ except Julia 1.11 |
 | `logdetcov(::WorkspaceGMRF)` | ✅ | ❌ raises | ✅ |
 | `logpdf(::WorkspaceGMRF, z)` | ✅ | ✅ | ✅ |
-| `gaussian_approximation` (`WorkspaceGMRF`) | ✅ | ✅ | ❌ raises |
+| `gaussian_approximation` (`WorkspaceGMRF`) | ✅ | ✅ | ✅ |
+| `logpdf(::ConstrainedGMRF, z)` | ✅ | ✅ | Julia 1.12 only |
+| `gaussian_approximation` (`ConstrainedGMRF`) | ✅ | ✅ | Julia 1.12 only |
 | `var` / `std` (any type) | ✅ | ❌ raises | ❌ raises |
 
 ✅ matches finite differences · ❌ raises an error · ⚠️ returns a plausible but
@@ -69,21 +71,33 @@ which it walks and gets wrong. Every operation that consumes a factorization
 therefore needs an explicit rule, and the package refuses the operations it has no
 rule for.
 
-Supported: construction of `GMRF` and `WorkspaceGMRF`, `logdetcov`, and `logpdf`,
-for `GMRF`, `ChordalGMRF`, `WorkspaceGMRF` and `MetaGMRF` priors.
+Supported: `logdetcov`, `logpdf`, and `gaussian_approximation`, for `GMRF`,
+`ChordalGMRF`, `WorkspaceGMRF` and `MetaGMRF` priors, plus `ConstrainedGMRF` on
+Julia 1.12 (see below). Gradients flow to both the prior's hyperparameters and
+the observation likelihood's.
+
+`gaussian_approximation` is differentiated with the Implicit Function Theorem
+rather than through the Fisher-scoring loop, matching the backend-agnostic rule
+the other backends use.
 
 Not supported, raising `ArgumentError`:
 
-- `gaussian_approximation` for any prior. Its Implicit-Function-Theorem rule has to
-  move precision cotangents between the prior and the approximation posterior,
-  which store precisions under different conventions; the previous implementation
-  got this wrong silently. Use Zygote, Mooncake or ForwardDiff.
 - `var` and `std`. Their tangent is `-(Q⁻¹ Q̇ Q⁻¹)ᵢᵢ`, which reaches entries of
   `Q⁻¹` outside the selected-inverse pattern. ForwardDiff handles this by redoing
   the selected inversion in Dual arithmetic, which reverse mode has no equivalent
   of, so use ForwardDiff for marginal-variance gradients.
 - `WorkspaceGMRF` with linear equality constraints, whose `logpdf` carries a
-  constraint-correction term that depends on `Q`.
+  constraint-correction term that depends on `Q`. Use `ConstrainedGMRF` instead.
+
+!!! note "Constrained GMRFs need Julia 1.12 under Enzyme"
+    `ConstrainedGMRF` stores a bare `Float64` (`log_constraint_correction`)
+    alongside its array fields, which makes it a *mixed activity* type. Enzyme
+    accepts such a type back from a custom rule on Julia 1.12, but on 1.10 and
+    1.11 it raises
+    `MixedReturnException: ... has mixed internal activity types. This is not
+    presently supported.` — an upstream limitation, raised before any of this
+    package's rules run. ForwardDiff and Zygote handle constrained models on
+    every version.
 
 ### Specify the linear solver explicitly
 
@@ -101,21 +115,23 @@ gmrf = GMRF(μ, Q, LinearSolve.DiagonalFactorization()) # diagonal (IID)
 
 Enzyme's behaviour varies by Julia version even with identical package versions,
 so the supported set was verified separately on 1.10.10, 1.11.9 and 1.12.6.
-Julia 1.10 and 1.12 behave identically across every operation and GMRF type.
-Julia 1.11 has one difference:
+Unconstrained `GMRF` and `WorkspaceGMRF` pipelines behave identically on all
+three. Two differences remain, both of them loud failures rather than wrong
+answers:
 
 !!! note "ChordalGMRF is not differentiable with Enzyme on Julia 1.11"
-    `logdetcov` and `logpdf` on a `ChordalGMRF` work under Enzyme on Julia 1.10
-    and 1.12, but fail with `EnzymeNoDerivativeError` on 1.11. Use ForwardDiff or
-    Mooncake there, or run the pipeline on a `GMRF`/`WorkspaceGMRF` instead. This
-    is a loud failure, not a wrong answer.
+    `logdetcov`, `logpdf` and `gaussian_approximation` on a `ChordalGMRF` work
+    under Enzyme on Julia 1.10 and 1.12, but fail with `EnzymeNoDerivativeError`
+    on 1.11. Use ForwardDiff or Mooncake there, or run the pipeline on a
+    `GMRF`/`WorkspaceGMRF` instead.
 
-The *error type* on unsupported paths also varies. Where this package's own rule
-refuses first you get an `ArgumentError` naming the operation and type; where
-Enzyme's compilation fails earlier you get an Enzyme error. `var` on a `GMRF` is
-one of the latter on Julia 1.11 and 1.12, where Enzyme's type analysis gives up
-on `sum(::SparseVector)` before rule dispatch. Both outcomes are errors, never
-wrong numbers.
+The second is the `ConstrainedGMRF` mixed-activity limitation described above,
+which excludes Julia 1.10 and 1.11.
+
+The *error type* on unsupported paths can also vary: where this package's own
+rule refuses first you get an `ArgumentError` naming the operation and type,
+whereas if Enzyme's own compilation gives up earlier you get an Enzyme error
+instead. Both are errors, never wrong numbers.
 
 ## ForwardDiff
 
@@ -136,7 +152,8 @@ stable than a pure finite-difference Hessian.
 ## Constrained GMRFs
 
 `ConstrainedGMRF` priors (from `RW1Model`, `BesagModel`, …) are supported by
-Zygote and ForwardDiff. Enzyme has no `ConstrainedGMRF` rules and will refuse.
+Zygote, ForwardDiff, and — on Julia 1.12 only — Enzyme. See the note in the
+Enzyme section for why the older versions are excluded.
 
 ## Testing your own gradients
 
