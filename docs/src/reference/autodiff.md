@@ -40,7 +40,7 @@ Mooncake is not in the table; it is covered by the package's own
 | `logdetcov(::ChordalGMRF)` | ✅ | ✅ | ⚠️ unreliable |
 | `logpdf(::ChordalGMRF, z)` | ✅ | ✅ | ⚠️ unreliable |
 | `gaussian_approximation` (`ChordalGMRF`) | ✅ | ✅ | ⚠️ unreliable |
-| `logdetcov(::WorkspaceGMRF)` | ✅ | ❌ raises | ✅ |
+| `logdetcov(::WorkspaceGMRF)` | ✅ | ✅ | ✅ |
 | `logpdf(::WorkspaceGMRF, z)` | ✅ | ✅ | ✅ |
 | `gaussian_approximation` (`WorkspaceGMRF`) | ✅ | ✅ | ✅ |
 | `logpdf(::ConstrainedGMRF, z)` | ✅ | ✅ | Julia 1.12 only |

@@ -52,6 +52,44 @@ function ChainRulesCore.rrule(::typeof(logpdf), x::WorkspaceGMRF, z::AbstractVec
     return val, workspace_logpdf_pullback
 end
 
+# --- logdetcov rrule for WorkspaceGMRF ---
+
+# ∂logdetcov/∂Q = -Q⁻¹ on Q's own sparsity pattern; see the commentary in
+# src/autodiff/logdetcov.jl for why the selected inverse is exact here.
+#
+# Constraints do not appear: `logdetcov(::WorkspaceGMRF)` is the *base*
+# log-determinant, and the Rue-Held correction is a separate term that `logpdf`
+# adds on top of it. So this rule is the same whether or not `x` is constrained,
+# and it must NOT pick up a constraint contribution — the regression test pins
+# that by checking a constrained workspace against the unconstrained
+# -logdet(Q) reference.
+function ChainRulesCore.rrule(::typeof(logdetcov), x::WorkspaceGMRF)
+    val = logdetcov(x)
+
+    function workspace_logdetcov_pullback(ȳ)
+        c = -unthunk(ȳ)
+        # Skip the selected inversion entirely when the result is unused.
+        c isa AbstractZero && return NoTangent(), ZeroTangent()
+
+        # The workspace is shared and may have been refactorized at a different
+        # Q since the forward pass, so re-load before reading the selected
+        # inverse (matching the logpdf pullback above).
+        ensure_loaded!(x)
+        Q̄ = c * selinv(x.workspace)
+
+        x̄ = Tangent{typeof(x)}(;
+            mean = ZeroTangent(),
+            precision = Q̄,
+            workspace = NoTangent(),
+            constraints = NoTangent(),
+            version = NoTangent(),
+        )
+        return NoTangent(), x̄
+    end
+
+    return val, workspace_logdetcov_pullback
+end
+
 # --- WorkspaceGMRF constructor rrules ---
 
 function ChainRulesCore.rrule(

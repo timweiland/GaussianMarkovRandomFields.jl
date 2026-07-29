@@ -78,9 +78,18 @@ end
         @test ref_logpdf ≈ FiniteDiff.finite_difference_gradient(dense_logpdf, θ) rtol = 1.0e-5
     end
 
+    # A GMRFWorkspace is a reusable symbolic factorization, so it is built once
+    # here rather than inside the differentiated function: Zygote cannot trace
+    # CHOLMOD's symbolic phase, and constructing one inside the closure raises
+    # regardless of which rules exist. Sharing it across the calls below also
+    # exercises the pullback's `ensure_loaded!`, since the workspace gets
+    # refactorized at a different Q in between.
+    ws = GMRFWorkspace(Qof(θ))
+
     gmrf_constructors = Any[
         ("ChordalGMRF", θ -> ChordalGMRF(μof(θ), Qof(θ))),
         ("GMRF/CHOLMOD", θ -> GMRF(μof(θ), Qof(θ), LinearSolve.CHOLMODFactorization())),
+        ("WorkspaceGMRF", θ -> WorkspaceGMRF(μof(θ), Qof(θ), ws)),
     ]
 
     @testset "$name" for (name, mk) in gmrf_constructors
@@ -110,6 +119,50 @@ end
             # ForwardDiff and Zygote share no rrule code here, but cross-check
             # against finite differences too so a shared-primal bug cannot pass.
             @test g ≈ FiniteDiff.finite_difference_gradient(f, θ) rtol = 1.0e-5
+        end
+    end
+
+    @testset "constrained WorkspaceGMRF" begin
+        # Sum-to-zero constraint, the usual identifiability constraint on
+        # RW/Besag-style models.
+        A = ones(1, n)
+        e = [0.0]
+
+        mk(θ) = WorkspaceGMRF(μof(θ), Qof(θ), ws, A, e)
+
+        @testset "logdetcov ignores the constraint" begin
+            # logdetcov is the *base* log-determinant; the Rue-Held correction is
+            # a separate term that only logpdf adds. So the constrained gradient
+            # must equal the plain -logdet(Q) reference. If the rule ever grew a
+            # constraint contribution, this is what would catch it.
+            g = DifferentiationInterface.gradient(θ -> logdetcov(mk(θ)), AutoZygote(), θ)
+            @test g ≈ ref_logdetcov rtol = 1.0e-8
+
+            unconstrained =
+                DifferentiationInterface.gradient(
+                θ -> logdetcov(WorkspaceGMRF(μof(θ), Qof(θ), ws)),
+                AutoZygote(), θ
+            )
+            @test g ≈ unconstrained rtol = 1.0e-10
+        end
+
+        @testset "logpdf still carries the constraint correction" begin
+            # Guards the other direction: adding the logdetcov rule must not
+            # disturb the existing constrained logpdf rrule, whose gradient does
+            # depend on the constraint through log_constraint_correction.
+            z_feasible = z .- (sum(z) / n)
+            f(θ) = logpdf(mk(θ), z_feasible)
+
+            g = DifferentiationInterface.gradient(f, AutoZygote(), θ)
+            @test g ≈ FiniteDiff.finite_difference_gradient(f, θ) rtol = 1.0e-5
+
+            # The correction genuinely moves the gradient, so the constrained and
+            # unconstrained logpdf gradients must differ — otherwise this test
+            # would pass even if the constraint were being ignored entirely.
+            plain(θ) = logpdf(WorkspaceGMRF(μof(θ), Qof(θ), ws), z_feasible)
+            @test !isapprox(
+                g, DifferentiationInterface.gradient(plain, AutoZygote(), θ), rtol = 1.0e-3
+            )
         end
     end
 end
