@@ -1,3 +1,4 @@
+# COV_EXCL_START
 # `logdetcov` had no Enzyme rule at all, so Enzyme differentiated the underlying
 # factorization directly. For a `GMRF` that means CHOLMOD's `ccall`s, which carry
 # no derivative information — Enzyme walked them and returned `[0.0, 0.0]`, a
@@ -54,3 +55,4 @@ function EnzymeRules.reverse(
     end
     return (nothing,)
 end
+# COV_EXCL_STOP

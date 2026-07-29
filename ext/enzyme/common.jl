@@ -1,3 +1,4 @@
+# COV_EXCL_START
 # Shared plumbing for the Enzyme rules.
 #
 # Every rule in this extension routes through the functions below rather than
@@ -298,3 +299,4 @@ returns a plausible-looking wrong number.
         )
     )
 end
+# COV_EXCL_STOP

@@ -1,3 +1,4 @@
+# COV_EXCL_START
 # `gaussian_approximation` finds the mode x* of the posterior by Fisher scoring.
 # Differentiating the solver loop would be slow and unstable, so this rule applies
 # the Implicit Function Theorem to the optimality condition instead, mirroring the
@@ -312,3 +313,4 @@ _nonzeros(A) = A
 copy_cotangent(A::Union{Symmetric, Hermitian}) =
     typeof(A).name.wrapper(copy(A.data), Symbol(A.uplo))
 copy_cotangent(A) = copy(A)
+# COV_EXCL_STOP

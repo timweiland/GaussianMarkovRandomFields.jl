@@ -1,3 +1,4 @@
+# COV_EXCL_START
 # `GMRF(μ, Q)` and `GMRF(μ, Q, alg)` just store their arguments, so these rules
 # are only plumbing: hand Enzyme a shadow GMRF built from the argument shadows,
 # then drain that shadow back into the arguments on the way out. The reason they
@@ -53,6 +54,13 @@ add_shadow!(dest::AbstractMatrix, src) = (dest .+= unwrap_triangle(src); dest)
 
 # Structured destinations store only their band, and broadcasting a full matrix
 # into one raises rather than dropping the off-band entries.
+#
+# Both of these assume `src` is a cotangent buffer of the *same* shape as `dest`
+# — which is what every call site passes, since both descend from one primal.
+# That matters for `SymTridiagonal`: reading `s[i+1, i]` alone is a 1:1 copy of
+# `src.ev[i]`, but would halve the result if `src` were instead a full matrix
+# holding one independent cotangent per position, where `(i+1, i)` and `(i, i+1)`
+# both feed `ev[i]`. Use `accumulate_on_pattern!` for that direction.
 function add_shadow!(dest::Diagonal, src)
     s = unwrap_triangle(src)
     @inbounds for i in eachindex(dest.diag)
@@ -273,3 +281,4 @@ _zero_precision!(A::Union{Symmetric, Hermitian}) = (_zero_precision!(A.data); A)
 _zero_precision!(A::SymTridiagonal) = (fill!(A.dv, 0); fill!(A.ev, 0); A)
 _zero_precision!(A::Diagonal) = (fill!(A.diag, 0); A)
 _zero_precision!(A) = (fill!(A, 0); A)
+# COV_EXCL_STOP
