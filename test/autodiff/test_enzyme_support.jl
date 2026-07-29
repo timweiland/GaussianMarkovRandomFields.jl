@@ -16,13 +16,14 @@
 # if the fixture is ever changed.
 
 using GaussianMarkovRandomFields
-using Distributions: logpdf, logdetcov
+using Distributions: logpdf, logdetcov, Poisson, Normal
 using SparseArrays
 using SparseArrays: getcolptr
 using LinearAlgebra
 using LinearSolve
 using Random
 using Statistics: var
+import Statistics
 using DifferentiationInterface
 using Enzyme, FiniteDiff, ForwardDiff
 using ReTest: @testset, @test, @test_throws
@@ -97,11 +98,45 @@ end
     # Operations with a correct Enzyme rule. Each is checked against finite
     # differences, with ForwardDiff as an independent cross-check that the
     # reference itself is trustworthy.
+    poisson = ExponentialFamily(Poisson)(PoissonObservations(rand(0:4, n)))
+    # Sum-to-zero. Hoisted out of the closure the way a real model defines its
+    # constraints — as fixed structure, not as something rebuilt per evaluation.
+    A_sum, e_sum = ones(1, n), [0.0]
+    constrained_gmrf(θ) = ConstrainedGMRF(cholmod_gmrf(θ), A_sum, e_sum)
+    z0 = z .- Statistics.mean(z)                     # satisfies the sum-to-zero constraint
+
     supported = [
         "logdetcov (GMRF/CHOLMOD)" => θ -> logdetcov(cholmod_gmrf(θ)),
         "logpdf (GMRF/CHOLMOD)" => θ -> logpdf(cholmod_gmrf(θ), z),
         "logdetcov (ChordalGMRF)" => θ -> logdetcov(chordal_gmrf(θ)),
+        # `gaussian_approximation` is the operation the whole hyperparameter
+        # pipeline is built on, so it is covered through both the mode and the
+        # posterior logpdf.
+        "gaussian_approximation → logpdf" =>
+            θ -> logpdf(gaussian_approximation(cholmod_gmrf(θ), poisson), z),
+        "gaussian_approximation → mean" =>
+            θ -> sum(abs2, Statistics.mean(gaussian_approximation(cholmod_gmrf(θ), poisson))),
     ]
+
+    # `ConstrainedGMRF` mixes a bare `Float64` (`log_constraint_correction`) with
+    # heap fields, which makes it a "mixed activity" type. Enzyme only accepts
+    # such a type back from a custom rule on Julia 1.12; on 1.10 and 1.11 it
+    # raises `MixedReturnException: ... not presently supported` before any of
+    # these rules run. That is a loud failure, and it is upstream of this package.
+    if VERSION >= v"1.12"
+        append!(
+            supported, [
+                "logpdf (ConstrainedGMRF)" => θ -> logpdf(constrained_gmrf(θ), z0),
+                "constrained gaussian_approximation → logpdf" =>
+                    θ -> logpdf(gaussian_approximation(constrained_gmrf(θ), poisson), z0),
+                "constrained gaussian_approximation → mean" =>
+                    θ -> sum(
+                    abs2,
+                    Statistics.mean(gaussian_approximation(constrained_gmrf(θ), poisson))
+                ),
+            ]
+        )
+    end
 
     @testset "$name matches finite differences" for (name, f) in supported
         reference = DifferentiationInterface.gradient(f, AutoFiniteDiff(), copy(θ))
@@ -111,8 +146,32 @@ end
         @test forward ≈ reference rtol = 1.0e-5     # the reference is sane
         @test enzyme ≈ reference rtol = 1.0e-5
         # A zero gradient is the specific failure mode being guarded against:
-        # `logdetcov` used to return exactly [0.0, 0.0] on every Julia version.
+        # `logdetcov` used to return exactly [0.0, 0.0] on every Julia version,
+        # and every constrained path did the same before `MixedDuplicated`
+        # arguments were handled.
         @test !all(iszero, enzyme)
+    end
+
+    @testset "likelihood hyperparameters flow through gaussian_approximation" begin
+        # Marginal-likelihood optimisation differentiates the observation model's
+        # own hyperparameters, not just the prior's, and those reach the result
+        # only through the nested VJPs inside the IFT rule.
+        y = randn(n)
+        function with_sigma(ϑ)
+            prior = GMRF(ϑ[2] * ones(n), Qof(ϑ), LinearSolve.CHOLMODFactorization())
+            lik = ExponentialFamily(Normal)(y; σ = exp(ϑ[3]))
+            return logpdf(gaussian_approximation(prior, lik), z)
+        end
+
+        ϑ = [θ[1], θ[2], log(0.7)]
+        reference = DifferentiationInterface.gradient(with_sigma, AutoFiniteDiff(), copy(ϑ))
+        enzyme = DifferentiationInterface.gradient(with_sigma, ENZYME, copy(ϑ))
+
+        @test enzyme ≈ reference rtol = 1.0e-5
+        # The σ component specifically — it is the one that only exists because
+        # of the nested `loggrad`/`loghessian` differentiation.
+        @test enzyme[3] ≈ reference[3] rtol = 1.0e-5
+        @test !iszero(enzyme[3])
     end
 
     @testset "unsupported operations raise instead of returning a wrong number" begin

@@ -23,11 +23,11 @@ function EnzymeRules.augmented_primal(
 
     # The selected inverse is the whole reverse pass; skip it when the GMRF is
     # `Const`, since then there is nowhere to accumulate into.
-    if x isa Const
-        tape = nothing
-    else
+    if is_active(x)
         enzyme_check_supported("logdetcov", x.val)
         tape = enzyme_selinv(x.val)
+    else
+        tape = nothing
     end
 
     primal_out = EnzymeRules.needs_primal(config) ? primal : nothing
@@ -43,12 +43,12 @@ function EnzymeRules.reverse(
         tape,
         x::Annotation{<:AbstractGMRF}
     )
-    if x isa Duplicated
+    if is_active(x)
         Σ = tape
         ȳ = dret.val
         accumulate_on_pattern!(
             (i, j) -> -ȳ * Σ[i, j],
-            shadow_precision(x.dval),
+            shadow_precision(shadow_of(x)),
             precision_storage(x.val),
         )
     end

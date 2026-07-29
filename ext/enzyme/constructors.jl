@@ -132,11 +132,11 @@ function _drain_gmrf_shadow!(tape, μ::Annotation, Q::Annotation)
     μ_shadow = shadow_mean(tape)
     Q_shadow = shadow_precision(tape)
 
-    if μ isa Duplicated
-        add_shadow!(μ.dval, μ_shadow)
+    if is_active(μ)
+        add_shadow!(shadow_of(μ), μ_shadow)
     end
-    if Q isa Duplicated
-        add_shadow!(Q.dval, Q_shadow)
+    if is_active(Q)
+        add_shadow!(shadow_of(Q), Q_shadow)
     end
 
     fill!(μ_shadow, zero(eltype(μ_shadow)))
@@ -189,6 +189,61 @@ function EnzymeRules.reverse(
     ) where {RT}
     _drain_gmrf_shadow!(tape, μ, Q)
     return (nothing, nothing)
+end
+
+# --- ConstrainedGMRF(base, A, e) --------------------------------------------
+#
+# The constructor precomputes Ã = Q⁻¹Aᵀ by solving against the base GMRF's
+# factorization, so without a rule Enzyme walks straight into CHOLMOD and every
+# gradient through a constrained prior comes back zero.
+#
+# `A` and `e` define model structure rather than hyperparameters, so they receive
+# no cotangent — matching the `NoTangent()` the ChainRules rrule returns for them.
+# Their annotations are left open rather than pinned to `Const`: a caller that
+# builds the constraint matrix inside the differentiated function hands them over
+# as active, and a rule that only matched `Const` would silently not apply.
+# Cotangents on the derived `log_constraint_correction` are folded into the base
+# slots where they arise (see `accumulate_constraint_correction!`), so the only
+# work here is moving the base cotangents — plus anything that arrived via
+# `constrained_mean` — onto the constructor's own argument.
+
+function EnzymeRules.augmented_primal(
+        config::EnzymeRules.RevConfigWidth{1},
+        func::Const{Type{ConstrainedGMRF}},
+        ::Type{RT},
+        base_gmrf::Annotation{<:AbstractGMRF},
+        A::Annotation,
+        e::Annotation
+    ) where {RT}
+    primal = func.val(base_gmrf.val, A.val, e.val)
+
+    dres = EnzymeRules.needs_shadow(config) ? zero_gmrf_shadow(primal) : nothing
+
+    return EnzymeRules.AugmentedReturn(primal, return_shadow(RT, dres), (primal, dres))
+end
+
+function EnzymeRules.reverse(
+        config::EnzymeRules.RevConfigWidth{1},
+        func::Const{Type{ConstrainedGMRF}},
+        ::Type{RT},
+        tape,
+        base_gmrf::Annotation{<:AbstractGMRF},
+        A::Annotation,
+        e::Annotation
+    ) where {RT}
+    primal, shadow = tape
+    shadow === nothing && return (nothing, nothing, nothing)
+
+    if is_active(base_gmrf)
+        bs = shadow_of(base_gmrf)
+        μ̄ = shadow_mean(shadow) .+ constrained_mean_cotangent(shadow, primal)
+        add_shadow!(shadow_mean(bs), μ̄)
+        add_shadow!(shadow_precision(bs), shadow_precision(shadow))
+    end
+
+    zero_gmrf_shadow!(shadow)
+
+    return (nothing, nothing, nothing)
 end
 
 _zero_precision!(A::SparseMatrixCSC) = (fill!(nonzeros(A), 0); A)

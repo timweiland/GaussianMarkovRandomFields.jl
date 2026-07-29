@@ -21,7 +21,7 @@ function EnzymeRules.augmented_primal(
         ::Type{RT},
         d::Annotation{<:AbstractGMRF}
     ) where {RT}
-    d isa Const || enzyme_unsupported("var", d.val)
+    is_active(d) && enzyme_unsupported("var", d.val)
 
     primal = var(d.val)
     primal_out = EnzymeRules.needs_primal(config) ? primal : nothing
@@ -40,24 +40,13 @@ function EnzymeRules.reverse(
     return (nothing,)
 end
 
-# --- gaussian_approximation -------------------------------------------------
+# --- gaussian_approximation for priors without an IFT rule ------------------
 #
-# This one *did* have an Implicit-Function-Theorem rule, and it was silently
-# wrong: on Julia 1.10 the whole pipeline returned [0.84, -120.55] where the
-# true gradient is [-214.07, -178.58], and on 1.12 it corrupted a sparse shadow
-# badly enough to raise from inside `SparseMatrixCSC`'s constructor.
-#
-# The reason it is refused rather than repaired is that the IFT rule has to move
-# precision cotangents between the prior and the approximation posterior, and
-# those two do not agree on how a precision is stored — a prior built from a
-# user's `Q` is a bare `SparseMatrixCSC` where every entry is its own variable,
-# while the posterior comes back as `Symmetric(Q, :U)` where only one triangle is
-# read and its off-diagonals count double. Reconciling that correctly across all
-# three GMRF types is a larger piece of work than this fix, and a rule that gets
-# it half right is exactly the failure mode being removed here.
-#
-# Zygote, Mooncake and ForwardDiff all have working `gaussian_approximation`
-# rules; the error message points at them.
+# `gaussian_approximation.jl` implements the rule for `GMRF` and
+# `ConstrainedGMRF`; this is the less specific fallback every other prior type
+# lands on. `WorkspaceGMRF` and `ChordalGMRF` route their IFT solve through
+# different machinery (`workspace_solve` and the chordal factor respectively) and
+# have not been verified here, so they refuse rather than guess.
 
 function EnzymeRules.augmented_primal(
         config::EnzymeRules.RevConfigWidth{1},
@@ -66,7 +55,7 @@ function EnzymeRules.augmented_primal(
         prior_gmrf::Annotation,
         obs_lik::Annotation
     ) where {RT}
-    (prior_gmrf isa Const && obs_lik isa Const) ||
+    (is_active(prior_gmrf) || is_active(obs_lik)) &&
         enzyme_unsupported("gaussian_approximation", prior_gmrf.val)
 
     primal = gaussian_approximation(prior_gmrf.val, obs_lik.val)

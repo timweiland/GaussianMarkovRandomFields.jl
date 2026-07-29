@@ -39,12 +39,13 @@ module GaussianMarkovRandomFieldsEnzyme
 using GaussianMarkovRandomFields
 const GMRFs = GaussianMarkovRandomFields
 using GaussianMarkovRandomFields: GMRF, AbstractGMRF, ChordalGMRF, WorkspaceGMRF,
-    MetaGMRF, precision_matrix, selinv, gaussian_approximation
+    MetaGMRF, ConstrainedGMRF, precision_matrix, selinv, gaussian_approximation,
+    ObservationLikelihood, loggrad, loghessian, _base_gmrf
 
 using Enzyme
 using Distributions: logpdf, logdetcov, mean, var
 using SparseArrays
-using SparseArrays: getcolptr
+using SparseArrays: getcolptr, AbstractSparseMatrix
 using LinearAlgebra
 using CliqueTrees.Multifrontal: selinv as mselinv
 
@@ -55,6 +56,7 @@ include("enzyme/common.jl")
 include("enzyme/constructors.jl")
 include("enzyme/logdetcov.jl")
 include("enzyme/logpdf.jl")
+include("enzyme/gaussian_approximation.jl")
 include("enzyme/unsupported.jl")
 
 end

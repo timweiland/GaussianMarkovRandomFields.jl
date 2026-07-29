@@ -23,6 +23,7 @@ enzyme_selinv(d::GMRF) = selinv(d.linsolve_cache)
 enzyme_selinv(d::WorkspaceGMRF) = (GMRFs.ensure_loaded!(d); selinv(d.workspace))
 enzyme_selinv(d::ChordalGMRF) = mselinv(d.Q, d.F)
 enzyme_selinv(d::MetaGMRF) = enzyme_selinv(d.gmrf)
+enzyme_selinv(d::ConstrainedGMRF) = enzyme_selinv(d.base_gmrf)
 enzyme_selinv(d::AbstractGMRF) = enzyme_unsupported("selected inversion", d)
 
 """
@@ -47,6 +48,40 @@ function enzyme_check_supported(op, d::WorkspaceGMRF)
 end
 
 """
+    is_active(x::Annotation)
+    shadow_of(x::Annotation)
+
+Whether an argument carries a cotangent, and the shadow object to accumulate it
+into.
+
+`x isa Duplicated` is not the right test. Enzyme represents the shadow of an
+immutable struct that mixes mutable fields with *active scalar* fields as a `Ref`
+to the struct — `MixedDuplicated` — rather than as the struct itself.
+`ConstrainedGMRF` is exactly that shape: a bare `Float64`
+`log_constraint_correction` sitting alongside vector fields. Testing for
+`Duplicated` alone silently skips every constrained GMRF, which is how the first
+attempt at these rules returned an exact zero gradient.
+"""
+is_active(x::Annotation) = !(x isa Const)
+shadow_of(x::Union{Duplicated, DuplicatedNoNeed}) = x.dval
+shadow_of(x::MixedDuplicated) = x.dval[]
+
+"""
+    return_shadow(::Type{RT}, shadow)
+
+Present `shadow` the way Enzyme expects a custom rule to return it.
+
+A `MixedDuplicated` return wants its shadow inside a `Ref`; everything else wants
+the object itself.
+
+Note that this only decides the *shape*. Whether Enzyme accepts a mixed-activity
+type from a custom rule at all is a separate question, and one it answers
+differently by version — see the `ConstrainedGMRF` note in the AD reference page.
+"""
+return_shadow(::Type{RT}, shadow) where {RT} =
+    RT <: MixedDuplicated ? Ref(shadow) : shadow
+
+"""
     shadow_mean(shadow::AbstractGMRF)
     shadow_precision(shadow::AbstractGMRF)
 
@@ -63,11 +98,18 @@ shadow_mean(s::ChordalGMRF) = s.μ
 shadow_precision(s::ChordalGMRF) = s.Q
 
 # `MetaGMRF` only attaches metadata and forwards every operation, so it inherits
-# whatever its inner GMRF supports. (`ConstrainedGMRF` deliberately does *not* get
-# this treatment: its `logpdf` carries a constraint correction that depends on `Q`,
-# so delegating to the base GMRF would quietly drop a term.)
+# whatever its inner GMRF supports.
 shadow_mean(s::MetaGMRF) = shadow_mean(s.gmrf)
 shadow_precision(s::MetaGMRF) = shadow_precision(s.gmrf)
+
+# A `ConstrainedGMRF`'s differentiable parameters all live on its base GMRF —
+# the constraint matrix and vector define model structure, not hyperparameters.
+# Its own `constrained_mean` and `log_constraint_correction` fields are *derived*
+# from the base, and the rules that care fold their contributions into these same
+# base slots (see `logpdf.jl`), so cotangents are never dropped.
+shadow_mean(s::ConstrainedGMRF) = shadow_mean(s.base_gmrf)
+shadow_precision(s::ConstrainedGMRF) = shadow_precision(s.base_gmrf)
+precision_storage(d::ConstrainedGMRF) = precision_storage(d.base_gmrf)
 
 """
     precision_storage(d::AbstractGMRF)
@@ -193,6 +235,33 @@ function accumulate_on_pattern!(f, target::AbstractMatrix, ::Val{:upper})
         target[i, j] += (i == j ? f(i, j) : 2 * f(i, j))
     end
     return target
+end
+
+"""
+    cotangent_matrix(buffer, storage) -> AbstractMatrix
+
+Read a precision *shadow* back as the mathematical gradient matrix
+`G[i, j] = ∂L/∂M[i, j]`, where `M` is the symmetric matrix the GMRF actually
+factorizes.
+
+The two are not the same object. A shadow holds one number per *stored entry*
+under its matrix's storage convention, so for a triangle-stored precision the
+off-diagonals carry a factor of two (one for each position of `M` they move) and
+the opposite triangle is empty. Anything that consumes a cotangent as a matrix —
+contracting it against a Hessian, or handing it to a differently-stored GMRF —
+has to undo that first. Conflating the two is what made the previous
+`gaussian_approximation` rule wrong: it read a `Symmetric(Q, :U)` posterior
+shadow as if it were a plain gradient and passed it to a prior stored in full.
+
+[`accumulate_on_pattern!`](@ref) is the inverse direction, taking `G[i, j]` and
+writing it back under a target's convention.
+"""
+cotangent_matrix(buffer, ::Val{:full}) = buffer
+function cotangent_matrix(buffer, ::Union{Val{:lower}, Val{:upper}})
+    D = buffer isa Union{Symmetric, Hermitian} ? buffer.data : buffer
+    # Only one triangle is populated, so this both mirrors it and undoes the
+    # doubling, while leaving the diagonal alone.
+    return (D + transpose(D)) / 2
 end
 
 """
