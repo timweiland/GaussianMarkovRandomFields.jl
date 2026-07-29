@@ -15,7 +15,7 @@ hyperparameters and forward mode is the right shape for the problem.
 Reach for a reverse-mode backend when the parameter vector is large enough that
 forward mode's per-parameter cost dominates:
 
-- **Zygote.jl** for `GMRF` and `WorkspaceGMRF` priors.
+- **Zygote.jl** for `GMRF`, `ChordalGMRF` and `WorkspaceGMRF` priors.
 - **Mooncake.jl** for `ChordalGMRF`, which is what the chordal backend is built
   for.
 - **Enzyme.jl** for `logpdf`, `logdetcov` and `gaussian_approximation` on `GMRF`
@@ -34,12 +34,12 @@ Mooncake is not in the table; it is covered by the package's own
 
 | Operation | ForwardDiff | Zygote | Enzyme |
 |---|---|---|---|
-| `logdetcov(::GMRF)` | ✅ | ❌ raises | ✅ |
+| `logdetcov(::GMRF)` | ✅ | ✅ | ✅ |
 | `logpdf(::GMRF, z)` | ✅ | ✅ | ✅ |
 | `gaussian_approximation` (`GMRF`) | ✅ | ✅ | ✅ |
-| `logdetcov(::ChordalGMRF)` | ✅ | ❌ raises | ⚠️ unreliable |
-| `logpdf(::ChordalGMRF, z)` | ✅ | ⚠️ **silently wrong** | ⚠️ unreliable |
-| `gaussian_approximation` (`ChordalGMRF`) | ✅ | ⚠️ **silently wrong** | ⚠️ unreliable |
+| `logdetcov(::ChordalGMRF)` | ✅ | ✅ | ⚠️ unreliable |
+| `logpdf(::ChordalGMRF, z)` | ✅ | ✅ | ⚠️ unreliable |
+| `gaussian_approximation` (`ChordalGMRF`) | ✅ | ✅ | ⚠️ unreliable |
 | `logdetcov(::WorkspaceGMRF)` | ✅ | ❌ raises | ✅ |
 | `logpdf(::WorkspaceGMRF, z)` | ✅ | ✅ | ✅ |
 | `gaussian_approximation` (`WorkspaceGMRF`) | ✅ | ✅ | ✅ |
@@ -53,14 +53,6 @@ Every ❌ in this table is an explicit, actionable error. Combinations that cann
 be supported raise rather than falling back to differentiating a sparse
 factorization, because doing the latter produces wrong gradients that no test
 without a finite-difference reference would catch.
-
-## Known-incorrect combination
-
-!!! warning "Zygote + ChordalGMRF"
-    Differentiating `logpdf` or `gaussian_approximation` through a `ChordalGMRF`
-    with Zygote returns gradients that are wrong by roughly 10–15% when the
-    precision matrix has Cholesky fill-in, with no error and no warning. Use
-    Mooncake (the backend `ChordalGMRF` is designed for) or ForwardDiff instead.
 
 ## Enzyme
 

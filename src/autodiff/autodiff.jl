@@ -20,6 +20,7 @@ using ChainRulesCore
 include("constructors.jl")
 include("precision_gradient.jl")  # Helper for computing precision gradients
 include("logpdf.jl")
+include("logdetcov.jl")
 include("gaussian_approximation.jl")
 
 # Mooncake-specific rules for ChordalGMRF live in the
