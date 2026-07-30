@@ -90,39 +90,72 @@ mooncake_refusal(e) = e isa ArgumentError && occursin("ChordalGMRF", sprint(show
         # it is built on `backward_solve`, but Mooncake gives up on `_rand_impl!`
         # before reaching the guard, with a `BoundsError` from its own rule
         # compiler — loud already, and not ours to convert.
+        #
+        # `guard_wins` records whether our refusal is reliably the *first* thing
+        # to see the call. It is false only for `gaussian_approximation`: whether
+        # Mooncake reaches the guard or gives up compiling `_newton_loop` first
+        # varies by platform, the same way `ChordalGMRF` under Enzyme does (the
+        # AD reference page's note). Both outcomes are errors, which is the
+        # property this file exists to defend; only one of them is ours to word.
         cases = [
-            "logdetcov" => θ -> logdetcov(mooncake_cholmod_gmrf(θ)),
-            "logpdf" => θ -> logpdf(mooncake_cholmod_gmrf(θ), z),
-            "logpdf (default solver)" => θ -> logpdf(mooncake_default_gmrf(θ), z),
-            "gaussian_approximation" =>
-                θ -> logpdf(gaussian_approximation(mooncake_cholmod_gmrf(θ), obs_lik), z),
-            "var" => θ -> sum(var(mooncake_cholmod_gmrf(θ))),
-            "selinv" => θ -> sum(selinv(mooncake_cholmod_gmrf(θ).linsolve_cache)),
-            "backward_solve" =>
-                θ -> sum(backward_solve(mooncake_cholmod_gmrf(θ).linsolve_cache, z)),
+            (
+                name = "logdetcov", guard_wins = true,
+                f = θ -> logdetcov(mooncake_cholmod_gmrf(θ)),
+            ),
+            (
+                name = "logpdf", guard_wins = true,
+                f = θ -> logpdf(mooncake_cholmod_gmrf(θ), z),
+            ),
+            (
+                name = "logpdf (default solver)", guard_wins = true,
+                f = θ -> logpdf(mooncake_default_gmrf(θ), z),
+            ),
+            (
+                name = "gaussian_approximation", guard_wins = false,
+                f = θ -> logpdf(gaussian_approximation(mooncake_cholmod_gmrf(θ), obs_lik), z),
+            ),
+            (
+                name = "var", guard_wins = true,
+                f = θ -> sum(var(mooncake_cholmod_gmrf(θ))),
+            ),
+            (
+                name = "selinv", guard_wins = true,
+                f = θ -> sum(selinv(mooncake_cholmod_gmrf(θ).linsolve_cache)),
+            ),
+            (
+                name = "backward_solve", guard_wins = true,
+                f = θ -> sum(backward_solve(mooncake_cholmod_gmrf(θ).linsolve_cache, z)),
+            ),
         ]
 
-        @testset "$name" for (name, f) in cases
+        @testset "$(case.name)" for case in cases
             # Caught rather than `@test_throws`, so that one (expensive) Mooncake
             # compilation answers both "did it raise?" and "what did it say?".
             err = try
-                DifferentiationInterface.gradient(f, MOONCAKE, copy(θ))
+                DifferentiationInterface.gradient(case.f, MOONCAKE, copy(θ))
                 nothing
             catch e
                 e
             end
 
-            # Specifically *our* refusal, not merely some `ArgumentError`: see
-            # `mooncake_refusal` for why the type alone cannot tell them apart.
-            @test mooncake_refusal(err)
+            # True on every version and architecture, and the whole point of the
+            # guard: an exception rather than a number, and — since the process
+            # is still alive to run this line — rather than signal 11.
+            @test err isa Exception
 
-            # And the message has to stay actionable — it already names
-            # `ChordalGMRF` if the assertion above passed, so this pins the other
-            # half of the way out. `err === nothing` must fail this as a test
-            # rather than error out of it: a ReTest *error* aborts the entire
-            # run, not just this file.
-            msg = err === nothing ? "" : sprint(showerror, err)
-            @test occursin("ForwardDiff", msg)
+            if case.guard_wins
+                # Specifically *our* refusal, not merely some `ArgumentError`:
+                # see `mooncake_refusal` for why the type cannot tell them apart.
+                @test mooncake_refusal(err)
+
+                # And the message has to stay actionable. It already names
+                # `ChordalGMRF` if the assertion above passed, so this pins the
+                # other half of the way out. `err === nothing` must fail this as
+                # a test rather than error out of it: a ReTest *error* aborts the
+                # entire run, not just this file.
+                msg = err === nothing ? "" : sprint(showerror, err)
+                @test occursin("ForwardDiff", msg)
+            end
         end
 
         # Refusing is specific to differentiating. The primal calls still work.

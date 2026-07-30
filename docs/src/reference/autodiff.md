@@ -95,10 +95,13 @@ mean or the quadratic form behind `sqmahal`, still differentiate normally.
 
 As with Enzyme, the *error type* can vary. Where this package's guard refuses
 first you get the `ArgumentError` naming the operation; where Mooncake's own rule
-compiler gives up earlier you get a `MooncakeRuleCompilationError` instead. Julia
-1.10 takes the second route for precision matrices denser than a tridiagonal one,
-and for `rand` on every version. Both are loud failures — never a wrong number,
-and, which is the point of the guard, never a crash.
+compiler gives up earlier you get a `MooncakeRuleCompilationError` instead, which
+says nothing about GMRFs. Known cases of the second: `rand` on every version,
+Julia 1.10 for precision matrices denser than a tridiagonal one, and
+`gaussian_approximation` on x86-64 (where Mooncake stops at the Newton loop;
+aarch64 reaches the guard and gives the actionable message). Both are loud
+failures — never a wrong number, and, which is the point of the guard, never a
+crash.
 
 Use `ChordalGMRF` under Mooncake, or ForwardDiff, which handles every GMRF type.
 
