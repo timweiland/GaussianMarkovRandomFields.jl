@@ -5,6 +5,36 @@ through several AD backends. Which backend to reach for depends on **both** the
 operation and the GMRF type — support is not uniform, and the differences are
 large enough to matter in practice.
 
+## Two kinds of differentiation
+
+It is worth separating two things that both get called "AD support", because the
+answer is different for each.
+
+**Differentiating through GMRF internals** — `logpdf`, `logdetcov`, `var` and
+`gaussian_approximation`, with respect to hyperparameters — runs through a sparse
+Cholesky factorization. No general-purpose AD system can traverse that: CHOLMOD is
+a C library reached through opaque pointers, and even the pure-Julia multifrontal
+factorization behind `ChordalGMRF` is walked incorrectly by backends that try. So
+every supported combination here rests on a **hand-written rule**, and the support
+matrix below records exactly which ones exist. This is the part where the choice of
+backend genuinely constrains what you can do.
+
+**Differentiating your own likelihood** — through
+[`AutoDiffObservationModel`](@ref) and [`AutoDiffLatentPrior`](@ref) — is a
+different situation. There the package differentiates *your* Julia function, not
+its own linear algebra, and it does so through
+[DifferentiationInterface.jl](https://github.com/JuliaDiff/DifferentiationInterface.jl).
+Any DI-compatible backend can be passed as `grad_backend`; the package does not
+need a rule for it. The default picks the first of Enzyme, Mooncake, Zygote or
+ForwardDiff that is loaded, and you can override it:
+
+```julia
+using DifferentiationInterface, Enzyme
+obs_model = AutoDiffObservationModel(my_loglik; n_latent = n, grad_backend = AutoEnzyme())
+```
+
+The support matrix constrains the first kind, not the second.
+
 ## Choosing a backend
 
 **Start with ForwardDiff.jl.** It is the only backend that currently handles every
@@ -24,31 +54,42 @@ forward mode's per-parameter cost dominates:
 
 ## Support matrix
 
-Checked against finite differences with a precision matrix whose Cholesky factor
-has genuine fill-in — the Enzyme column on Julia 1.10.10, 1.11.9 and 1.12.6, the
-other columns on 1.12.6. The fill-in matters: a tridiagonal AR(1) precision has
-none, and several of the failures below are invisible with one.
+Every cell below was checked against finite differences on Julia 1.10.10, 1.11.9
+and 1.12.6, using a precision matrix whose Cholesky factor has genuine fill-in.
+The fill-in matters: a tridiagonal AR(1) precision has none, and several of these
+failures are invisible with one.
 
-Mooncake is not in the table; it supports `ChordalGMRF` and refuses the
-CHOLMOD-backed types, so a column would be mostly ❌. See the Mooncake section
-below.
-
-| Operation | ForwardDiff | Zygote | Enzyme |
-|---|---|---|---|
-| `logdetcov(::GMRF)` | ✅ | ✅ | ✅ |
-| `logpdf(::GMRF, z)` | ✅ | ✅ | ✅ |
-| `gaussian_approximation` (`GMRF`) | ✅ | ✅ | ✅ |
-| `logdetcov(::ChordalGMRF)` | ✅ | ✅ | ⚠️ unreliable |
-| `logpdf(::ChordalGMRF, z)` | ✅ | ✅ | ⚠️ unreliable |
-| `gaussian_approximation` (`ChordalGMRF`) | ✅ | ✅ | ⚠️ unreliable |
-| `logdetcov(::WorkspaceGMRF)` | ✅ | ✅ | ✅ |
-| `logpdf(::WorkspaceGMRF, z)` | ✅ | ✅ | ✅ |
-| `gaussian_approximation` (`WorkspaceGMRF`) | ✅ | ✅ | ✅ |
-| `logpdf(::ConstrainedGMRF, z)` | ✅ | ✅ | Julia 1.12 only |
-| `gaussian_approximation` (`ConstrainedGMRF`) | ✅ | ✅ | Julia 1.12 only |
-| `var` / `std` (any type) | ✅ | ❌ raises | ❌ raises |
+| Operation | ForwardDiff | Zygote | Enzyme | Mooncake |
+|---|---|---|---|---|
+| `logdetcov(::GMRF)` | ✅ | ✅ | ✅ | ❌ raises |
+| `logpdf(::GMRF, z)` | ✅ | ✅ | ✅ | ❌ raises |
+| `gaussian_approximation` (`GMRF`) | ✅ | ✅ | ✅ | ❌ raises |
+| `logdetcov(::ChordalGMRF)` | ✅ | ✅ | ⚠️ unreliable | ✅ |
+| `logpdf(::ChordalGMRF, z)` | ✅ | ✅ | ⚠️ unreliable | ✅ |
+| `gaussian_approximation` (`ChordalGMRF`) | ✅ | ✅ | ⚠️ unreliable | ✅ |
+| `logdetcov(::WorkspaceGMRF)` | ✅ | ✅ | ✅ | ❌ raises |
+| `logpdf(::WorkspaceGMRF, z)` | ✅ | ✅ | ✅ | ❌ raises |
+| `gaussian_approximation` (`WorkspaceGMRF`) | ✅ | ✅ | ✅ | ❌ raises |
+| `logpdf(::ConstrainedGMRF, z)` | ✅ | ✅ | Julia 1.12 only | ❌ raises |
+| `gaussian_approximation` (`ConstrainedGMRF`) | ✅ | ✅ | Julia 1.12 only | ❌ raises |
+| `var` / `std` (`GMRF`, `WorkspaceGMRF`) | ✅ | ❌ raises | ❌ raises | ❌ raises |
+| `var` / `std` (`ChordalGMRF`) | ✅ | ❌ raises | ❌ raises | ⚠️ wrong, see below |
 
 ✅ matches finite differences · ❌ raises an error · ⚠️ see the note for that row
+
+The Enzyme `ChordalGMRF` rows depend on the Julia version *and* the CPU
+architecture; see the note under [Enzyme](#Enzyme) below. The verification above
+ran on aarch64.
+
+The single ⚠️ is `var`/`std` on a `ChordalGMRF` under Mooncake, whose gradient is
+currently around 1% off. The cause sits upstream of this package, in the
+selected-inversion rule for the chordal factorization, and a fix is expected. Use
+ForwardDiff for marginal-variance gradients in the meantime.
+
+Everything else that is not ✅ raises an explicit, actionable error. Combinations
+that cannot be supported refuse rather than falling back to differentiating a
+sparse factorization, because doing the latter produces wrong gradients that no
+test without a finite-difference reference would catch.
 
 Every ❌ in this table is an explicit, actionable error. Combinations that cannot
 be supported raise rather than falling back to differentiating a sparse
