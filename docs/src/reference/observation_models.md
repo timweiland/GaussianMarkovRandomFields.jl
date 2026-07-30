@@ -197,10 +197,10 @@ AutoDiff observation models require an automatic differentiation backend:
 4. **Enzyme.jl** — fastest where it applies, but it covers the fewest
    operations and GMRF types
 
-Backends are **not** interchangeable here: support varies by operation and by GMRF
-type, and one combination (Zygote with `ChordalGMRF`) returns incorrect gradients
-without raising. Check the support matrix in the
-[Automatic Differentiation Reference](@ref) before picking one.
+Coverage differs between them: which operations and GMRF types each backend
+handles varies, and a few combinations need a recent Julia version. Check the
+support matrix in the [Automatic Differentiation Reference](@ref) before picking
+one.
 
 ```julia
 # Load an AD backend (required for AutoDiffObservationModel)

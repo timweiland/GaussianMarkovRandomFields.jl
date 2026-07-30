@@ -142,11 +142,12 @@ println("  Converged: $(Optim.converged(result))")
 # AD through Gaussian approximations. Constrained priors (e.g. RW, Besag) are
 # supported by ForwardDiff and Zygote everywhere, and by Enzyme on Julia 1.12.
 #
-# Backends are not interchangeable in general: support varies by operation and by
-# GMRF type, and one combination returns incorrect gradients without raising. See
-# the [Automatic Differentiation Reference](@ref) for the measured support matrix
-# before committing to a backend. For the model in this tutorial, Zygote and
-# Enzyme agree, so the choice comes down to performance and ease of use.
+# Coverage differs between backends, though: which operations and GMRF types each
+# one handles varies, and a few combinations need a recent Julia version. The
+# [Automatic Differentiation Reference](@ref) has the support matrix, checked
+# against finite differences — worth a look before settling on a backend for a
+# long-running fit. For the model in this tutorial, Zygote and Enzyme agree, so
+# the choice comes down to performance and ease of use.
 #
 # Zygote has low pre-compilation times and works in most cases.
 # By contrast, Enzyme incurs large pre-compilation overheads and may not work in
