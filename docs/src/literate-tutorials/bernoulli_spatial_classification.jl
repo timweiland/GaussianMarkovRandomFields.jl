@@ -11,6 +11,21 @@
 # - perform a fast Gaussian approximation to the posterior, and
 # - make and visualize spatial probability predictions on a grid.
 #
+# Written out, the model is
+# ```math
+# u \sim \mathcal{GP}\big(0, k_\nu(\cdot, \cdot)\big), \quad
+# y_i \mid u \sim \mathrm{Bernoulli}\big(p(s_i)\big), \quad
+# \mathrm{logit}\, p(s_i) = u(s_i),
+# ```
+# where $u$ is a Matérn field with smoothness $\nu$, approximated by a GMRF
+# through its SPDE representation, and $s_i$ are the observed locations. The
+# logit link keeps $p(s_i) \in (0, 1)$ without constraining $u$.
+#
+# The posterior $p(u \mid y)$ is not Gaussian, because the Bernoulli likelihood
+# is not conjugate to the prior. We approximate it by the Gaussian centred at the
+# posterior mode with matching curvature — the Laplace approximation — which
+# `gaussian_approximation` computes.
+#
 # We use the well-known Lansing Woods dataset (tree locations with species marks).
 # The dataset here provides three columns: `x`, `y`, `is_hickory` (0/1). We try a
 # local file first so the tutorial works offline; otherwise we download a small RDA
