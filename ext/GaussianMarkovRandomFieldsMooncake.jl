@@ -1,13 +1,15 @@
 module GaussianMarkovRandomFieldsMooncake
 
 using GaussianMarkovRandomFields
-using GaussianMarkovRandomFields: ∇ₓ_neg_log_posterior, hermdiff
+using GaussianMarkovRandomFields: ∇ₓ_neg_log_posterior, hermdiff,
+    _logdet_cov_impl, _selinv_diag_impl, _selinv_impl, _backward_solve_impl
 using Statistics: mean
 using Mooncake
 using Mooncake: @is_primitive, @mooncake_overlay, MinimalCtx, CoDual, NoRData, NoFData, primal, tangent, fdata, zero_tangent
 using MooncakeSparse
 using SparseArrays: nonzeros, SparseMatrixCSC
 using LinearAlgebra: Hermitian
+using LinearSolve: CHOLMODFactorization
 using CliqueTrees.Multifrontal: ChordalCholesky
 
 @is_primitive MinimalCtx Tuple{Type{ChordalGMRF}, AbstractVector, SparseMatrixCSC}
@@ -121,5 +123,7 @@ end
 
     return ChordalGMRF(x_corrected, Q_post, posterior.F)
 end
+
+include("mooncake/unsupported.jl")
 
 end
