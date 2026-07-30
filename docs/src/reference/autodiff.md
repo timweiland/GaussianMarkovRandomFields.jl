@@ -15,7 +15,7 @@ hyperparameters and forward mode is the right shape for the problem.
 Reach for a reverse-mode backend when the parameter vector is large enough that
 forward mode's per-parameter cost dominates:
 
-- **Zygote.jl** for `GMRF` and `WorkspaceGMRF` priors.
+- **Zygote.jl** for `GMRF`, `ChordalGMRF` and `WorkspaceGMRF` priors.
 - **Mooncake.jl** for `ChordalGMRF`, which is what the chordal backend is built
   for.
 - **Enzyme.jl** for `logpdf`, `logdetcov` and `gaussian_approximation` on `GMRF`
@@ -34,13 +34,13 @@ Mooncake is not in the table; it is covered by the package's own
 
 | Operation | ForwardDiff | Zygote | Enzyme |
 |---|---|---|---|
-| `logdetcov(::GMRF)` | ✅ | ❌ raises | ✅ |
+| `logdetcov(::GMRF)` | ✅ | ✅ | ✅ |
 | `logpdf(::GMRF, z)` | ✅ | ✅ | ✅ |
 | `gaussian_approximation` (`GMRF`) | ✅ | ✅ | ✅ |
-| `logdetcov(::ChordalGMRF)` | ✅ | ❌ raises | ⚠️ unreliable |
-| `logpdf(::ChordalGMRF, z)` | ✅ | ⚠️ **silently wrong** | ⚠️ unreliable |
-| `gaussian_approximation` (`ChordalGMRF`) | ✅ | ⚠️ **silently wrong** | ⚠️ unreliable |
-| `logdetcov(::WorkspaceGMRF)` | ✅ | ❌ raises | ✅ |
+| `logdetcov(::ChordalGMRF)` | ✅ | ✅ | ⚠️ unreliable |
+| `logpdf(::ChordalGMRF, z)` | ✅ | ✅ | ⚠️ unreliable |
+| `gaussian_approximation` (`ChordalGMRF`) | ✅ | ✅ | ⚠️ unreliable |
+| `logdetcov(::WorkspaceGMRF)` | ✅ | ✅ | ✅ |
 | `logpdf(::WorkspaceGMRF, z)` | ✅ | ✅ | ✅ |
 | `gaussian_approximation` (`WorkspaceGMRF`) | ✅ | ✅ | ✅ |
 | `logpdf(::ConstrainedGMRF, z)` | ✅ | ✅ | Julia 1.12 only |
@@ -54,13 +54,20 @@ be supported raise rather than falling back to differentiating a sparse
 factorization, because doing the latter produces wrong gradients that no test
 without a finite-difference reference would catch.
 
-## Known-incorrect combination
+## Zygote
 
-!!! warning "Zygote + ChordalGMRF"
-    Differentiating `logpdf` or `gaussian_approximation` through a `ChordalGMRF`
-    with Zygote returns gradients that are wrong by roughly 10–15% when the
-    precision matrix has Cholesky fill-in, with no error and no warning. Use
-    Mooncake (the backend `ChordalGMRF` is designed for) or ForwardDiff instead.
+Zygote works through the package's ChainRules rules, which cover `logdetcov`,
+`logpdf` and `gaussian_approximation` for every GMRF type in the table. Each one
+uses a selected inverse rather than differentiating the sparse factorization.
+
+`var` and `std` raise an `ArgumentError`. Their tangent needs entries of the
+covariance *outside* the precision's sparsity pattern, which selected inversion
+does not compute, so there is no cheap rule to write and one built on `selinv`
+would be silently wrong. Use ForwardDiff for marginal-variance gradients.
+
+The contrast with `logdetcov` is the whole reason that one is supported:
+`∂logdetcov/∂Q = -Q⁻¹` is only ever contracted against a `dQ` living on `Q`'s own
+pattern, so the selected inverse is exact there, whereas `∂diag(Q⁻¹)/∂Q` is not.
 
 ## Enzyme
 
