@@ -17,7 +17,7 @@ forward mode's per-parameter cost dominates:
 
 - **Zygote.jl** for `GMRF`, `ChordalGMRF` and `WorkspaceGMRF` priors.
 - **Mooncake.jl** for `ChordalGMRF`, which is what the chordal backend is built
-  for.
+  for. It refuses a plain `GMRF`.
 - **Enzyme.jl** for `logpdf`, `logdetcov` and `gaussian_approximation` on `GMRF`
   and `WorkspaceGMRF`. Fast, but it has the most caveats: no `var`/`std`,
   constrained models need Julia 1.12, and `ChordalGMRF` is unreliable.
@@ -29,8 +29,9 @@ has genuine fill-in — the Enzyme column on Julia 1.10.10, 1.11.9 and 1.12.6, t
 other columns on 1.12.6. The fill-in matters: a tridiagonal AR(1) precision has
 none, and several of the failures below are invisible with one.
 
-Mooncake is not in the table; it is covered by the package's own
-`ChordalGMRF` test suite rather than by this audit.
+Mooncake is not in the table; it supports `ChordalGMRF` and refuses the
+CHOLMOD-backed types, so a column would be mostly ❌. See the Mooncake section
+below.
 
 | Operation | ForwardDiff | Zygote | Enzyme |
 |---|---|---|---|
@@ -68,6 +69,38 @@ would be silently wrong. Use ForwardDiff for marginal-variance gradients.
 The contrast with `logdetcov` is the whole reason that one is supported:
 `∂logdetcov/∂Q = -Q⁻¹` is only ever contracted against a `dQ` living on `Q`'s own
 pattern, so the selected inverse is exact there, whereas `∂diag(Q⁻¹)/∂Q` is not.
+
+## Mooncake
+
+Mooncake is built for `ChordalGMRF`, whose multifrontal factorization is pure
+Julia and therefore something Mooncake can traverse. `logdetcov`, `logpdf` and
+`gaussian_approximation` are all checked against finite differences on that type.
+
+A `GMRF` backed by CHOLMOD — what the two-argument constructor resolves to for a
+general sparse precision, and what `ConstrainedGMRF` wraps — raises an
+`ArgumentError` instead. Mooncake reaches CHOLMOD only as pointers into memory
+owned by a C library; left to itself it dereferences one and the process dies
+with a segmentation fault, taking the rest of the session down with it. Refusing
+is the only alternative, since there is nothing there for a generic AD to
+traverse.
+
+`WorkspaceGMRF` needs no such guard. It owns its `CHOLMOD.Factor` directly rather
+than through the shared solver entry points, and Mooncake gives up on it with a
+`TypeError` well before reaching the factor.
+
+The refusal fires on the operations that actually consume the factorization —
+`logdetcov` (and so `logpdf`), `var`/`std`, `selinv` and `backward_solve` — not
+on the presence of a `GMRF`. The parts that need no factorization, such as the
+mean or the quadratic form behind `sqmahal`, still differentiate normally.
+
+As with Enzyme, the *error type* can vary. Where this package's guard refuses
+first you get the `ArgumentError` naming the operation; where Mooncake's own rule
+compiler gives up earlier you get a `MooncakeRuleCompilationError` instead. Julia
+1.10 takes the second route for precision matrices denser than a tridiagonal one,
+and for `rand` on every version. Both are loud failures — never a wrong number,
+and, which is the point of the guard, never a crash.
+
+Use `ChordalGMRF` under Mooncake, or ForwardDiff, which handles every GMRF type.
 
 ## Enzyme
 
