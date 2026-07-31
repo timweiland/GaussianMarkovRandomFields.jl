@@ -11,6 +11,26 @@
 # - A BYM latent field = Besag (structured spatial) + IID (unstructured spatial).
 # - Fixed effects (intercept + one covariate).
 #
+# In symbols, for district $i$ with observed count $y_i$ and expected count $E_i$,
+# ```math
+# y_i \mid \eta_i \sim \mathrm{Poisson}\big(E_i \exp(\eta_i)\big), \quad
+# \eta_i = \beta_0 + \beta_1 \mathrm{AFF}_i + u_i + v_i,
+# ```
+# so $\exp(\eta_i)$ is the relative risk and the offset $\log E_i$ enters the
+# linear predictor with a fixed coefficient of one. The two random effects split
+# the residual variation by whether it respects the map:
+# ```math
+# u_i \mid u_{-i} \sim \mathcal{N}\!\left(\frac{1}{n_i}\sum_{j \sim i} u_j,\;
+# \frac{1}{\tau_u n_i}\right), \qquad
+# v_i \sim \mathcal{N}(0, \tau_v^{-1}),
+# ```
+# where $j \sim i$ denotes the neighbours of district $i$ and $n_i$ their number.
+# The Besag component $u$ borrows strength from adjacent districts; the IID
+# component $v$ absorbs district-specific over-dispersion that has no spatial
+# pattern. The Besag precision is singular — it constrains only differences
+# between neighbours, not the overall level — so it carries a sum-to-zero
+# constraint, which the intercept $\beta_0$ then supplies.
+#
 # What you’ll learn:
 # - Build a polygon contiguity adjacency matrix directly from a shapefile.
 # - Compose a BYM + fixed‑effects model via the formula interface.

@@ -94,16 +94,16 @@ x_st_kron_posterior = linear_condition(x_st_kron; A = A_all, Q_ϵ = Q_noise, y =
 # Let's look at the dynamics of this posterior.
 using CairoMakie
 CairoMakie.activate!()
-plot(x_st_kron_posterior, t_initial_idx)
+plot(x_st_kron_posterior, t_initial_idx; axis = (; xlabel = "x", ylabel = "concentration", title = "Separable prior, t = 0"))
 
 #
-plot(x_st_kron_posterior, Nₜ ÷ 3)
+plot(x_st_kron_posterior, Nₜ ÷ 3; axis = (; xlabel = "x", ylabel = "concentration", title = "Separable prior, t = T/3"))
 
 #
-plot(x_st_kron_posterior, 2 * Nₜ ÷ 3)
+plot(x_st_kron_posterior, 2 * Nₜ ÷ 3; axis = (; xlabel = "x", ylabel = "concentration", title = "Separable prior, t = 2T/3"))
 
 #
-plot(x_st_kron_posterior, Nₜ)
+plot(x_st_kron_posterior, Nₜ; axis = (; xlabel = "x", ylabel = "concentration", title = "Separable prior, t = T"))
 
 # We see that the effect of our observations effectively just "dies off" over
 # time.
@@ -139,16 +139,16 @@ x_adv_diff = discretize(adv_diff_spde, disc, ts)
 x_adv_diff_posterior = linear_condition(x_adv_diff; A = A_all, Q_ϵ = Q_noise, y = ys_all)
 
 # Let's look at the dynamics of this posterior.
-plot(x_adv_diff_posterior, t_initial_idx)
+plot(x_adv_diff_posterior, t_initial_idx; axis = (; xlabel = "x", ylabel = "concentration", title = "Advection-diffusion, t = 0"))
 
 #
-plot(x_adv_diff_posterior, Nₜ ÷ 3)
+plot(x_adv_diff_posterior, Nₜ ÷ 3; axis = (; xlabel = "x", ylabel = "concentration", title = "Advection-diffusion, t = T/3"))
 
 #
-plot(x_adv_diff_posterior, 2 * Nₜ ÷ 3)
+plot(x_adv_diff_posterior, 2 * Nₜ ÷ 3; axis = (; xlabel = "x", ylabel = "concentration", title = "Advection-diffusion, t = 2T/3"))
 
 #
-plot(x_adv_diff_posterior, Nₜ)
+plot(x_adv_diff_posterior, Nₜ; axis = (; xlabel = "x", ylabel = "concentration", title = "Advection-diffusion, t = T"))
 
 # This looks much more reasonable!
 # We see that the pollutant is transported downstream over time, and the

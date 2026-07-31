@@ -7,7 +7,7 @@
 #
 # ```math
 # x_0 \sim \mathcal{N}(\mu_0, \Lambda_0), \\
-# x_{t+1} = \phi x_t + \varepsilon_t, \quad \varepsilon \sim \mathcal{N}(0, \Lambda).
+# x_{t+1} = \phi x_t + \varepsilon_t, \quad \varepsilon_t \sim \mathcal{N}(0, \Lambda).
 # ```
 #
 # The latter equation is equivalent to the likelihood
@@ -74,7 +74,10 @@ x = GMRF(μ, Q, LinearSolve.LDLtFactorization())
 # `Distributions.jl`. We can get its mean, marginal standard deviation, and
 # draw samples as follows:
 using Plots, Distributions
-plot(xs, mean(x), ribbon = 1.96 * std(x), label = "Mean + std")
+plot(
+    xs, mean(x), ribbon = 1.96 * std(x), label = "Mean ± 1.96 std",
+    xlabel = "t", ylabel = "x", title = "AR(1) prior"
+)
 for i in 1:3
     plot!(xs, rand(x), fillalpha = 0.3, linestyle = :dash, label = "Sample")
 end
@@ -104,7 +107,10 @@ obs_lik = obs_model(y; σ = 0.001) # Concrete likelihood
 x_cond = gaussian_approximation(x, obs_lik)
 
 # Indeed, our model now conforms to these observations:
-plot(xs, mean(x_cond), ribbon = 1.96 * std(x_cond), label = "Mean + std")
+plot(
+    xs, mean(x_cond), ribbon = 1.96 * std(x_cond), label = "Mean ± 1.96 std",
+    xlabel = "t", ylabel = "x", title = "AR(1) posterior given observations"
+)
 for i in 1:3
     plot!(xs, rand(x_cond), fillalpha = 0.3, linestyle = :dash, label = "Sample")
 end
@@ -154,7 +160,10 @@ end
 x_car = generate_car_model(W, 0.99; μ = μ, σ = 0.001)
 
 # Let's take our CAR for a test drive:
-plot(xs, mean(x_car), ribbon = 1.96 * std(x_car), label = "Mean + std")
+plot(
+    xs, mean(x_car), ribbon = 1.96 * std(x_car), label = "Mean ± 1.96 std",
+    xlabel = "t", ylabel = "x", title = "CAR prior"
+)
 for i in 1:3
     plot!(xs, rand(x_car), fillalpha = 0.3, linestyle = :dash, label = "Sample")
 end
@@ -167,7 +176,10 @@ obs_model = ExponentialFamily(Distributions.Normal, indices = [1, 26, 76])
 y = [1.0, 0.85, 0.71]
 obs_lik = obs_model(y; σ = 0.001)
 x_car_cond = gaussian_approximation(x_car, obs_lik)
-plot(xs, mean(x_car_cond), ribbon = 1.96 * std(x_car_cond), label = "Mean + std")
+plot(
+    xs, mean(x_car_cond), ribbon = 1.96 * std(x_car_cond), label = "Mean ± 1.96 std",
+    xlabel = "t", ylabel = "x", title = "CAR posterior given observations"
+)
 for i in 1:3
     plot!(xs, rand(x_car_cond), fillalpha = 0.3, linestyle = :dash, label = "Sample")
 end
