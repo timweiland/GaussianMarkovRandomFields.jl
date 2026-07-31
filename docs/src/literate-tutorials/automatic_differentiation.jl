@@ -7,11 +7,23 @@
 # gradients through GMRF operations to optimize hyperparameters like precision parameters,
 # mean field values, and other model parameters.
 #
-# We currently support AD via Zygote, Enzyme, and ForwardDiff.
+# Four backends have hand-written rules in this package: ForwardDiff, Zygote,
+# Enzyme and Mooncake. Which of them works depends on the operation and on the
+# GMRF type -- differentiating through a sparse Cholesky factorization is not
+# something a general-purpose AD system can do unaided, so each supported
+# combination rests on a rule written for it. ForwardDiff is the only backend
+# that covers every type and every operation, and it is what we use below.
 #
-# !!! note "AD may break"
-#     Our current AD rules cover the most common workflows with GMRFs.
-#     Less common operations may or may not work.
+# The [Automatic Differentiation Reference](@ref) has the full support matrix,
+# checked against finite differences. Combinations without a rule raise an
+# explicit error rather than returning a wrong number.
+#
+# !!! note "A different question: your own likelihoods"
+#     The matrix above is about differentiating *through* the package's own
+#     linear algebra. When you supply your own log-likelihood to
+#     `AutoDiffObservationModel`, the package differentiates your function
+#     through [DifferentiationInterface.jl](https://github.com/JuliaDiff/DifferentiationInterface.jl)
+#     instead, and any DI-compatible backend works there -- no rule needed.
 #     If one of these backends breaks for your use case, please open an issue.
 
 # ## Basic Setup
