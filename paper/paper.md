@@ -27,7 +27,7 @@ Inference under these models scales particularly favorably due to the use of spa
 This computational efficiency has led to their widespread adoption across various statistical applications [@lindgrenSPDEApproachGaussian2022].
 
 `GaussianMarkovRandomFields.jl` provides a flexible and efficient Julia implementation of GMRFs.
-The package includes various methods to construct GMRFs, including the SPDE approach [@lindgrenExplicitLinkGaussian2011], and provides efficient, customizable routines for GMRF computations.
+The package includes various methods to construct GMRFs, including the stochastic partial differential equation (SPDE) approach [@lindgrenExplicitLinkGaussian2011], and provides efficient, customizable routines for GMRF computations.
 It is designed to be intuitive to use for rapid prototyping, yet sufficiently flexible to empower expert users to solve advanced problems.
 As such, it is suitable for both research and teaching in spatial statistics and Bayesian modeling.
 
@@ -47,12 +47,12 @@ For large-scale applications, the package provides efficient marginal variance c
 \autoref{fig:bernoulli} demonstrates this capability on a spatial binary classification task.
 Automatic differentiation support via ForwardDiff.jl [@revels2016forward] and Enzyme.jl [@moses2020enzyme] enables gradient-based optimization and inference methods, making the package compatible with modern probabilistic programming frameworks including Turing.jl [@ge2018turing].
 
-![Spatial binary classification of tree species in the Lansing Woods dataset using a Matérn latent field with Bernoulli observations. Points show observed trees: \textcolor{red}{hickory} and \textcolor{blue}{other species}. The heatmap shows predicted probabilities, demonstrating the package's support for non-Gaussian likelihoods through efficient Gaussian approximation.\label{fig:bernoulli}](bernoulli_classification.pdf){ width=80% }
+![Spatial binary classification of tree species in the Lansing Woods dataset [@gerrard1969lansing; @baddeley2015spatstat] using a Matérn latent field with Bernoulli observations. Points show observed trees: \textcolor{red}{hickory (circles)} and \textcolor{blue}{other species (diamonds)}. The heatmap shows predicted probabilities, demonstrating the package's support for non-Gaussian likelihoods through efficient Gaussian approximation.\label{fig:bernoulli}](bernoulli_classification.pdf){ width=80% }
 
 # State of the Field
 
 Implementations of GMRF-based inference have historically centered on R.
-R-INLA [@rueApproximateBayesianInference2009] provides comprehensive support for latent Gaussian models through integrated nested Laplace approximations, but its model library is curated and custom extensions require low-level C implementation.
+R-INLA [@rueApproximateBayesianInference2009] provides comprehensive support for latent Gaussian models through integrated nested Laplace approximations, but its model library is curated, and custom extensions require low-level C implementation.
 The inlabru package [@bachl2019inlabru] adds a flexible modeling interface for non-linear predictors while remaining tied to R-INLA's computational backend.
 The rSPDE package [@bolin2025rspde] supports fractional SPDE models with non-integer smoothness.
 Template Model Builder (TMB) [@kristensen2016tmb] supports Laplace approximation and gradient-based inference over latent Gaussian models via C++ templates, but requires users to write C++ for their models.
