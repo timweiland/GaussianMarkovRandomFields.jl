@@ -24,6 +24,9 @@ everything else will make more sense afterwards.
   processes and SPDEs that makes this efficient.
 - [Spatiotemporal Modelling with SPDEs](@ref) models a pollutant spreading
   through a river over time, on a 1D toy domain.
+- [Modelling on manifolds](@ref) leaves flat Euclidean space behind: it builds a
+  Matérn field on a sphere from a surface mesh, verifies it against the exact
+  solution, and lets an advection–diffusion field rotate around the globe.
 - [Boundary Conditions for SPDEs](@ref) explains why the default boundary
   behaviour of an SPDE discretization is often not what you want, and what to do
   about it.

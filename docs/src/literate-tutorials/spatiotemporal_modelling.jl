@@ -122,7 +122,7 @@ plot(x_st_kron_posterior, Nₜ; axis = (; xlabel = "x", ylabel = "concentration"
 # Concretely, we are going to consider an advection-diffusion SPDE as presented
 # in [Clarotto2024](@cite).
 adv_diff_spde = AdvectionDiffusionSPDE{1}(
-    γ = [-0.6],
+    γ = [0.6],
     H = 0.1 * sparse(I, (1, 1)),
     τ = 0.1,
     α = 2 // 1,

@@ -20,9 +20,11 @@ function MaternModel(discretization::F; smoothness::S, alg = CHOLMODFactorizatio
     # Assemble the κ-independent FEM matrices once; reused on every precision_matrix call.
     C, G = assemble_matern_C_G(discretization)
     # Precompute the κ-invariant structural precision pattern (#183); every
-    # precision_matrix call is padded to it.
-    D = ndim(discretization)
-    α_val = Integer(smoothness_to_ν(smoothness, D) + D // 2)
+    # precision_matrix call is padded to it. The statistical dimension is the
+    # intrinsic (manifold) dimension, which differs from ndim for embedded
+    # meshes such as a triangulated sphere in 3D.
+    d = intrinsic_dim(discretization)
+    α_val = Integer(smoothness_to_ν(smoothness, d) + d // 2)
     Q_pattern = _matern_structural_pattern(
         G, discretization.constraint_handler, discretization.constraint_noise, α_val
     )
@@ -106,8 +108,8 @@ end
 
 function precision_matrix(model::MaternModel{F, S}; τ::Real, range::Real, kwargs...) where {F, S}
     _validate_matern_parameters(; τ = τ, range = range)
-    D = ndim(model.discretization)
-    ν = smoothness_to_ν(model.smoothness, D)
+    d = intrinsic_dim(model.discretization)
+    ν = smoothness_to_ν(model.smoothness, d)
     κ = range_to_κ(range, ν)
     (; C, G, Q_pattern) = model.fem_matrices
     Q_unscaled = matern_precision_only(model.discretization, model.smoothness, κ, C, G)
