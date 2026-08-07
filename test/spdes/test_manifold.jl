@@ -80,7 +80,7 @@ end
 
     @testset "discretize(MaternSPDE{2}) agrees with MaternModel" begin
         spde = MaternSPDE{2}(range = 0.5, smoothness = 0)
-        x = discretize(spde, disc)
+        x = GaussianMarkovRandomFields.discretize(spde, disc)
         Q_spde = to_matrix(precision_map(x))
         model = MaternModel(disc; smoothness = 0)
         Q_model = precision_matrix(model; τ = 1.0, range = 0.5)
@@ -88,8 +88,8 @@ end
     end
 
     @testset "SPDE dimension must match the intrinsic dimension" begin
-        @test_throws ArgumentError discretize(MaternSPDE{3}(range = 0.5, smoothness = 0), disc)
-        @test_throws ArgumentError discretize(
+        @test_throws ArgumentError GaussianMarkovRandomFields.discretize(MaternSPDE{3}(range = 0.5, smoothness = 0), disc)
+        @test_throws ArgumentError GaussianMarkovRandomFields.discretize(
             AdvectionDiffusionSPDE{3}(γ = [0.0, 0.0, 0.0]), disc, range(0.0, 1.0, length = 3)
         )
     end
@@ -98,12 +98,12 @@ end
         spde_bad = MaternSPDE{2}(
             range = 0.5, smoothness = 0, diffusion_factor = [1.0 0.0; 0.0 2.0]
         )
-        @test_throws ArgumentError discretize(spde_bad, disc)
+        @test_throws ArgumentError GaussianMarkovRandomFields.discretize(spde_bad, disc)
         # ... but a uniform scaling is expanded automatically
         spde_ok = MaternSPDE{2}(
             range = 0.5, smoothness = 0, diffusion_factor = 0.5 * Matrix(I, 2, 2)
         )
-        x = discretize(spde_ok, disc)
+        x = GaussianMarkovRandomFields.discretize(spde_ok, disc)
         @test size(to_matrix(precision_map(x))) == (ndofs(disc), ndofs(disc))
     end
 
@@ -138,7 +138,7 @@ end
         spde = AdvectionDiffusionSPDE{2}(
             κ = 0.1, α = 1 // 1, H = sparse(0.01 * I, 2, 2), γ = wind, τ = 0.1
         )
-        X = discretize(spde, disc, ts)
+        X = GaussianMarkovRandomFields.discretize(spde, disc, ts)
         @test length(mean(X)) == ndofs(disc) * length(ts)
 
         # Observe a bump on the equator at the initial time; the posterior
@@ -157,7 +157,7 @@ end
         @test abs(drift) < 0.5
 
         # Constant advection vectors must be given in embedding coordinates
-        X_const = discretize(
+        X_const = GaussianMarkovRandomFields.discretize(
             AdvectionDiffusionSPDE{2}(
                 κ = 0.1, α = 1 // 1, H = sparse(0.01 * I, 2, 2),
                 γ = [0.5, 0.0, 0.0], τ = 0.1,
@@ -167,6 +167,6 @@ end
         @test length(mean(X_const)) == ndofs(disc) * length(ts)
 
         # Streamline diffusion is not available for velocity *fields*
-        @test_throws ArgumentError discretize(spde, disc, ts; streamline_diffusion = true)
+        @test_throws ArgumentError GaussianMarkovRandomFields.discretize(spde, disc, ts; streamline_diffusion = true)
     end
 end
