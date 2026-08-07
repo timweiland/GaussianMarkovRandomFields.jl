@@ -18,10 +18,10 @@
 #
 # In this tutorial, we model data on the unit sphere. What it takes:
 #
-# 1. A surface mesh of the sphere, which we build with Gmsh.
-# 2. A `FEMDiscretization` on that mesh — the elements are two-dimensional
-#    triangles, but their nodes have three-dimensional coordinates.
-# 3. That's it. `MaternModel` and friends work as usual from there.
+# - A surface mesh of the sphere, which we build with Gmsh.
+# - A `FEMDiscretization` on that mesh — the elements are two-dimensional
+#   triangles, but their nodes have three-dimensional coordinates.
+# - That's it. `MaternModel` and friends work as usual from there.
 #
 # ## Meshing the sphere
 # We use Gmsh's OpenCASCADE kernel to create a sphere and mesh its surface
@@ -313,8 +313,8 @@ fig
 #
 # Two things to keep in mind:
 #
-# 1. Hyperparameters are measured in *geodesic* units of the manifold — for
-#    the Earth, remember to work on a sphere of the appropriate radius (or
-#    rescale your ranges).
-# 2. The `σ² = 1` variance normalization is exact in Euclidean space and
-#    slightly approximate on curved manifolds, as we quantified above.
+# - Hyperparameters are measured in *geodesic* units of the manifold — for
+#   the Earth, remember to work on a sphere of the appropriate radius (or
+#   rescale your ranges).
+# - The `σ² = 1` variance normalization is exact in Euclidean space and
+#   slightly approximate on curved manifolds, as we quantified above.
