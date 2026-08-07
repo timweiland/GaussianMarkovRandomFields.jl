@@ -18,7 +18,7 @@ using GaussianMarkovRandomFields:
     _process_constraint, _ones_pattern
 
 import GaussianMarkovRandomFields:
-    ndim, evaluation_matrix, node_selection_matrix,
+    ndim, intrinsic_dim, evaluation_matrix, node_selection_matrix,
     derivative_matrices, second_derivative_matrices,
     assemble_mass_matrix, assemble_diffusion_matrix, assemble_advection_matrix,
     lump_matrix, assemble_streamline_diffusion_matrix, apply_soft_constraints!,
@@ -51,7 +51,7 @@ using Ferrite: Grid, Interpolation, QuadratureRule, DofHandler, ConstraintHandle
     CellValues, CellIterator, CellCache, PointEvalHandler,
     Lagrange, RefLine, RefTriangle, Vec, ⊗,
     add!, close!, dof_range, celldofs, getcoordinates, getnbasefunctions,
-    getnquadpoints, getdetJdV, shape_value, shape_gradient,
+    getnquadpoints, getdetJdV, shape_value, shape_gradient, spatial_coordinate,
     reference_shape_value, reference_shape_gradient, gradient, hessian,
     start_assemble, assemble!, apply!, allocate_matrix,
     generate_grid

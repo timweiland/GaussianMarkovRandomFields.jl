@@ -114,6 +114,7 @@ end
         Be::SparseMatrixCSC,
         cellvalues::CellValues;
         advection_velocity = 1,
+        cell_coords = nothing,
     )
 
 Assemble the advection matrix `Be` for the given cell values.
@@ -121,13 +122,22 @@ Assemble the advection matrix `Be` for the given cell values.
 # Arguments
 - `Be::SparseMatrixCSC`: The advection matrix.
 - `cellvalues::CellValues`: Ferrite cell values.
-- `advection_velocity=1`: The advection velocity.
+- `advection_velocity=1`: The advection velocity. Either a constant, or a
+  function of the spatial coordinate returning a velocity vector; in the
+  latter case `cell_coords` must be passed.
+- `cell_coords=nothing`: The coordinates of the current cell (from
+  `getcoordinates`), required to evaluate a position-dependent velocity at the
+  quadrature points.
 """
 function assemble_advection_matrix(
         Be::SparseMatrixCSC,
         cellvalues::CellValues;
         advection_velocity = 1,
+        cell_coords = nothing,
     )
+    if advection_velocity isa Function && cell_coords === nothing
+        throw(ArgumentError("cell_coords is required for a position-dependent advection velocity"))
+    end
     n_basefuncs = getnbasefunctions(cellvalues)
     # Reset to 0
     fill!(Be, 0.0)
@@ -135,14 +145,23 @@ function assemble_advection_matrix(
     for q_point in 1:getnquadpoints(cellvalues)
         # Get the quadrature weight
         dΩ = getdetJdV(cellvalues, q_point)
+        γ = if advection_velocity isa Function
+            x = spatial_coordinate(cellvalues, q_point, cell_coords)
+            v = advection_velocity(x)
+            v isa Vec ? v : Vec(v...)
+        else
+            advection_velocity
+        end
         # Loop over test shape functions
         for i in 1:n_basefuncs
-            ∇δu = shape_gradient(cellvalues, q_point, i)
+            δu = shape_value(cellvalues, q_point, i)
             # Loop over trial shape functions
             for j in 1:n_basefuncs
-                u = shape_value(cellvalues, q_point, j)
-                # Add contribution to Ke
-                Be[i, j] += (advection_velocity ⋅ ∇δu ⋅ u) * dΩ
+                ∇u = shape_gradient(cellvalues, q_point, j)
+                # Advective form (γ ⋅ ∇u, δu): the derivative acts on the
+                # trial function, so the operator transports along +γ as in
+                # the AdvectionDiffusionSPDE definition.
+                Be[i, j] += (γ ⋅ ∇u ⋅ δu) * dΩ
             end
         end
     end

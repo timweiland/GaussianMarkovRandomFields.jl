@@ -10,12 +10,16 @@ Spatiotemporal advection-diffusion SPDE as proposed in [Clarotto2024](@cite):
 ```
 
 where Z(t, s) is spatiotemporal noise which may be colored.
+
+The advection velocity `γ` is either a constant vector or a function of the
+spatial coordinate returning a velocity vector, e.g. a tangential velocity
+field on an embedded manifold.
 """
 function AdvectionDiffusionSPDE{D}(;
         κ::Real = 1.0,
         α::Rational = 1 // 1,
         H::AbstractMatrix = sparse(I, (D, D)),
-        γ::AbstractVector,
+        γ::Union{AbstractVector, Function},
         c::Real = 1.0,
         τ::Real = 1.0,
         spatial_spde = MaternSPDE{D}(κ = κ, smoothness = 1, diffusion_factor = H),
@@ -62,7 +66,10 @@ function assemble_M_G_B_matrices(
         Ferrite.reinit!(cellvalues, cell)
         Me = assemble_mass_matrix(Me, cellvalues, interpolation; lumping = true)
         Ge = assemble_diffusion_matrix(Ge, cellvalues; diffusion_factor = H)
-        Be = assemble_advection_matrix(Be, cellvalues; advection_velocity = γ)
+        Be = assemble_advection_matrix(
+            Be, cellvalues;
+            advection_velocity = γ, cell_coords = getcoordinates(cell),
+        )
         if streamline_diffusion
             cell_volume = 0.0
             for qp in 1:getnquadpoints(cellvalues)
@@ -95,23 +102,38 @@ mesh element size.
 """
 function discretize(
         spde::AdvectionDiffusionSPDE{D},
-        discretization::FEMDiscretization{D},
+        discretization::FEMDiscretization,
         ts::AbstractVector{Float64};
         streamline_diffusion = false,
         mean_offset = 0.0,
         prescribed_noise = 1.0e-4,
         algorithm = nothing,
     ) where {D}
-    if norm(spde.γ) ≈ 0.0
+    d = intrinsic_dim(discretization)
+    D == d || throw(
+        ArgumentError(
+            "AdvectionDiffusionSPDE{$D} cannot be discretized on a mesh of " *
+                "intrinsic (manifold) dimension $d. The SPDE dimension must match " *
+                "the element dimension: e.g. use AdvectionDiffusionSPDE{2} on a " *
+                "surface mesh embedded in 3D."
+        )
+    )
+    if spde.γ isa Function
+        # No global velocity magnitude available for the streamline-diffusion
+        # normalization; not supported (yet) for position-dependent velocities.
+        streamline_diffusion && throw(
+            ArgumentError(
+                "streamline_diffusion is not supported for position-dependent " *
+                    "advection velocities."
+            )
+        )
+    elseif norm(spde.γ) ≈ 0.0
         # SD changes nothing for zero advection
         streamline_diffusion = false
     end
 
-    cellvalues = CellValues(
-        discretization.quadrature_rule,
-        discretization.interpolation,
-        discretization.geom_interpolation,
-    )
+    cellvalues = assembly_cellvalues(discretization)
+    H = _embedding_diffusion_factor(spde.H, ndim(discretization))
     ch = discretization.constraint_handler
     if streamline_diffusion
         M, G, B, S = assemble_M_G_B_matrices(
@@ -119,7 +141,7 @@ function discretize(
             discretization.dof_handler,
             ch,
             discretization.interpolation,
-            spde.H,
+            H,
             spde.γ;
             streamline_diffusion = true,
         )
@@ -129,7 +151,7 @@ function discretize(
             discretization.dof_handler,
             ch,
             discretization.interpolation,
-            spde.H,
+            H,
             spde.γ,
         )
     end

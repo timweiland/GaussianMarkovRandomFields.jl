@@ -24,6 +24,7 @@ makedocs(
                 "tutorials/autoregressive_models.md",
                 "tutorials/spatial_modelling_spdes.md",
                 "tutorials/spatiotemporal_modelling.md",
+                "tutorials/modelling_on_manifolds.md",
                 "tutorials/boundary_conditions.md",
             ],
             "Non-Gaussian observations" => [

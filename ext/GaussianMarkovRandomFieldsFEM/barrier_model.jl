@@ -33,10 +33,12 @@ whose ids are in `barrier_cells`). Returns a `NamedTuple`:
   pattern of the precision `Aᵀ C̃⁻¹ A`; every assembly is padded to it.
 """
 function assemble_barrier_fem(disc::FEMDiscretization{D}, barrier_cells) where {D}
-    D == 2 || throw(ArgumentError("BarrierModel currently supports 2D discretizations only"))
+    intrinsic_dim(disc) == 2 || throw(
+        ArgumentError("BarrierModel currently supports discretizations of 2D manifolds only")
+    )
     dh = disc.dof_handler
     interpolation = disc.interpolation
-    cellvalues = CellValues(disc.quadrature_rule, interpolation, disc.geom_interpolation)
+    cellvalues = assembly_cellvalues(disc)
     Tv = Float64
     barrier_set = Set{Int}(barrier_cells)
 

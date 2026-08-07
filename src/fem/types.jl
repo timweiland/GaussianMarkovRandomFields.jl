@@ -48,6 +48,20 @@ Typically `ndim(f) == 1`, `2`, or `3`.
 """
 ndim(::FEMDiscretization{D}) where {D} = D
 
+"""
+    intrinsic_dim(f::FEMDiscretization)
+
+Return the intrinsic (manifold) dimension of the discretization, i.e. the
+reference dimension of its elements. For flat meshes this equals [`ndim`](@ref);
+for meshes embedded in a higher-dimensional space it is smaller, e.g. `2` for a
+surface mesh in 3D such as a triangulated sphere.
+
+This is the dimension `d` that enters the statistical properties of an SPDE
+discretized on the mesh (e.g. `α = ν + d/2` and the variance normalization of
+the Matérn SPDE). The implementation lives in the FEM extension.
+"""
+function intrinsic_dim end
+
 # Generic `discretize` fallback over (::SPDE, ::FEMDiscretization). Lives here
 # rather than next to the SPDE abstract type because it references
 # `FEMDiscretization`, which is only defined after `spdes/spde.jl` runs.
@@ -79,12 +93,16 @@ ndim(::MaternSPDE{D}) where {D} = D
 
 Spatiotemporal advection-diffusion SPDE. Validated constructors live in the
 `GaussianMarkovRandomFieldsFEM` extension.
+
+The advection velocity `γ` is either a constant vector or a function of the
+spatial coordinate returning a velocity vector (for spatially varying flows,
+e.g. tangential velocity fields on embedded manifolds).
 """
 struct AdvectionDiffusionSPDE{D} <: SPDE
     κ::Real
     α::Rational
     H::AbstractMatrix
-    γ::AbstractVector
+    γ::Union{AbstractVector, Function}
     c::Real
     τ::Real
     spatial_spde::SPDE
