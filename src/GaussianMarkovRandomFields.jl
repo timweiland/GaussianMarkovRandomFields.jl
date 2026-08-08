@@ -16,6 +16,7 @@ include("workspace/workspace.jl")
 # Per-factor engine cache + the structured prior GMRF type. Loaded after
 # workspace/ (factor engines are GMRFWorkspaces) and before latent_models/.
 include("structured/prior_cache.jl")
+include("structured/structured_constraints.jl")
 include("structured/structured_prior_gmrf.jl")
 include("autoregressive/autoregressive.jl")
 include("spdes/spdes.jl")

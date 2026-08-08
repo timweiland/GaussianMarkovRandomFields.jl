@@ -145,7 +145,9 @@ function _workspace_constrain_with_matrix(step, ws::GMRFWorkspace, A)
     n = length(step)
     A_tilde_T = Matrix{eltype(step)}(undef, n, m)
     for i in 1:m
-        A_tilde_T[:, i] .= workspace_solve(ws, A[i, :])
+        # `Vector` materializes sparse constraint rows — solver backends
+        # expect dense right-hand sides.
+        A_tilde_T[:, i] .= workspace_solve(ws, Vector(A[i, :]))
     end
     L_c = cholesky(Symmetric(A * A_tilde_T))
     return step - A_tilde_T * (L_c \ (A * step))
@@ -322,8 +324,10 @@ function gaussian_approximation(
         verbose::Bool = false
     )
     x_init = x0 === nothing ? copy(mean(prior)) : copy(x0)
+    constraints_nt = prior.constraints === nothing ? nothing :
+        (A = prior.constraints.A, e = prior.constraints.e)
     return _workspace_newton_loop(
-        prior, prior.workspace, obs_lik, nothing, x_init;
+        prior, prior.workspace, obs_lik, constraints_nt, x_init;
         max_iter, mean_change_tol, newton_dec_tol,
         adaptive_stepsize, max_linesearch_iter, verbose,
     )

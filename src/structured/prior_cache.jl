@@ -255,3 +255,63 @@ function _structured_selinv_diag(Q::AbstractMatrix, c::SparseOpCache)
     _leaf_sync!(c.engine, Qs.nzval)
     return selinv_diag(c.engine)
 end
+
+# --- Structured sampling transform ---
+#
+# Sampling x ~ N(0, Q⁻¹) needs any M with M Mᵀ = Q⁻¹. Each factor engine
+# provides M_j via `backward_solve` (whatever fill-reducing permutation the
+# backend uses, M_j M_jᵀ = Q_j⁻¹ holds), and
+# (⊗ⱼ M_j)(⊗ⱼ M_j)ᵀ = ⊗ⱼ Q_j⁻¹ = Q⁻¹ — so a Kronecker sample is k rounds of
+# factor-level triangular solves via the classic mode-rotation vec-trick:
+# apply the currently-fastest factor columnwise, then rotate that mode to
+# slowest; after k rounds the layout is restored.
+
+"""
+    _structured_sample_transform(z, Q, cache) -> Vector
+
+Apply `M` with `M Mᵀ = Q⁻¹` to `z`, using the cached factor engines.
+`z + mean` is then a sample from the structured prior.
+"""
+function _structured_sample_transform(
+        z::AbstractVector, K::AbstractKroneckerProduct, c::KroneckerOpCache
+    )
+    factors = _structure_factors(K)
+    x = z
+    for j in length(factors):-1:1
+        X = _leaf_sample_apply(c.factors[j], factors[j], reshape(x, c.dims[j], :))
+        x = vec(transpose(X))
+    end
+    return x
+end
+
+function _structured_sample_transform(
+        z::AbstractVector, B::BlockDiagonalPrecision, c::BlockDiagOpCache
+    )
+    x = similar(z, Float64)
+    for (b, block) in enumerate(B.blocks)
+        rng = (B.offsets[b] + 1):B.offsets[b + 1]
+        x[rng] = _structured_sample_transform(z[rng], block, c.blocks[b])
+    end
+    return x
+end
+
+_structured_sample_transform(z::AbstractVector, D::Diagonal, ::DiagonalOpCache) =
+    z ./ sqrt.(D.diag)
+
+function _structured_sample_transform(z::AbstractVector, Q::AbstractMatrix, c::SparseOpCache)
+    return vec(_leaf_sample_apply(c, Q, reshape(z, length(z), 1)))
+end
+
+function _leaf_sample_apply(c::SparseOpCache, Q::AbstractMatrix, Z::AbstractMatrix)
+    Qs = _ensure_sparse(Q)
+    _same_pattern(Qs, c.engine.Q) ||
+        throw(ArgumentError("factor pattern changed since the structured prior cache was built."))
+    _leaf_sync!(c.engine, Qs.nzval)
+    X = Matrix{Float64}(undef, size(Z))
+    for col in axes(Z, 2)
+        X[:, col] = backward_solve(c.engine, Z[:, col])
+    end
+    return X
+end
+
+_leaf_sample_apply(::DiagonalOpCache, D::Diagonal, Z::AbstractMatrix) = Z ./ sqrt.(D.diag)

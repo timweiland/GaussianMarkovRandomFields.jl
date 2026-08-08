@@ -1,4 +1,5 @@
 using GaussianMarkovRandomFields
+using GaussianMarkovRandomFields: has_constraints
 using Distributions
 using LinearAlgebra
 using SparseArrays
@@ -80,12 +81,12 @@ const AbstractKroneckerProduct = GMRFs.AbstractKroneckerProduct
         @test ws.prior_cache === cache1
         @test logdetcov(prior2) ≈ -logdet(Matrix(Q_factor(2.0, 0.3, 1.1, 0.2)))
 
-        # Constrained separable prior falls back to the materialized path
+        # Constrained separable prior stays structured (factor-form Rue–Held)
         sep_con = SeparableModel(RW1Model(n_t), space_model)
         θr = (τ_rw1 = 1.0, τ_ar1 = 0.9, ρ_ar1 = 0.4)
         ws3 = make_workspace(sep_con; θr...)
         prior_con = sep_con(ws3; θr...)
-        @test prior_con isa WorkspaceGMRF
+        @test prior_con isa StructuredPriorGMRF
         @test has_constraints(prior_con)
     end
 
@@ -208,6 +209,183 @@ const AbstractKroneckerProduct = GMRFs.AbstractKroneckerProduct
         prior = sep(ws; θ...)
         @test_throws ArgumentError ChainRulesCore.rrule(logdetcov, prior)
         @test_throws ArgumentError ChainRulesCore.rrule(logpdf, prior, randn(length(prior)))
+    end
+
+    @testset "Sampling (chol(⊗) = ⊗chol)" begin
+        sep_u = SeparableModel(AR1Model(4), AR1Model(3))
+        θu = (τ_ar1 = 1.2, ρ_ar1 = 0.6, τ_ar1_2 = 0.8, ρ_ar1_2 = 0.3)
+        ws_u = make_workspace(sep_u; θu...)
+        prior_u = sep_u(ws_u; θu...)
+        Qu = Matrix(GMRFs._ensure_sparse(precision_matrix(sep_u; θu...)))
+        # The sampling transform M satisfies M Mᵀ = Q⁻¹ exactly — build M by
+        # applying it to unit vectors.
+        M = hcat(
+            [
+                GMRFs._structured_sample_transform(
+                        Vector{Float64}(I(12)[:, k]), prior_u.structure, prior_u.cache.op
+                    ) for k in 1:12
+            ]...
+        )
+        @test M * M' ≈ inv(Qu) rtol = 1.0e-8
+        @test all(isfinite, rand(prior_u))
+
+        comb_u = CombinedModel(sep_u, IIDModel(3))
+        θcu = (
+            τ_ar1_separable = 1.2, ρ_ar1_separable = 0.6, τ_ar1_2_separable = 0.8,
+            ρ_ar1_2_separable = 0.3, τ_iid = 2.0,
+        )
+        ws_cu = make_workspace(comb_u; θcu...)
+        prior_cu = comb_u(ws_cu; θcu...)
+        Qcu = Matrix(GMRFs._ensure_sparse(precision_matrix(comb_u; θcu...)))
+        Mc = hcat(
+            [
+                GMRFs._structured_sample_transform(
+                        Vector{Float64}(I(15)[:, k]), prior_cu.structure, prior_cu.cache.op
+                    ) for k in 1:15
+            ]...
+        )
+        @test Mc * Mc' ≈ inv(Qcu) rtol = 1.0e-8
+    end
+end
+
+@testset "Structured prior — constraints (factor-form Rue–Held)" begin
+    Random.seed!(20260809)
+
+    n_t, n_s = 6, 8
+    N = n_t * n_s
+    rw = RW1Model(n_t)
+    space_model = AR1Model(n_s)
+    sep = SeparableModel(rw, space_model)
+    θ = (τ_rw1 = 1.3, τ_ar1 = 0.9, ρ_ar1 = 0.4)
+
+    Q_ref = kron(
+        sparse(precision_matrix(rw; τ = θ.τ_rw1)),
+        sparse(precision_matrix(space_model; τ = θ.τ_ar1, ρ = θ.ρ_ar1)),
+    )
+
+    @testset "Constraint detection" begin
+        kc = GMRFs._prior_constraints(sep; θ...)
+        @test kc isa GMRFs.KroneckerConstraint
+        A_ref, e_ref = constraints(sep; θ...)
+        @test kc.A ≈ sparse(A_ref)
+        @test kc.e ≈ e_ref
+
+        # ≥2 constrained components: falls back to the general constraint path
+        sep2c = SeparableModel(RW1Model(5), RW1Model(6))
+        @test !(GMRFs._prior_constraints(sep2c; τ_rw1 = 1.0, τ_rw1_2 = 2.0) isa GMRFs.KroneckerConstraint)
+    end
+
+    @testset "Constrained prior vs ConstraintInfo reference" begin
+        kc = GMRFs._prior_constraints(sep; θ...)
+        ws = make_workspace(sep; θ...)
+        prior = sep(ws; θ...)
+        @test prior isa StructuredPriorGMRF && has_constraints(prior)
+        @test ws.loaded_version == 0  # prior never claimed the joint workspace
+
+        ws_ref = GMRFWorkspace(Q_ref)
+        prior_ref = GMRFs._instantiate_prior(Q_ref, zeros(N), (kc.A, kc.e), ws_ref)
+
+        # Compare at a constraint-satisfying point
+        x = randn(N)
+        Ad = Matrix(kc.A)
+        x_c = x - Ad' * ((Ad * Ad') \ (Ad * x))
+        @test logpdf(prior, x_c) ≈ logpdf(prior_ref, x_c) rtol = 1.0e-10
+        @test mean(prior) ≈ mean(prior_ref)
+        @test var(prior) ≈ var(prior_ref) rtol = 1.0e-8
+        # Base logdetcov excludes the Rue–Held correction (same as WorkspaceGMRF)
+        @test logdetcov(prior) ≈ -logdet(Matrix(Q_ref))
         @test_throws ArgumentError rand(prior)
+    end
+
+    @testset "Constrained GA + ForwardDiff gradient vs materialized flow" begin
+        kc = GMRFs._prior_constraints(sep; θ...)
+        ws = make_workspace(sep; θ...)
+        ws_ref = GMRFWorkspace(Q_ref)
+
+        obs_model = ExponentialFamily(Distributions.Poisson)
+        y = PoissonObservations(rand(0:4, N))
+        obs_lik = obs_model(y)
+
+        prior = sep(ws; θ...)
+        prior_ref = GMRFs._instantiate_prior(Q_ref, zeros(N), (kc.A, kc.e), ws_ref)
+        post = gaussian_approximation(prior, obs_lik)
+        post_ref = gaussian_approximation(prior_ref, obs_lik)
+        @test post isa WorkspaceGMRF && has_constraints(post)
+        @test mean(post) ≈ mean(post_ref) rtol = 1.0e-6
+        @test precision_matrix(post) ≈ precision_matrix(post_ref)
+        @test norm(kc.A * mean(post)) < 1.0e-6
+
+        # Latte-shaped constrained objective (logpdf-based prior term)
+        function obj(v, structured::Bool)
+            θd = (τ_rw1 = v[1], τ_ar1 = v[2], ρ_ar1 = v[3])
+            p = if structured
+                sep(ws; θd...)
+            else
+                T = eltype(v)
+                Qj = kron(
+                    sparse(precision_matrix(rw; τ = v[1])),
+                    sparse(precision_matrix(space_model; τ = v[2], ρ = v[3])),
+                )
+                GMRFs._instantiate_prior(Qj, zeros(T, N), (kc.A, kc.e), ws_ref)
+            end
+            g = gaussian_approximation(p, obs_lik)
+            xs = mean(g)
+            return logpdf(p, xs) + loglik(xs, obs_lik) - logpdf(g, xs)
+        end
+        v0 = [1.3, 0.9, 0.4]
+        @test obj(v0, true) ≈ obj(v0, false) rtol = 1.0e-8
+        g_s = ForwardDiff.gradient(v -> obj(v, true), v0)
+        g_m = ForwardDiff.gradient(v -> obj(v, false), v0)
+        @test g_s ≈ g_m rtol = 1.0e-6
+    end
+
+    @testset "CombinedModel block embedding" begin
+        iid = IIDModel(5)
+        comb = CombinedModel(sep, iid)
+        θc = (
+            τ_rw1_separable = 1.3, τ_ar1_separable = 0.9, ρ_ar1_separable = 0.4,
+            τ_iid = 2.0,
+        )
+        kcc = GMRFs._prior_constraints(comb; θc...)
+        @test kcc isa GMRFs.KroneckerConstraint
+        Ac_ref, ec_ref = constraints(comb; θc...)
+        @test Matrix(kcc.A) ≈ Matrix(Ac_ref)
+
+        wsc = make_workspace(comb; θc...)
+        prior_c = comb(wsc; θc...)
+        @test prior_c isa StructuredPriorGMRF && has_constraints(prior_c)
+
+        Qc_ref = blockdiag(Q_ref, sparse(2.0 * I, 5, 5))
+        wsc_ref = GMRFWorkspace(Qc_ref)
+        prior_c_ref = GMRFs._instantiate_prior(Qc_ref, zeros(N + 5), (kcc.A, kcc.e), wsc_ref)
+        xc = randn(N + 5)
+        Acd = Matrix(kcc.A)
+        xc_c = xc - Acd' * ((Acd * Acd') \ (Acd * xc))
+        @test logpdf(prior_c, xc_c) ≈ logpdf(prior_c_ref, xc_c) rtol = 1.0e-10
+        @test var(prior_c) ≈ var(prior_c_ref) rtol = 1.0e-8
+    end
+
+    @testset "Multi-row component constraints (RW2)" begin
+        rw2 = RW2Model(7)
+        sep2 = SeparableModel(rw2, AR1Model(4))
+        θ2 = (τ_rw2 = 1.0, τ_ar1 = 1.1, ρ_ar1 = 0.3)
+        kc2 = GMRFs._prior_constraints(sep2; θ2...)
+        @test kc2 isa GMRFs.KroneckerConstraint
+        @test size(kc2.A_i, 1) == 2
+
+        ws4 = make_workspace(sep2; θ2...)
+        prior2 = sep2(ws4; θ2...)
+        @test prior2 isa StructuredPriorGMRF && has_constraints(prior2)
+        Q2_ref = kron(
+            sparse(precision_matrix(rw2; τ = 1.0)),
+            sparse(precision_matrix(AR1Model(4); τ = 1.1, ρ = 0.3)),
+        )
+        ws4_ref = GMRFWorkspace(Q2_ref)
+        prior2_ref = GMRFs._instantiate_prior(Q2_ref, zeros(28), (kc2.A, kc2.e), ws4_ref)
+        x2 = randn(28)
+        A2d = Matrix(kc2.A)
+        x2_c = x2 - A2d' * ((A2d * A2d') \ (A2d * x2))
+        @test logpdf(prior2, x2_c) ≈ logpdf(prior2_ref, x2_c) rtol = 1.0e-8
+        @test var(prior2) ≈ var(prior2_ref) rtol = 1.0e-6
     end
 end

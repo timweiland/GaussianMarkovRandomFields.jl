@@ -37,6 +37,12 @@ gmrf = st_model(τ_rw1=1.0, τ_besag=2.0)
 
 # Notes
 - Requires at least 2 components
+- `precision_matrix` returns a *lazy* `Kronecker.KroneckerProduct` (an
+  `AbstractMatrix`; use `sparse` to materialize). Structure is exploited for
+  log-determinants, variances, sampling, and AD in the workspace path — see
+  [`StructuredPriorGMRF`](@ref). The only exception is the
+  ≥2-constrained-component case below, which returns a materialized sparse
+  matrix because the joint regularization destroys the Kronecker structure.
 - Component ordering: rightmost component varies fastest (e.g., space in time×space model)
 - Follows R-INLA convention: Q = Q_group ⊗ Q_main
 - Hyperparameters are suffixed with component model names (e.g., `τ_rw1`, `τ_besag`)
@@ -250,6 +256,25 @@ end
 # materializing and factorizing the joint precision.
 prior_logdensity(model::SeparableModel, x::AbstractVector; θ...) =
     _structured_prior_logdensity(model, x; θ...)
+
+# Structured constraint detection: with exactly one constrained component the
+# full constraint is `I_before ⊗ A_i ⊗ I_after` — full row rank whenever the
+# component's constraint block is, so the dense redundancy-removal QR of
+# `constraints(model)` is unnecessary and the Rue–Held corrections factorize.
+function _prior_constraints(model::SeparableModel; kwargs...)
+    comp_kwargs = _extract_component_kwargs(model, kwargs)
+    comp_cons = [constraints(comp; comp_kwargs[i]...) for (i, comp) in enumerate(model.components)]
+    idxs = findall(!isnothing, comp_cons)
+    isempty(idxs) && return nothing
+    length(idxs) == 1 || return constraints(model; kwargs...)
+
+    i = only(idxs)
+    A_i_raw, e_i = comp_cons[i]
+    A_i = sparse(A_i_raw)
+    dims = Int[length(c) for c in model.components]
+    A, e = _kron_expand_constraint(A_i, Vector{Float64}(e_i), i, dims)
+    return KroneckerConstraint(A, e, i, A_i, 1:prod(dims))
+end
 
 """
     _extract_component_kwargs(model::SeparableModel, kwargs)

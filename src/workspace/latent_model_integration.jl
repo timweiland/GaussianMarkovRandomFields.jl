@@ -160,7 +160,7 @@ prior = model(ws; τ=2.0, ρ=0.3)  # WorkspaceGMRF, numeric-only refactorization
 function (model::LatentModel)(ws::GMRFWorkspace; kwargs...)
     μ = mean(model; kwargs...)
     Q = precision_matrix(model; kwargs...)
-    constraint_info = constraints(model; kwargs...)
+    constraint_info = _prior_constraints(model; kwargs...)
     return _instantiate_prior(Q, μ, constraint_info, ws)
 end
 
@@ -176,6 +176,13 @@ function _instantiate_prior(Q::AbstractMatrix, μ, constraint_info, ws::GMRFWork
 
     update_precision!(ws, Q_for_ws)
 
+    # A structured constraint may reach this path when the precision itself
+    # was not structured (or via explicit fallback); use its materialized
+    # (A, e) system.
+    if constraint_info isa KroneckerConstraint
+        constraint_info = (constraint_info.A, constraint_info.e)
+    end
+
     if constraint_info === nothing
         return WorkspaceGMRF(μ, Q_for_ws, ws)
     else
@@ -184,20 +191,40 @@ function _instantiate_prior(Q::AbstractMatrix, μ, constraint_info, ws::GMRFWork
     end
 end
 
-# Structured path: the prior never touches the joint workspace.
+# Structured, unconstrained: the prior never touches the joint workspace.
 function _instantiate_prior(
         Q::Union{AbstractKroneckerProduct, BlockDiagonalPrecision},
-        μ, constraint_info, ws::GMRFWorkspace
+        μ, constraint_info::Nothing, ws::GMRFWorkspace
     )
-    # Constrained structured priors fall back to the materialized path for
-    # now: the constraint machinery (`ConstraintInfo`) needs joint solves at
-    # Q_prior. Structured constraint corrections are a planned follow-up.
-    constraint_info === nothing ||
-        return _instantiate_prior(_ensure_sparse(Q), μ, constraint_info, ws)
-
     cache = _get_or_build_prior_cache!(ws, Q)
     snapshot = _structured_snapshot(Q, cache, ws)
     return StructuredPriorGMRF(μ, Q, snapshot, ws, cache)
+end
+
+# Structured with a factor-decomposable constraint: keep the structured prior
+# and carry the Rue–Held corrections in factor form. Only the homogeneous
+# case (e = 0, μ = 0 — every intrinsic model in practice) is supported; the
+# general case falls back to the materialized path.
+function _instantiate_prior(
+        Q::Union{AbstractKroneckerProduct, BlockDiagonalPrecision},
+        μ, kc::KroneckerConstraint, ws::GMRFWorkspace
+    )
+    if !(all(iszero, kc.e) && all(iszero, μ))
+        return _instantiate_prior(_ensure_sparse(Q), μ, (kc.A, kc.e), ws)
+    end
+    cache = _get_or_build_prior_cache!(ws, Q)
+    snapshot = _structured_snapshot(Q, cache, ws)
+    cs = _resolve_constraints(Q, cache, kc)
+    return StructuredPriorGMRF(μ, Q, snapshot, ws, cache, cs)
+end
+
+# Structured with a general (materialized) constraint system: the
+# `ConstraintInfo` machinery needs joint solves at Q_prior, so materialize.
+function _instantiate_prior(
+        Q::Union{AbstractKroneckerProduct, BlockDiagonalPrecision},
+        μ, constraint_info::Tuple, ws::GMRFWorkspace
+    )
+    return _instantiate_prior(_ensure_sparse(Q), μ, constraint_info, ws)
 end
 
 # --- Helpers ---

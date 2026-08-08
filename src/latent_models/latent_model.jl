@@ -111,6 +111,18 @@ Mean vector of the Gaussian latent prior at hyperparameters `θ`.
 mean(model::LatentModel; kwargs...) = throw(MethodError(mean, (model,)))
 
 """
+    _prior_constraints(model::LatentModel; θ...)
+
+Constraint information for the workspace prior-instantiation path. The
+default is `constraints(model; θ...)`. Models with Kronecker-structured
+precisions override this to return a `KroneckerConstraint` when the
+constraint system admits a factor-level decomposition (exactly one
+constrained component), which both skips the dense redundancy-removal QR and
+enables factor-scale Rue–Held corrections on the structured prior.
+"""
+_prior_constraints(model::LatentModel; kwargs...) = constraints(model; kwargs...)
+
+"""
     (model::LatentModel)(; θ...) -> AbstractGMRF
 
 Materialise a Gaussian `LatentModel` at hyperparameters `θ`. Returns a

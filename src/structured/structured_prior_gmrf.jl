@@ -5,13 +5,12 @@ using Random
 export StructuredPriorGMRF
 
 """
-    StructuredPriorGMRF{T, QS, W} <: AbstractGMRF
+    StructuredPriorGMRF{T, QS, W, C} <: AbstractGMRF
 
 A Gaussian latent prior whose precision is carried in structured form
 (Kronecker product / block diagonal) alongside a sparse snapshot on the joint
 workspace pattern. Returned by `(model::LatentModel)(ws::GMRFWorkspace; θ...)`
-when the model's `precision_matrix` is structured and the model is
-unconstrained.
+when the model's `precision_matrix` is structured.
 
 Division of labor:
 
@@ -22,6 +21,9 @@ Division of labor:
 - **The posterior update** consumes the sparse `precision` snapshot (values
   on the workspace pattern) positionally in the Newton loop; the joint
   workspace's single factor slot holds only `Q_post`.
+- **Constraints** (single constrained component, homogeneous case) carry
+  their Rue–Held corrections in factor form too — no prior-side
+  `ConstraintInfo`, no joint solves, no dense redundancy-removal QR.
 
 Consequently, unlike a `WorkspaceGMRF` prior, a `StructuredPriorGMRF` never
 competes with the posterior for the joint factorization — the
@@ -36,20 +38,25 @@ prior-vs-posterior refactorization thrash cannot occur by construction.
 - `workspace`: The joint `GMRFWorkspace` — used only by
   `gaussian_approximation` to run the posterior Newton loop.
 - `cache`: Per-factor engines + scatter map (see `StructuredPriorCache`).
+- `constraints`: `nothing`, or a `StructuredPriorConstraints` with the
+  factor-form constraint state.
 """
 struct StructuredPriorGMRF{
         T <: Real, QS <: AbstractMatrix, W <: GMRFWorkspace,
+        C <: Union{Nothing, StructuredPriorConstraints},
     } <: AbstractGMRF{T, SparseMatrixCSC{T, Int}}
     mean::Vector{T}
     structure::QS
     precision::SparseMatrixCSC{T, Int}
     workspace::W
     cache::StructuredPriorCache
+    constraints::C
 end
 
 function StructuredPriorGMRF(
         mean::AbstractVector, structure::AbstractMatrix,
-        precision::SparseMatrixCSC, ws::GMRFWorkspace, cache::StructuredPriorCache
+        precision::SparseMatrixCSC, ws::GMRFWorkspace, cache::StructuredPriorCache,
+        constraints::Union{Nothing, StructuredPriorConstraints} = nothing
     )
     T = promote_type(eltype(mean), eltype(precision))
     mean_T = Vector{T}(mean)
@@ -58,15 +65,21 @@ function StructuredPriorGMRF(
             precision.m, precision.n, precision.colptr, precision.rowval,
             convert(Vector{T}, precision.nzval)
         )
-    return StructuredPriorGMRF{T, typeof(structure), typeof(ws)}(
-        mean_T, structure, precision_T, ws, cache
+    return StructuredPriorGMRF{T, typeof(structure), typeof(ws), typeof(constraints)}(
+        mean_T, structure, precision_T, ws, cache, constraints
     )
 end
+
+has_constraints(d::StructuredPriorGMRF) = d.constraints !== nothing
 
 # --- AbstractGMRF interface ---
 
 Base.length(d::StructuredPriorGMRF) = size(d.precision, 1)
+
+# Structured constraints are only resolved in the homogeneous case
+# (e = 0, μ = 0), where the constrained mean equals the unconstrained mean.
 mean(d::StructuredPriorGMRF) = d.mean
+
 precision_map(d::StructuredPriorGMRF) = d.precision
 precision_matrix(d::StructuredPriorGMRF) = d.precision
 
@@ -74,28 +87,48 @@ precision_matrix(d::StructuredPriorGMRF) = d.precision
     logdetcov(d::StructuredPriorGMRF)
 
 `log |Q⁻¹| = -log |Q|`, computed from structure (factor-level factorizations
-via the cached engines). Never touches the joint workspace.
+via the cached engines). Never touches the joint workspace. As for
+`WorkspaceGMRF`, this is the *base* log-determinant — the Rue–Held
+constraint correction is a separate term that `logpdf` adds on top.
 """
 logdetcov(d::StructuredPriorGMRF) = -_structured_logdet(d.structure, d.cache.op)
 
 function logpdf(d::StructuredPriorGMRF, z::AbstractVector)
     r = z - d.mean
     n = length(d)
-    return -0.5 * dot(r, d.precision, r) - 0.5 * logdetcov(d) - 0.5 * n * log(2π)
+    val = -0.5 * dot(r, d.precision, r) - 0.5 * logdetcov(d) - 0.5 * n * log(2π)
+    if d.constraints !== nothing
+        cs = d.constraints
+        constraint_residual = cs.A * z - cs.e
+        rel_error = norm(constraint_residual) / (norm(cs.A, Inf) * norm(z, Inf) + 1)
+        if rel_error > sqrt(eps())
+            @warn "Point does not satisfy constraints (relative residual: $(rel_error))" maxlog = 1
+        end
+        val += _constraint_logpdf_correction(cs)
+    end
+    return val
 end
 
-var(d::StructuredPriorGMRF) = _structured_selinv_diag(d.structure, d.cache.op)
+function var(d::StructuredPriorGMRF{T}) where {T}
+    σ_base = _structured_selinv_diag(d.structure, d.cache.op)
+    d.constraints === nothing && return σ_base
+    σ = σ_base - _constraint_var_correction(d.constraints, length(d))
+    σ .= max.(σ, zero(eltype(σ)))
+    return σ
+end
 
 std(d::StructuredPriorGMRF) = sqrt.(var(d))
 
 function _rand!(rng::AbstractRNG, d::StructuredPriorGMRF, x::AbstractVector)
-    throw(
+    d.constraints === nothing || throw(
         ArgumentError(
-            "Sampling from a StructuredPriorGMRF is not yet implemented. " *
-                "Materialize the prior for sampling, e.g. " *
-                "`GMRF(mean(d), sparse(d.precision))`."
+            "Sampling from a constrained StructuredPriorGMRF is not implemented yet. " *
+                "Materialize the prior for constrained sampling."
         )
     )
+    z = randn(rng, length(d))
+    x .= _structured_sample_transform(z, d.structure, d.cache.op) .+ d.mean
+    return x
 end
 
 # --- Reverse-mode guards ---
@@ -122,7 +155,8 @@ end
 # --- Display ---
 
 function Base.show(io::IO, d::StructuredPriorGMRF{T}) where {T}
-    return print(io, "StructuredPriorGMRF{$T}(n=$(length(d)), structure=$(_structure_summary(d.structure)))")
+    c_str = has_constraints(d) ? ", constraints=$(size(d.constraints.A, 1))" : ""
+    return print(io, "StructuredPriorGMRF{$T}(n=$(length(d)), structure=$(_structure_summary(d.structure))$(c_str))")
 end
 
 _structure_summary(K::AbstractKroneckerProduct) =
@@ -135,6 +169,9 @@ _structure_summary(A::AbstractMatrix) = string(size(A, 1))
 function Base.show(io::IO, ::MIME"text/plain", d::StructuredPriorGMRF{T}) where {T}
     println(io, "StructuredPriorGMRF{$T} with $(length(d)) variables")
     println(io, "  Structure: $(_structure_summary(d.structure))")
+    if has_constraints(d)
+        println(io, "  Constraints: $(size(d.constraints.A, 1))")
+    end
     return print(io, "  Backend: $(typeof(d.workspace.backend))")
 end
 # COV_EXCL_STOP
