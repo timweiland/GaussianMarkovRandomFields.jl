@@ -38,6 +38,32 @@ function ChainRulesCore.rrule(::Type{GMRF}, μ::AbstractVector, Q::Union{Abstrac
 end
 
 """
+    ChainRulesCore.rrule(::typeof(_ensure_sparse), A::SymTridiagonal)
+
+Structural pullback for the SymTridiagonal → SparseMatrixCSC conversion used
+by latent-model precision matrices (AR1, RW1). Generic AD lacks a usable rule
+for `sparse(::SymTridiagonal)`; here the cotangent is read off directly:
+`dv̄[i] = Q̄[i,i]` and `ev̄[i] = Q̄[i,i+1] + Q̄[i+1,i]` (each `ev[i]` is written
+to both symmetric positions, so its adjoint sums both).
+"""
+function ChainRulesCore.rrule(::typeof(_ensure_sparse), A::SymTridiagonal)
+    Q = _ensure_sparse(A)
+
+    function _ensure_sparse_symtridiagonal_pullback(Q̄)
+        Q̄ = unthunk(Q̄)
+        Q̄ isa AbstractZero && return NoTangent(), ZeroTangent()
+
+        n = size(A, 1)
+        dv̄ = [Q̄[i, i] for i in 1:n]
+        ev̄ = [Q̄[i, i + 1] + Q̄[i + 1, i] for i in 1:(n - 1)]
+        Ā = Tangent{typeof(A)}(; dv = dv̄, ev = ev̄)
+        return NoTangent(), Ā
+    end
+
+    return Q, _ensure_sparse_symtridiagonal_pullback
+end
+
+"""
     ChainRulesCore.rrule(::Type{GMRF}, μ::AbstractVector, Q::Union{AbstractMatrix, LinearMaps.LinearMap})
 
 Automatic differentiation rule for GMRF constructor with default algorithm.

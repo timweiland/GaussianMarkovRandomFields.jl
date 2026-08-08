@@ -1,5 +1,5 @@
 using GaussianMarkovRandomFields
-using Distributions: logpdf, Normal, Poisson
+using Distributions: logpdf, logdetcov, Normal, Poisson
 using SparseArrays
 using LinearAlgebra
 using Random
@@ -146,9 +146,8 @@ end
     # built once outside the differentiated function so its factorization
     # survives across calls.
     #
-    # Note: ForwardDiff-only for now. Zygote on the LatentModel-callable
-    # reuse path requires an rrule on the callable itself (separate gap;
-    # tracked as future work).
+    # The Zygote counterpart (via the `_evaluate_with_workspace` rrule) is
+    # covered in the "Zygote WorkspaceGMRF reuse path" testset below.
     Random.seed!(42)
     fd_backend = AutoFiniteDiff()
 
@@ -252,5 +251,127 @@ end
         rel_error = abs_error ./ (abs.(grad_fd) .+ 1.0e-10)
         @test maximum(abs_error) < 1.0e-3
         @test maximum(rel_error) < 5.0e-2
+    end
+end
+
+@testset "Zygote WorkspaceGMRF reuse path" begin
+    # Reverse-mode counterpart of the reuse-path tests above, enabled by the
+    # rrule shield on `_evaluate_with_workspace` (the positional core of
+    # `(model::LatentModel)(ws; θ...)`). One backward sweep covers any dim(θ),
+    # which is the shape downstream hyperparameter inference runs.
+    Random.seed!(42)
+    fd_backend = AutoFiniteDiff()
+
+    @testset "Unconstrained logpdf gradient" begin
+        k = 10
+        θ = [0.5, 0.1]
+        z = randn(k)
+        model = AR1Model(k)
+        ws = make_workspace(model; τ = 1.0, ρ = 0.3)
+
+        pipeline = θ -> logpdf(model(ws; τ = exp(θ[1]), ρ = tanh(θ[2])), z)
+
+        grad_zy = DifferentiationInterface.gradient(pipeline, AutoZygote(), θ)
+        grad_fwd = DifferentiationInterface.gradient(pipeline, AutoForwardDiff(), θ)
+        grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
+
+        @test maximum(abs.(grad_zy - grad_fd)) < 1.0e-4
+        # Both AD paths are exact up to floating point; pin them together.
+        @test grad_zy ≈ grad_fwd rtol = 1.0e-8
+    end
+
+    @testset "Unconstrained gaussian_approximation gradient" begin
+        k = 8
+        θ = [0.5, 0.0]
+        y = [2, 1, 3, 0, 4, 1, 2, 3]
+        x = zeros(k)
+        model = AR1Model(k)
+        ws = make_workspace(model; τ = 1.0, ρ = 0.3)
+        obs_lik = ExponentialFamily(Poisson)(PoissonObservations(y))
+
+        function pipeline(θ)
+            prior = model(ws; τ = exp(θ[1]), ρ = tanh(θ[2]))
+            posterior = gaussian_approximation(prior, obs_lik)
+            return logpdf(posterior, x)
+        end
+
+        grad_zy = DifferentiationInterface.gradient(pipeline, AutoZygote(), θ)
+        grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
+
+        abs_error = abs.(grad_zy - grad_fd)
+        rel_error = abs_error ./ (abs.(grad_fd) .+ 1.0e-10)
+        @test maximum(abs_error) < 2.0e-2
+        @test maximum(rel_error) < 5.0e-2
+    end
+
+    @testset "Constrained RW1 logpdf gradient" begin
+        k = 10
+        z = randn(k)
+        z .-= sum(z) / k
+        model = RW1Model(k)
+        ws = make_workspace(model; τ = 1.0)
+
+        pipeline = θ -> logpdf(model(ws; τ = exp(θ[1])), z)
+
+        θ = [0.3]
+        grad_zy = DifferentiationInterface.gradient(pipeline, AutoZygote(), θ)
+        grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
+
+        abs_error = abs.(grad_zy - grad_fd)
+        rel_error = abs_error ./ (abs.(grad_fd) .+ 1.0e-10)
+        @test maximum(abs_error) < 1.0e-4
+        @test maximum(rel_error) < 1.0e-2
+    end
+
+    @testset "Sparse design matrix GA" begin
+        # Exercises the obs-padded workspace pattern inside the callable's
+        # rrule (Q̄ arrives on a strictly larger pattern than the model's Q),
+        # and the sparse-A loghessian pullback inside workspace_ga_pullback —
+        # the path where thunked cotangents from ChainRules' sparse rules can
+        # reach `collect`, guarded by the explicit `unthunk`s there.
+        n = 8
+        m_obs = 10
+        Random.seed!(123)
+        A = sprand(m_obs, n, 0.6)
+        model = AR1Model(n)
+        ltom = LinearlyTransformedObservationModel(ExponentialFamily(Normal), A)
+        y_obs = randn(m_obs)
+        obs_lik = ltom(y_obs; σ = 0.5)
+        ws = GMRFWorkspace(model, obs_lik; τ = 1.0, ρ = 0.5)
+        x_eval = 0.1 .* randn(n)
+
+        function pipeline(θ)
+            prior = model(ws; τ = exp(θ[1]), ρ = tanh(θ[2]))
+            posterior = gaussian_approximation(prior, obs_lik)
+            return logpdf(posterior, x_eval)
+        end
+
+        θ = [0.5, 0.1]
+        grad_zy = DifferentiationInterface.gradient(pipeline, AutoZygote(), θ)
+        grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
+
+        abs_error = abs.(grad_zy - grad_fd)
+        rel_error = abs_error ./ (abs.(grad_fd) .+ 1.0e-10)
+        @test maximum(abs_error) < 2.0e-2
+        @test maximum(rel_error) < 5.0e-2
+    end
+
+    @testset "logdetcov gradient" begin
+        # The Laplace marginal-likelihood objective consumes the reuse path
+        # through logdetcov as well; only the precision tangent is nonzero.
+        k = 10
+        model = AR1Model(k)
+        ws = make_workspace(model; τ = 1.0, ρ = 0.3)
+
+        pipeline = θ -> logdetcov(model(ws; τ = exp(θ[1]), ρ = tanh(θ[2])))
+
+        θ = [0.5, 0.1]
+        grad_zy = DifferentiationInterface.gradient(pipeline, AutoZygote(), θ)
+        grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
+
+        abs_error = abs.(grad_zy - grad_fd)
+        rel_error = abs_error ./ (abs.(grad_fd) .+ 1.0e-10)
+        @test maximum(abs_error) < 1.0e-4
+        @test maximum(rel_error) < 1.0e-2
     end
 end
