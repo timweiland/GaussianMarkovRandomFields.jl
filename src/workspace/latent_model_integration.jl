@@ -136,9 +136,18 @@ end
 """
     (model::LatentModel)(ws::GMRFWorkspace; kwargs...)
 
-Create a `WorkspaceGMRF` from a `LatentModel` using an existing workspace.
-Computes fresh mean and precision from hyperparameters, updates the workspace,
-and returns a workspace-backed GMRF (with constraints embedded if the model has them).
+Materialize a workspace-backed prior from a `LatentModel` at hyperparameters
+`kwargs`, dispatching on the shape of the model's precision:
+
+- **Sparse precision** (the general case): returns a `WorkspaceGMRF` sharing
+  the joint workspace, exactly as before — values are padded onto the
+  workspace pattern and loaded via `update_precision!`.
+- **Structured precision** (lazy Kronecker / block diagonal) without
+  constraints: returns a [`StructuredPriorGMRF`](@ref) that carries the
+  structure plus a sparse snapshot on the workspace pattern. The joint
+  workspace is *not* touched — its factor slot remains dedicated to the
+  posterior, and prior log-determinants are computed at factor scale from
+  cached per-factor engines.
 
 # Example
 ```julia
@@ -151,8 +160,13 @@ prior = model(ws; τ=2.0, ρ=0.3)  # WorkspaceGMRF, numeric-only refactorization
 function (model::LatentModel)(ws::GMRFWorkspace; kwargs...)
     μ = mean(model; kwargs...)
     Q = precision_matrix(model; kwargs...)
-    Q_sparse = _ensure_sparse(Q)
     constraint_info = constraints(model; kwargs...)
+    return _instantiate_prior(Q, μ, constraint_info, ws)
+end
+
+# General (sparse) path: the prior shares the joint workspace.
+function _instantiate_prior(Q::AbstractMatrix, μ, constraint_info, ws::GMRFWorkspace)
+    Q_sparse = _ensure_sparse(Q)
 
     # Pad Q's values into the workspace's sparsity pattern with zeros at
     # observation-Hessian-only positions. Allows the joint-pattern workspace
@@ -168,6 +182,22 @@ function (model::LatentModel)(ws::GMRFWorkspace; kwargs...)
         A, e = constraint_info
         return WorkspaceGMRF(μ, Q_for_ws, ws, A, e)
     end
+end
+
+# Structured path: the prior never touches the joint workspace.
+function _instantiate_prior(
+        Q::Union{AbstractKroneckerProduct, BlockDiagonalPrecision},
+        μ, constraint_info, ws::GMRFWorkspace
+    )
+    # Constrained structured priors fall back to the materialized path for
+    # now: the constraint machinery (`ConstraintInfo`) needs joint solves at
+    # Q_prior. Structured constraint corrections are a planned follow-up.
+    constraint_info === nothing ||
+        return _instantiate_prior(_ensure_sparse(Q), μ, constraint_info, ws)
+
+    cache = _get_or_build_prior_cache!(ws, Q)
+    snapshot = _structured_snapshot(Q, cache, ws)
+    return StructuredPriorGMRF(μ, Q, snapshot, ws, cache)
 end
 
 # --- Helpers ---

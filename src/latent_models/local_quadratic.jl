@@ -77,6 +77,28 @@ override `prior_logdensity` with a direct, allocation-light evaluation of
 prior_logdensity(m::AbstractLatentPrior, x::AbstractVector; θ...) =
     local_quadratic(m, x; θ...).logp_ref
 
+"""
+    _structured_prior_logdensity(m::LatentModel, x::AbstractVector; θ...) -> Real
+
+`prior_logdensity` implementation for models whose `precision_matrix` may
+return a lazy structured type (Kronecker / block diagonal): when it does and
+the model is unconstrained, evaluate the Gaussian log-density directly —
+structured log-determinant (factor-scale factorizations) plus a lazy
+quadratic form — without materializing or factorizing the joint precision.
+Falls back to the default (`logpdf` of the materialized GMRF) otherwise.
+"""
+function _structured_prior_logdensity(m::LatentModel, x::AbstractVector; θ...)
+    Q = precision_matrix(m; θ...)
+    if _is_structured(Q) && constraints(m; θ...) === nothing
+        μ = mean(m; θ...)
+        r = x - μ
+        n = length(x)
+        return 0.5 * (_structured_logdet(Q) - n * log(2π)) -
+            0.5 * _structured_quadform(Q, r)
+    end
+    return local_quadratic(m, x; θ...).logp_ref
+end
+
 # --- IFT hooks (hyperparameter-gradient path) ---
 # The Implicit Function Theorem path needs the prior's latent gradient and Hessian evaluated at
 # a `ForwardDiff.Dual`-valued `x` (and Dual `θ`). Routing these through hooks — rather than

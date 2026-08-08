@@ -148,6 +148,14 @@ function precision_matrix(model::CombinedModel; kwargs...)
         push!(component_matrices, Q_comp)
     end
 
+    # If any component carries a structured precision (e.g. the Kronecker
+    # product of a SeparableModel component), return a lazy block diagonal so
+    # that the per-block structure survives composition. Otherwise keep the
+    # materialized sparse block diagonal.
+    if any(_is_structured, component_matrices)
+        return BlockDiagonalPrecision(Tuple(component_matrices))
+    end
+
     return _blockdiag(component_matrices...)
 end
 
@@ -209,6 +217,11 @@ end
 function model_name(::CombinedModel)
     return :combined
 end
+
+# Unconstrained combined priors with a structured precision (e.g. containing
+# a SeparableModel component) evaluate their exact log-density from structure.
+prior_logdensity(model::CombinedModel, x::AbstractVector; θ...) =
+    _structured_prior_logdensity(model, x; θ...)
 
 # Named component access: combined_model.matern, combined_model.iid, etc.
 

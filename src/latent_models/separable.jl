@@ -116,25 +116,27 @@ function precision_matrix(model::SeparableModel; kwargs...)
     # Compute precision matrices for each component
     Qs = [precision_matrix(comp; comp_kwargs[i]...) for (i, comp) in enumerate(model.components)]
 
-    # Kronecker product: Q1 ⊗ Q2
-    # This matches the mean vectorization (comp2 varying fastest)
-    Q = foldl(kron, Qs)
-
     # When multiple components are rank-deficient (have constraints), the individual
     # component regularizations (ε*I added by RW/Besag) get diluted through the
     # Kronecker product: (Q1 + εI) ⊗ (Q2 + εI) only provides ε²*I⊗I regularization
     # to the joint null space. Re-apply regularization so the constrained GMRF solver
-    # remains well-conditioned.
+    # remains well-conditioned. Adding εI destroys the Kronecker structure, so this
+    # branch (and only this branch) materializes to sparse.
     n_constrained = count(((i, comp),) -> constraints(comp; comp_kwargs[i]...) !== nothing, enumerate(model.components))
     if n_constrained >= 2
         regs = [comp.regularization for comp in model.components if hasfield(typeof(comp), :regularization)]
         if !isempty(regs)
+            Q = foldl(kron, map(_ensure_sparse, Qs))
             n = size(Q, 1)
-            Q = Q + maximum(regs) * sparse(I, n, n)
+            return Q + maximum(regs) * sparse(I, n, n)
         end
     end
 
-    return Q
+    # Lazy Kronecker product: Q1 ⊗ Q2 (matches the mean vectorization, comp2
+    # varying fastest). Structure survives until a lowering seam destroys it;
+    # log-determinants, quadratic forms, and AD tangents are answered at
+    # factor scale by dispatch on the structured type.
+    return kronecker(Qs...)
 end
 
 """
@@ -242,6 +244,12 @@ function constraints(model::SeparableModel; kwargs...)
     # Remove redundant constraints to ensure full row rank
     return _remove_redundant_constraints(A_combined, e_combined)
 end
+
+# Unconstrained separable priors evaluate their exact log-density from
+# structure (factor-scale log-determinants + lazy quadratic form) instead of
+# materializing and factorizing the joint precision.
+prior_logdensity(model::SeparableModel, x::AbstractVector; θ...) =
+    _structured_prior_logdensity(model, x; θ...)
 
 """
     _extract_component_kwargs(model::SeparableModel, kwargs)

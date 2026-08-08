@@ -122,6 +122,13 @@ function (model::LatentModel)(; kwargs...)
     Q = precision_matrix(model; kwargs...)
     constraint_info = constraints(model; kwargs...)
 
+    # A standalone GMRF owns a joint solver, so a lazy structured precision
+    # is lowered to sparse here — this is one of the two structure-destruction
+    # seams (the other being the workspace-pattern snapshot).
+    if _is_structured(Q)
+        Q = _ensure_sparse(Q)
+    end
+
     if constraint_info === nothing
         return GMRF(μ, Q, model.alg)
     else

@@ -301,6 +301,44 @@ function _workspace_build_result(prior, ws, obs_lik, constraints, x_final, diag_
     return _build_result(ws, x_final, constraints)
 end
 
+"""
+    gaussian_approximation(prior::StructuredPriorGMRF, obs_lik::ObservationLikelihood; kwargs...)
+
+Workspace-backed Gaussian approximation for a structured prior. Runs the same
+fixed-Q Newton loop as the `WorkspaceGMRF` path — the loop only consumes the
+prior's sparse snapshot values positionally — but the prior itself never
+loads into (or factorizes) the joint workspace: its factor slot is dedicated
+to `Q_post` throughout.
+"""
+function gaussian_approximation(
+        prior::StructuredPriorGMRF,
+        obs_lik::ObservationLikelihood;
+        x0::Union{Nothing, AbstractVector} = nothing,
+        max_iter::Int = 50,
+        mean_change_tol::Real = 1.0e-4,
+        newton_dec_tol::Real = 1.0e-5,
+        adaptive_stepsize::Bool = true,
+        max_linesearch_iter::Int = 10,
+        verbose::Bool = false
+    )
+    x_init = x0 === nothing ? copy(mean(prior)) : copy(x0)
+    return _workspace_newton_loop(
+        prior, prior.workspace, obs_lik, nothing, x_init;
+        max_iter, mean_change_tol, newton_dec_tol,
+        adaptive_stepsize, max_linesearch_iter, verbose,
+    )
+end
+
+# Reverse-mode guard: see the logpdf/logdetcov guards in
+# structured/structured_prior_gmrf.jl for rationale (fail loudly rather than
+# silently dropping the prior term).
+function ChainRulesCore.rrule(
+        ::typeof(gaussian_approximation), prior::StructuredPriorGMRF,
+        obs_lik::ObservationLikelihood; kwargs...
+    )
+    throw(ArgumentError(_STRUCTURED_REVERSE_AD_MSG))
+end
+
 # Conjugate Normal case: fall back to the existing linear_condition path
 function gaussian_approximation(
         prior::WorkspaceGMRF,

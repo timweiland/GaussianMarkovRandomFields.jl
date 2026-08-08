@@ -27,6 +27,11 @@ holds stale data, it transparently reloads and refactorizes.
 - `next_version`: Counter for assigning unique versions to `WorkspaceGMRF`s
 - `loaded_version`: Version of the `WorkspaceGMRF` whose data is currently factorized
     (0 means data was loaded directly via `update_precision!`, not by a `WorkspaceGMRF`)
+- `prior_cache`: `nothing`, or a `StructuredPriorCache` lazily installed by a
+    latent model with a structured (Kronecker / block-diagonal) precision. Holds
+    the per-factor engines and pattern maps that let the prior answer
+    log-determinant/selected-inverse queries without ever factorizing this
+    workspace's joint matrix.
 """
 mutable struct GMRFWorkspace{T <: Real, B <: WorkspaceBackend} <: AbstractLatentWorkspace
     Q::SparseMatrixCSC{T, Int}
@@ -47,6 +52,20 @@ mutable struct GMRFWorkspace{T <: Real, B <: WorkspaceBackend} <: AbstractLatent
     # Version tracking for WorkspaceGMRF coherence
     next_version::Int
     loaded_version::Int
+
+    # Structured-prior state (registry slot; see docstring). Typed `Any` to
+    # avoid a circular type dependency — access via `_get_prior_cache`.
+    prior_cache::Any
+
+    function GMRFWorkspace{T, B}(
+            Q, backend, rhs, solution, numeric_valid, selinv_valid,
+            logdet_valid, logdet_cache, next_version, loaded_version
+        ) where {T <: Real, B <: WorkspaceBackend}
+        return new{T, B}(
+            Q, backend, rhs, solution, numeric_valid, selinv_valid,
+            logdet_valid, logdet_cache, next_version, loaded_version, nothing
+        )
+    end
 end
 
 """
