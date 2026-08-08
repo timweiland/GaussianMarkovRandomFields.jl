@@ -287,7 +287,13 @@ function _component_param_keymap(model::SeparableModel, kwarg_keys)
     return keymap
 end
 
-ChainRulesCore.@non_differentiable _component_param_keymap(::SeparableModel, ::Any)
+# Hand-written rather than `@non_differentiable`: the macro also emits a
+# kwargs-forwarding `Core.kwcall` branch, which JET flags as a method error
+# because `_component_param_keymap` has no kwarg method.
+function ChainRulesCore.rrule(::typeof(_component_param_keymap), model::SeparableModel, kwarg_keys)
+    _component_param_keymap_pullback(::Any) = (NoTangent(), NoTangent(), NoTangent())
+    return _component_param_keymap(model, kwarg_keys), _component_param_keymap_pullback
+end
 
 """
     _extract_component_kwargs(model::SeparableModel, kwargs)
