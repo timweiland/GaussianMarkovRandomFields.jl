@@ -141,13 +141,10 @@ _workspace_constrain_step(step, ws::GMRFWorkspace, constraints::NamedTuple) =
     _workspace_constrain_with_matrix(step, ws, constraints.A)
 
 function _workspace_constrain_with_matrix(step, ws::GMRFWorkspace, A)
-    m = size(A, 1)
-    n = length(step)
-    A_tilde_T = Matrix{eltype(step)}(undef, n, m)
-    for i in 1:m
-        A_tilde_T[:, i] .= workspace_solve(ws, A[i, :])
-    end
-    L_c = cholesky(Symmetric(A * A_tilde_T))
+    # One blocked multi-RHS solve (BLAS-3 on CHOLMOD) instead of m column
+    # solves — this projection runs once per Newton iterate.
+    A_tilde_T = workspace_solve(ws, Matrix{Float64}(transpose(A)))
+    L_c = cholesky(Symmetric(Matrix(A * A_tilde_T)))
     return step - A_tilde_T * (L_c \ (A * step))
 end
 
@@ -299,6 +296,46 @@ function _workspace_build_result(prior, ws, obs_lik, constraints, x_final, diag_
     H_final = loghessian(x_final, obs_lik)
     _update_hessian!(ws, H_final, Q_p.nzval, diag_idx, sparse_hess_map)
     return _build_result(ws, x_final, constraints)
+end
+
+"""
+    gaussian_approximation(prior::StructuredPriorGMRF, obs_lik::ObservationLikelihood; kwargs...)
+
+Workspace-backed Gaussian approximation for a structured prior. Runs the same
+fixed-Q Newton loop as the `WorkspaceGMRF` path — the loop only consumes the
+prior's sparse snapshot values positionally — but the prior itself never
+loads into (or factorizes) the joint workspace: its factor slot is dedicated
+to `Q_post` throughout.
+"""
+function gaussian_approximation(
+        prior::StructuredPriorGMRF,
+        obs_lik::ObservationLikelihood;
+        x0::Union{Nothing, AbstractVector} = nothing,
+        max_iter::Int = 50,
+        mean_change_tol::Real = 1.0e-4,
+        newton_dec_tol::Real = 1.0e-5,
+        adaptive_stepsize::Bool = true,
+        max_linesearch_iter::Int = 10,
+        verbose::Bool = false
+    )
+    x_init = x0 === nothing ? copy(mean(prior)) : copy(x0)
+    constraints_nt = prior.constraints === nothing ? nothing :
+        (A = prior.constraints.A, e = prior.constraints.e)
+    return _workspace_newton_loop(
+        prior, prior.workspace, obs_lik, constraints_nt, x_init;
+        max_iter, mean_change_tol, newton_dec_tol,
+        adaptive_stepsize, max_linesearch_iter, verbose,
+    )
+end
+
+# Reverse-mode guard: see the logpdf/logdetcov guards in
+# structured/structured_prior_gmrf.jl for rationale (fail loudly rather than
+# silently dropping the prior term).
+function ChainRulesCore.rrule(
+        ::typeof(gaussian_approximation), prior::StructuredPriorGMRF,
+        obs_lik::ObservationLikelihood; kwargs...
+    )
+    throw(ArgumentError(_STRUCTURED_REVERSE_AD_MSG))
 end
 
 # Conjugate Normal case: fall back to the existing linear_condition path

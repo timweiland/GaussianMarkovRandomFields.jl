@@ -111,6 +111,18 @@ Mean vector of the Gaussian latent prior at hyperparameters `θ`.
 mean(model::LatentModel; kwargs...) = throw(MethodError(mean, (model,)))
 
 """
+    _prior_constraints(model::LatentModel; θ...)
+
+Constraint information for the workspace prior-instantiation path. The
+default is `constraints(model; θ...)`. Models with Kronecker-structured
+precisions override this to return a `KroneckerConstraint` when the
+constraint system admits a factor-level decomposition (exactly one
+constrained component), which both skips the dense redundancy-removal QR and
+enables factor-scale Rue–Held corrections on the structured prior.
+"""
+_prior_constraints(model::LatentModel; kwargs...) = constraints(model; kwargs...)
+
+"""
     (model::LatentModel)(; θ...) -> AbstractGMRF
 
 Materialise a Gaussian `LatentModel` at hyperparameters `θ`. Returns a
@@ -121,6 +133,13 @@ function (model::LatentModel)(; kwargs...)
     μ = mean(model; kwargs...)
     Q = precision_matrix(model; kwargs...)
     constraint_info = constraints(model; kwargs...)
+
+    # A standalone GMRF owns a joint solver, so a lazy structured precision
+    # is lowered to sparse here — this is one of the two structure-destruction
+    # seams (the other being the workspace-pattern snapshot).
+    if _is_structured(Q)
+        Q = _ensure_sparse(Q)
+    end
 
     if constraint_info === nothing
         return GMRF(μ, Q, model.alg)

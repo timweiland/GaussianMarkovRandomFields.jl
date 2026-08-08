@@ -3,12 +3,21 @@ module GaussianMarkovRandomFields
 include("typedefs.jl")
 include("utils/utils.jl")
 include("linear_maps/linear_maps.jl")
+# Lazy structured precision representations (Kronecker products, block
+# diagonals) + their lowering and scalar verbs. Loaded early: latent models
+# return these from `precision_matrix`.
+include("structured/structured_precision.jl")
 include("preconditioners/preconditioners.jl")
 include("gmrf.jl")
 include("chordal_gmrf.jl")
 include("metagmrf.jl")
 include("solvers/solvers.jl")
 include("workspace/workspace.jl")
+# Per-factor engine cache + the structured prior GMRF type. Loaded after
+# workspace/ (factor engines are GMRFWorkspaces) and before latent_models/.
+include("structured/prior_cache.jl")
+include("structured/structured_constraints.jl")
+include("structured/structured_prior_gmrf.jl")
 include("autoregressive/autoregressive.jl")
 include("spdes/spdes.jl")
 include("latent_models/latent_models.jl")

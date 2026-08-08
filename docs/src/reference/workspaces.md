@@ -74,6 +74,46 @@ end
     parallel. For actual parallel numeric factorization, build the pool
     with `CliqueTreesBackend` workspaces (pure Julia, no global state).
 
+## Structured priors
+
+Latent models whose precision carries algebraic structure return it lazily:
+`SeparableModel` yields a Kronecker product (`Kronecker.KroneckerProduct`),
+and `CombinedModel` yields a [`BlockDiagonalPrecision`](@ref) whenever a
+component is structured. In the workspace path, such models materialize as a
+[`StructuredPriorGMRF`](@ref) instead of a `WorkspaceGMRF`.
+
+The point is a strict division of labor between prior and posterior:
+
+- The **posterior** needs one materialized factorization (structure is
+  destroyed by `Q_post = Q_prior − H`), and the joint `GMRFWorkspace`'s
+  factor slot is dedicated to it.
+- The **prior**'s factorization-shaped questions are answered from structure
+  at *factor* scale, via small per-factor `GMRFWorkspace` engines cached on
+  the joint workspace: `logdet(⊗ᵢ Qᵢ) = Σᵢ (N/nᵢ) logdet(Qᵢ)`,
+  `diag((A ⊗ B)⁻¹) = diag(A⁻¹) ⊗ diag(B⁻¹)`, sampling via
+  `chol(A ⊗ B) = chol(A) ⊗ chol(B)`.
+
+The prior therefore never competes with the posterior for the joint
+factorization, and the per-evaluation joint factorization previously paid
+solely for `logdet(Q_prior)` disappears from hyperparameter-fitting loops.
+ForwardDiff hyperparameter gradients follow the same structure (factor-level
+selected-inverse tangents instead of a joint selected inverse).
+
+For a separable model with exactly one constrained component (the canonical
+intrinsic space-time setting, e.g. RW1 ⊗ spatial), the constraint
+`A = I ⊗ A_i ⊗ I` also decomposes: the Rue–Held log-density correction and
+the constrained marginal variances are computed from one small gram matrix
+`A_i Q_i⁻¹ A_iᵀ` on the constrained factor plus cached factor
+log-determinants — no prior-side `ConstraintInfo`, no joint constraint
+solves, and no dense redundancy-removal QR.
+
+```@docs
+StructuredPriorGMRF
+BlockDiagonalPrecision
+GaussianMarkovRandomFields.StructuredPriorCache
+GaussianMarkovRandomFields.KroneckerConstraint
+```
+
 ## Extension protocol
 
 Peer packages can provide their own workspace types for models that don't

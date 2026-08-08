@@ -19,6 +19,12 @@ Given k component models with sizes n₁, n₂, ..., nₖ:
 - Combined mean vector: μ = vcat(μ₁, μ₂, ..., μₖ)
 - Combined constraints: Block-diagonal constraint structure preserving individual constraints
 
+When any component's precision is structured (e.g. the Kronecker product of
+a [`SeparableModel`](@ref) component), `precision_matrix` returns a *lazy*
+[`BlockDiagonalPrecision`](@ref) so the per-block structure survives
+composition (see [`StructuredPriorGMRF`](@ref)); otherwise it returns the
+materialized sparse block diagonal as before.
+
 # Parameter Naming
 
 To avoid conflicts when multiple models have the same hyperparameters (e.g., multiple τ),
@@ -148,6 +154,14 @@ function precision_matrix(model::CombinedModel; kwargs...)
         push!(component_matrices, Q_comp)
     end
 
+    # If any component carries a structured precision (e.g. the Kronecker
+    # product of a SeparableModel component), return a lazy block diagonal so
+    # that the per-block structure survives composition. Otherwise keep the
+    # materialized sparse block diagonal.
+    if any(_is_structured, component_matrices)
+        return BlockDiagonalPrecision(Tuple(component_matrices))
+    end
+
     return _blockdiag(component_matrices...)
 end
 
@@ -208,6 +222,42 @@ end
 
 function model_name(::CombinedModel)
     return :combined
+end
+
+# Unconstrained combined priors with a structured precision (e.g. containing
+# a SeparableModel component) evaluate their exact log-density from structure.
+prior_logdensity(model::CombinedModel, x::AbstractVector; θ...) =
+    _structured_prior_logdensity(model, x; θ...)
+
+# Structured constraint detection: when exactly one component contributes
+# constraints and that component resolves to a `KroneckerConstraint`, embed
+# it at the component's block offset (the constraint only touches that block,
+# so all correction algebra stays block-local). Anything else falls back to
+# the general dense constraint assembly.
+function _prior_constraints(model::CombinedModel; kwargs...)
+    per_comp = Any[]
+    for (i, component) in enumerate(model.components)
+        comp_params = _extract_component_params(component, i, model, kwargs...)
+        push!(per_comp, _prior_constraints(component; comp_params...))
+    end
+    idxs = findall(!isnothing, per_comp)
+    isempty(idxs) && return nothing
+
+    if length(idxs) == 1 && per_comp[only(idxs)] isa KroneckerConstraint
+        comp_idx = only(idxs)
+        kc = per_comp[comp_idx]::KroneckerConstraint
+        offset = sum(model.component_sizes[1:(comp_idx - 1)]; init = 0)
+        n_block = model.component_sizes[comp_idx]
+        m = size(kc.A, 1)
+        A_emb = hcat(
+            spzeros(m, offset), kc.A, spzeros(m, model.total_size - offset - n_block)
+        )
+        return KroneckerConstraint(
+            A_emb, kc.e, kc.comp, kc.A_i, (offset + 1):(offset + n_block)
+        )
+    end
+
+    return constraints(model; kwargs...)
 end
 
 # Named component access: combined_model.matern, combined_model.iid, etc.

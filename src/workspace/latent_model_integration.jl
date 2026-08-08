@@ -136,9 +136,18 @@ end
 """
     (model::LatentModel)(ws::GMRFWorkspace; kwargs...)
 
-Create a `WorkspaceGMRF` from a `LatentModel` using an existing workspace.
-Computes fresh mean and precision from hyperparameters, updates the workspace,
-and returns a workspace-backed GMRF (with constraints embedded if the model has them).
+Materialize a workspace-backed prior from a `LatentModel` at hyperparameters
+`kwargs`, dispatching on the shape of the model's precision:
+
+- **Sparse precision** (the general case): returns a `WorkspaceGMRF` sharing
+  the joint workspace, exactly as before — values are padded onto the
+  workspace pattern and loaded via `update_precision!`.
+- **Structured precision** (lazy Kronecker / block diagonal) without
+  constraints: returns a [`StructuredPriorGMRF`](@ref) that carries the
+  structure plus a sparse snapshot on the workspace pattern. The joint
+  workspace is *not* touched — its factor slot remains dedicated to the
+  posterior, and prior log-determinants are computed at factor scale from
+  cached per-factor engines.
 
 # Example
 ```julia
@@ -159,8 +168,13 @@ end
 function _evaluate_with_workspace(model::LatentModel, ws::GMRFWorkspace, θ::NamedTuple)
     μ = mean(model; θ...)
     Q = precision_matrix(model; θ...)
+    constraint_info = _prior_constraints(model; θ...)
+    return _instantiate_prior(Q, μ, constraint_info, ws)
+end
+
+# General (sparse) path: the prior shares the joint workspace.
+function _instantiate_prior(Q::AbstractMatrix, μ, constraint_info, ws::GMRFWorkspace)
     Q_sparse = _ensure_sparse(Q)
-    constraint_info = constraints(model; θ...)
 
     # Pad Q's values into the workspace's sparsity pattern with zeros at
     # observation-Hessian-only positions. Allows the joint-pattern workspace
@@ -170,12 +184,55 @@ function _evaluate_with_workspace(model::LatentModel, ws::GMRFWorkspace, θ::Nam
 
     update_precision!(ws, Q_for_ws)
 
+    # A structured constraint may reach this path when the precision itself
+    # was not structured (or via explicit fallback); use its materialized
+    # (A, e) system.
+    if constraint_info isa KroneckerConstraint
+        constraint_info = (constraint_info.A, constraint_info.e)
+    end
+
     if constraint_info === nothing
         return WorkspaceGMRF(μ, Q_for_ws, ws)
     else
         A, e = constraint_info
         return WorkspaceGMRF(μ, Q_for_ws, ws, A, e)
     end
+end
+
+# Structured, unconstrained: the prior never touches the joint workspace.
+function _instantiate_prior(
+        Q::Union{AbstractKroneckerProduct, BlockDiagonalPrecision},
+        μ, constraint_info::Nothing, ws::GMRFWorkspace
+    )
+    cache = _get_or_build_prior_cache!(ws, Q)
+    snapshot = _structured_snapshot(Q, cache, ws)
+    return StructuredPriorGMRF(μ, Q, snapshot, ws, cache)
+end
+
+# Structured with a factor-decomposable constraint: keep the structured prior
+# and carry the Rue–Held corrections in factor form. Only the homogeneous
+# case (e = 0, μ = 0 — every intrinsic model in practice) is supported; the
+# general case falls back to the materialized path.
+function _instantiate_prior(
+        Q::Union{AbstractKroneckerProduct, BlockDiagonalPrecision},
+        μ, kc::KroneckerConstraint, ws::GMRFWorkspace
+    )
+    if !(all(iszero, kc.e) && all(iszero, μ))
+        return _instantiate_prior(_ensure_sparse(Q), μ, (kc.A, kc.e), ws)
+    end
+    cache = _get_or_build_prior_cache!(ws, Q)
+    snapshot = _structured_snapshot(Q, cache, ws)
+    cs = _resolve_constraints(Q, cache, kc)
+    return StructuredPriorGMRF(μ, Q, snapshot, ws, cache, cs)
+end
+
+# Structured with a general (materialized) constraint system: the
+# `ConstraintInfo` machinery needs joint solves at Q_prior, so materialize.
+function _instantiate_prior(
+        Q::Union{AbstractKroneckerProduct, BlockDiagonalPrecision},
+        μ, constraint_info::Tuple, ws::GMRFWorkspace
+    )
+    return _instantiate_prior(_ensure_sparse(Q), μ, constraint_info, ws)
 end
 
 # --- Helpers ---
