@@ -365,6 +365,146 @@ end
         @test var(prior_c) ≈ var(prior_c_ref) rtol = 1.0e-8
     end
 
+    @testset "Observation-hyperparameter gradients (Dual likelihood)" begin
+        obs_model = ExponentialFamily(Distributions.Normal)
+        y = randn(N)
+        ws = make_workspace(sep; θ...)
+        ws_ref = GMRFWorkspace(Q_ref)
+        kc = GMRFs._prior_constraints(sep; θ...)
+
+        function obj_obs(v, structured::Bool)
+            obs_lik = obs_model(y; σ = v[1])
+            p = if structured
+                sep(ws; θ...)
+            else
+                GMRFs._instantiate_prior(Q_ref, zeros(N), (kc.A, kc.e), ws_ref)
+            end
+            g = gaussian_approximation(p, obs_lik)
+            xs = mean(g)
+            return logpdf(p, xs) + loglik(xs, obs_lik) - logpdf(g, xs)
+        end
+        σ0 = [0.5]
+        @test obj_obs(σ0, true) ≈ obj_obs(σ0, false) rtol = 1.0e-6
+        g_s = ForwardDiff.gradient(v -> obj_obs(v, true), σ0)
+        g_m = ForwardDiff.gradient(v -> obj_obs(v, false), σ0)
+        @test g_s ≈ g_m rtol = 1.0e-5
+
+        # Unconstrained variant (covers the unconstrained obs-Dual branch)
+        sep_u = SeparableModel(AR1Model(n_t), space_model)
+        θu = (τ_ar1 = 1.2, ρ_ar1 = 0.6, τ_ar1_2 = 0.9, ρ_ar1_2 = 0.4)
+        ws_u = make_workspace(sep_u; θu...)
+        Q_u = GMRFs._ensure_sparse(precision_matrix(sep_u; θu...))
+        ws_u_ref = GMRFWorkspace(Q_u)
+        function obj_obs_u(v, structured::Bool)
+            obs_lik = obs_model(y; σ = v[1])
+            p = structured ? sep_u(ws_u; θu...) :
+                WorkspaceGMRF(zeros(N), Q_u, ws_u_ref)
+            g = gaussian_approximation(p, obs_lik)
+            xs = mean(g)
+            return logpdf(p, xs) + loglik(xs, obs_lik) - logpdf(g, xs)
+        end
+        g_su = ForwardDiff.gradient(v -> obj_obs_u(v, true), σ0)
+        g_mu = ForwardDiff.gradient(v -> obj_obs_u(v, false), σ0)
+        @test g_su ≈ g_mu rtol = 1.0e-5
+    end
+
+    @testset "Dual prior_logdensity (cacheless factor engines)" begin
+        sep_u = SeparableModel(AR1Model(n_t), space_model)
+        x = randn(N)
+        f(v) = prior_logdensity(sep_u, x; τ_ar1 = v[1], ρ_ar1 = v[2], τ_ar1_2 = v[3], ρ_ar1_2 = v[4])
+        function f_ref(v)
+            Qj = kron(
+                sparse(precision_matrix(AR1Model(n_t); τ = v[1], ρ = v[2])),
+                sparse(precision_matrix(space_model; τ = v[3], ρ = v[4])),
+            )
+            return 0.5 * logdet(Matrix(Qj)) - 0.5 * dot(x, Qj, x) - 0.5 * N * log(2π)
+        end
+        v0 = [1.2, 0.6, 0.9, 0.4]
+        @test f(v0) ≈ f_ref(v0) rtol = 1.0e-8
+        @test ForwardDiff.gradient(f, v0) ≈ ForwardDiff.gradient(f_ref, v0) rtol = 1.0e-6
+    end
+
+    @testset "Batched multi-RHS solve (generic backend fallback)" begin
+        ws_ct = GMRFWorkspace(Q_ref, CliqueTreesBackend)
+        B = randn(N, 3)
+        @test workspace_solve(ws_ct, B) ≈ Matrix(Q_ref) \ B rtol = 1.0e-8
+    end
+
+    @testset "Fallback instantiation paths" begin
+        # Structured precision + general (tuple) constraints: two constrained
+        # components force the dense constraint assembly, and the prior
+        # materializes.
+        W = sparse([0 1 0; 1 0 1; 0 1 0.0])
+        comb2 = CombinedModel(sep, BesagModel(W))
+        θ2c = (
+            τ_rw1_separable = 1.3, τ_ar1_separable = 0.9, ρ_ar1_separable = 0.4,
+            τ_besag = 1.0,
+        )
+        @test precision_matrix(comb2; θ2c...) isa BlockDiagonalPrecision
+        @test !(GMRFs._prior_constraints(comb2; θ2c...) isa GMRFs.KroneckerConstraint)
+        ws2c = make_workspace(comb2; θ2c...)
+        prior2c = comb2(ws2c; θ2c...)
+        @test prior2c isa WorkspaceGMRF && has_constraints(prior2c)
+
+        # Non-homogeneous structured constraint (e ≠ 0): falls back to the
+        # materialized path rather than resolving factor-form corrections.
+        kc = GMRFs._prior_constraints(sep; θ...)
+        kc_inhom = GMRFs.KroneckerConstraint(kc.A, ones(length(kc.e)), kc.comp, kc.A_i, kc.block)
+        ws_f = make_workspace(sep; θ...)
+        Q_lazy = precision_matrix(sep; θ...)
+        prior_f = GMRFs._instantiate_prior(Q_lazy, zeros(N), kc_inhom, ws_f)
+        @test prior_f isa WorkspaceGMRF && has_constraints(prior_f)
+    end
+
+    @testset "Diagonal constrained factor (constrained IID in a Kronecker product)" begin
+        iid_con = IIDModel(4; constraint = :sumtozero)
+        sep_dc = SeparableModel(iid_con, AR1Model(5))
+        θdc = (τ_iid = 2.0, τ_ar1 = 1.1, ρ_ar1 = 0.3)
+        kc = GMRFs._prior_constraints(sep_dc; θdc...)
+        @test kc isa GMRFs.KroneckerConstraint
+        ws_dc = make_workspace(sep_dc; θdc...)
+        prior_dc = sep_dc(ws_dc; θdc...)
+        @test prior_dc isa StructuredPriorGMRF && has_constraints(prior_dc)
+
+        Q_dc = kron(
+            sparse(precision_matrix(iid_con; τ = 2.0)),
+            sparse(precision_matrix(AR1Model(5); τ = 1.1, ρ = 0.3)),
+        )
+        ws_dc_ref = GMRFWorkspace(Q_dc)
+        prior_dc_ref = GMRFs._instantiate_prior(Q_dc, zeros(20), (kc.A, kc.e), ws_dc_ref)
+        xd = randn(20)
+        Ad = Matrix(kc.A)
+        xd_c = xd - Ad' * ((Ad * Ad') \ (Ad * xd))
+        @test logpdf(prior_dc, xd_c) ≈ logpdf(prior_dc_ref, xd_c) rtol = 1.0e-10
+        @test var(prior_dc) ≈ var(prior_dc_ref) rtol = 1.0e-8
+    end
+
+    @testset "Display, std, and guard methods" begin
+        ws = make_workspace(sep; θ...)
+        prior = sep(ws; θ...)
+        @test occursin("⊗", sprint(show, prior))
+        @test occursin("constraints", sprint(show, prior))
+        @test std(prior) ≈ sqrt.(var(prior))
+
+        obs_model = ExponentialFamily(Distributions.Poisson)
+        obs_lik = obs_model(PoissonObservations(rand(0:4, N)))
+        @test_throws ArgumentError ChainRulesCore.rrule(gaussian_approximation, prior, obs_lik)
+        @test_throws ArgumentError GMRFs._workspace_add_precision_tangent(nothing, prior, nothing)
+
+        # BlockDiagonalPrecision basics
+        B = BlockDiagonalPrecision(sparse(2.0 * I, 3, 3), Diagonal([1.0, 2.0]))
+        @test B[1, 5] == 0.0
+        @test B[5, 5] == 2.0
+        @test_throws ArgumentError BlockDiagonalPrecision(randn(2, 3))
+        combu = CombinedModel(SeparableModel(AR1Model(3), AR1Model(2)), IIDModel(2))
+        Qcu = precision_matrix(
+            combu;
+            τ_ar1_separable = 1.0, ρ_ar1_separable = 0.5,
+            τ_ar1_2_separable = 1.0, ρ_ar1_2_separable = 0.3, τ_iid = 1.0,
+        )
+        @test occursin("blockdiag", GMRFs._structure_summary(Qcu))
+    end
+
     @testset "Multi-row component constraints (RW2)" begin
         rw2 = RW2Model(7)
         sep2 = SeparableModel(rw2, AR1Model(4))
