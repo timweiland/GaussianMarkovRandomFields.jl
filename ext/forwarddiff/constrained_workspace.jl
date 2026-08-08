@@ -15,7 +15,7 @@
 
 function _compute_constrained_duals(
         mean_T, Q::SparseMatrixCSC{<:ForwardDiff.Dual}, ws::GMRFs.GMRFWorkspace,
-        A_dense::Matrix{Float64}, e_vec::Vector{Float64},
+        A_dense::AbstractMatrix{Float64}, e_vec::Vector{Float64},
         A_tilde_T_v::Matrix{Float64}, log_AA_det::Float64
     )
     D = eltype(Q)
@@ -68,7 +68,7 @@ end
 # lifts these from `posterior_primal.constraints`).
 function _build_constrained_dual_workspace_gmrf(
         mean::AbstractVector, Q::SparseMatrixCSC, ws::GMRFs.GMRFWorkspace,
-        A_dense::Matrix{Float64}, e_vec::Vector{Float64},
+        A_dense::AbstractMatrix{Float64}, e_vec::Vector{Float64},
         A_tilde_T_v::Matrix{Float64}, L_c_primal,
         log_AA_det::Float64, version::Int
     )
@@ -119,21 +119,17 @@ function _construct_forwarddiff_constrained_workspace_gmrf(
     version = GMRFs._next_version!(ws)
     ws.loaded_version = version
 
-    n = size(Q, 1)
-    m = size(A, 1)
-    A_dense = Matrix{Float64}(A)
+    A_sp = A isa SparseMatrixCSC ? A : sparse(A)
     e_vec = Vector{Float64}(e)
 
-    # Primal Ã^T = Q_v⁻¹ A' via m solves against the primal factorization.
-    A_tilde_T_v = Matrix{Float64}(undef, n, m)
-    for i in 1:m
-        A_tilde_T_v[:, i] .= GMRFs.workspace_solve(ws, A_dense[i, :])
-    end
-    L_c_primal = cholesky(Symmetric(A_dense * A_tilde_T_v))
-    log_AA_det = logdet(cholesky(Symmetric(A_dense * A_dense')))
+    # Primal Ã^T = Q_v⁻¹ A' via one blocked multi-RHS solve against the
+    # primal factorization.
+    A_tilde_T_v = GMRFs.workspace_solve(ws, Matrix{Float64}(transpose(A_sp)))
+    L_c_primal = cholesky(Symmetric(Matrix(A_sp * A_tilde_T_v)))
+    log_AA_det = logdet(cholesky(Symmetric(Matrix(A_sp * A_sp'))))
 
     return _build_constrained_dual_workspace_gmrf(
-        mean, Q, ws, A_dense, e_vec, A_tilde_T_v, L_c_primal, log_AA_det, version
+        mean, Q, ws, A_sp, e_vec, A_tilde_T_v, L_c_primal, log_AA_det, version
     )
 end
 
