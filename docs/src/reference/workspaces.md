@@ -222,6 +222,7 @@ CliqueTreesBackend
 - [Latent Models](@ref) — the `LatentModel` interface that factory hooks
   dispatch on.
 - [Automatic Differentiation Reference](@ref) — `WorkspaceGMRF` supports Zygote
-  rrules for `logpdf` and `gaussian_approximation`, and ForwardDiff
-  through the unconstrained constructor.
+  rrules for `logpdf`, `logdetcov`, `gaussian_approximation`, and the
+  `model(ws; θ...)` reuse path, and ForwardDiff through the unconstrained
+  constructor.
 - Tutorial: [Reusing factorizations across hyperparameters](@ref).

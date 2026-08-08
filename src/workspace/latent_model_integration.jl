@@ -158,9 +158,17 @@ prior = model(ws; τ=2.0, ρ=0.3)  # WorkspaceGMRF, numeric-only refactorization
 ```
 """
 function (model::LatentModel)(ws::GMRFWorkspace; kwargs...)
-    μ = mean(model; kwargs...)
-    Q = precision_matrix(model; kwargs...)
-    constraint_info = _prior_constraints(model; kwargs...)
+    # Delegate to a positional function so that reverse-mode AD can attach an
+    # rrule (see workspace/autodiff.jl). An rrule on this kwargs callable
+    # itself would be useless for hyperparameter gradients: ChainRules treats
+    # kwargs as non-differentiable, so Zygote would silently drop θ tangents.
+    return _evaluate_with_workspace(model, ws, values(kwargs))
+end
+
+function _evaluate_with_workspace(model::LatentModel, ws::GMRFWorkspace, θ::NamedTuple)
+    μ = mean(model; θ...)
+    Q = precision_matrix(model; θ...)
+    constraint_info = _prior_constraints(model; θ...)
     return _instantiate_prior(Q, μ, constraint_info, ws)
 end
 

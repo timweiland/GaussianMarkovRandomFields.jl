@@ -102,6 +102,14 @@ Zygote works through the package's ChainRules rules, which cover `logdetcov`,
 `logpdf` and `gaussian_approximation` for every GMRF type in the table. Each one
 uses a selected inverse rather than differentiating the sparse factorization.
 
+The workspace reuse path — `make_workspace(model; θ...)` once, then
+`model(ws; θ...)` inside the differentiated function — also works under Zygote.
+The callable carries an rrule that reruns the model's `mean` and
+`precision_matrix` construction in reverse mode while keeping the workspace
+itself (including its `update_precision!` mutation) out of the trace.
+`SeparableModel` is the exception: its Kronecker-product construction is not
+yet reverse-mode differentiable, so use ForwardDiff for separable models.
+
 `var` and `std` raise an `ArgumentError`. Their tangent needs entries of the
 covariance *outside* the precision's sparsity pattern, which selected inversion
 does not compute, so there is no cheap rule to write and one built on `selinv`

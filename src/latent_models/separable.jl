@@ -1,6 +1,7 @@
 using LinearAlgebra
 using SparseArrays
 using LinearMaps
+using ChainRulesCore
 
 export SeparableModel
 
@@ -277,17 +278,19 @@ function _prior_constraints(model::SeparableModel; kwargs...)
 end
 
 """
-    _extract_component_kwargs(model::SeparableModel, kwargs)
+    _component_param_keymap(model::SeparableModel, kwarg_keys)
 
-Extract hyperparameters for each component from the combined kwargs.
-
-Returns a vector of NamedTuples, one per component.
+Per component, the pair `(local param names, suffixed keys in the combined
+kwargs)`, keeping only keys present in `kwarg_keys`. Pure Symbol bookkeeping —
+marked non-differentiable so that reverse-mode AD only has to trace the value
+extraction in [`_extract_component_kwargs`](@ref), not the `Dict`/`push!`
+bookkeeping here.
 """
-function _extract_component_kwargs(model::SeparableModel, kwargs)
+function _component_param_keymap(model::SeparableModel, kwarg_keys)
     # Track counts of each model name
     name_counts = Dict{Symbol, Int}()
 
-    comp_kwargs = NamedTuple[]
+    keymap = Tuple{Tuple{Vararg{Symbol}}, Tuple{Vararg{Symbol}}}[]
 
     for component in model.components
         comp_model_name = model_name(component)
@@ -297,21 +300,48 @@ function _extract_component_kwargs(model::SeparableModel, kwargs)
         count = get(name_counts, comp_model_name, 0) + 1
         name_counts[comp_model_name] = count
 
-        # Extract parameters for this component
         suffix = count == 1 ? "" : "_$count"
-        comp_kw = NamedTuple()
+        local_names = Symbol[]
+        full_keys = Symbol[]
 
         for param_name in keys(comp_params_template)
             # Look for {param}_{modelname}{suffix} in kwargs
             full_key = Symbol("$(param_name)_$(comp_model_name)$(suffix)")
 
-            if haskey(kwargs, full_key)
-                comp_kw = merge(comp_kw, NamedTuple{(param_name,)}((kwargs[full_key],)))
+            if full_key in kwarg_keys
+                push!(local_names, param_name)
+                push!(full_keys, full_key)
             end
         end
 
-        push!(comp_kwargs, comp_kw)
+        push!(keymap, (Tuple(local_names), Tuple(full_keys)))
     end
 
-    return comp_kwargs
+    return keymap
+end
+
+# Hand-written rather than `@non_differentiable`: the macro also emits a
+# kwargs-forwarding `Core.kwcall` branch, which JET flags as a method error
+# because `_component_param_keymap` has no kwarg method.
+function ChainRulesCore.rrule(::typeof(_component_param_keymap), model::SeparableModel, kwarg_keys)
+    _component_param_keymap_pullback(::Any) = (NoTangent(), NoTangent(), NoTangent())
+    return _component_param_keymap(model, kwarg_keys), _component_param_keymap_pullback
+end
+
+"""
+    _extract_component_kwargs(model::SeparableModel, kwargs)
+
+Extract hyperparameters for each component from the combined kwargs.
+
+Returns a vector of NamedTuples, one per component. Implemented without
+mutation on the value path so reverse-mode AD (Zygote) can differentiate
+hyperparameters through it.
+"""
+function _extract_component_kwargs(model::SeparableModel, kwargs)
+    keymap = _component_param_keymap(model, keys(kwargs))
+    # `map` (not a typed comprehension, which lowers to `setindex!`) so that
+    # Zygote can differentiate the value extraction.
+    return map(keymap) do (local_names, full_keys)
+        NamedTuple{local_names}(map(k -> kwargs[k], full_keys))
+    end
 end
