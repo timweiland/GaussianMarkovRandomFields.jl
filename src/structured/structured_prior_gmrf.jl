@@ -152,6 +152,14 @@ function ChainRulesCore.rrule(::typeof(logpdf), d::StructuredPriorGMRF, z::Abstr
     throw(ArgumentError(_STRUCTURED_REVERSE_AD_MSG))
 end
 
+# The WorkspaceGMRF gaussian_approximation pullback can never receive a
+# structured prior (its rrule signature is `::WorkspaceGMRF`), but Julia
+# 1.11's closure-capture inference cannot prove that and union-splits the
+# captured prior over both GMRF types — give that branch a defined
+# (throwing) method so JET's error analysis stays clean.
+_workspace_add_precision_tangent(prior_tangent, prior::StructuredPriorGMRF, Q̄) =
+    throw(ArgumentError(_STRUCTURED_REVERSE_AD_MSG))
+
 # --- Display ---
 
 function Base.show(io::IO, d::StructuredPriorGMRF{T}) where {T}
