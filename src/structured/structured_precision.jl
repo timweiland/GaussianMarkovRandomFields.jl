@@ -58,6 +58,10 @@ function Base.getindex(B::BlockDiagonalPrecision{T}, i::Int, j::Int) where {T}
     return T(B.blocks[bi][i - B.offsets[bi], j - B.offsets[bj]])
 end
 
+# Block-wise matvec. The generic `*(::AbstractMatrix, ::AbstractVector)`
+# routes through this 3-arg `mul!`, so no `*` method is defined here — a
+# `*(::BlockDiagonalPrecision, ::AbstractVector)` would be ambiguous against
+# the special-vector `*` methods of FillArrays/NamedDims/SciMLBase.
 function LinearAlgebra.mul!(y::AbstractVector, B::BlockDiagonalPrecision, x::AbstractVector)
     length(x) == size(B, 2) || throw(DimensionMismatch("matvec size mismatch"))
     for (k, block) in enumerate(B.blocks)
@@ -65,11 +69,6 @@ function LinearAlgebra.mul!(y::AbstractVector, B::BlockDiagonalPrecision, x::Abs
         mul!(view(y, rng), block, view(x, rng))
     end
     return y
-end
-
-function Base.:*(B::BlockDiagonalPrecision{T}, x::AbstractVector{S}) where {T, S}
-    y = Vector{promote_type(T, S)}(undef, size(B, 1))
-    return mul!(y, B, x)
 end
 
 # --- Structure trait ---
