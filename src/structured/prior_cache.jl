@@ -177,9 +177,11 @@ function _structured_snapshot(Q::AbstractMatrix, cache::StructuredPriorCache, ws
     J = _ensure_sparse(Q)
     length(cache.scatter) == nnz(J) ||
         throw(ArgumentError("structured prior cache is stale: lowered pattern size changed."))
-    T = eltype(J)
-    nz = zeros(T, length(ws.Q.nzval))
     J_nz = nonzeros(J)
+    # `similar`+`fill!` rather than `zeros(eltype(J), n)`: inference through
+    # the abstract `J` loses that the first argument is a type, and the
+    # spurious `zeros(::Integer, ::Integer)` candidate trips JET.
+    nz = fill!(similar(J_nz, length(ws.Q.nzval)), zero(eltype(J_nz)))
     scatter = cache.scatter
     @inbounds for k in eachindex(scatter)
         nz[scatter[k]] = J_nz[k]
