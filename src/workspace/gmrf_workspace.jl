@@ -192,12 +192,20 @@ end
 
 """
     workspace_solve(ws::GMRFWorkspace, b::AbstractVector) -> Vector
+    workspace_solve(ws::GMRFWorkspace, B::AbstractMatrix) -> Matrix
 
-Solve Q x = b using the workspace's factorization.
+Solve Q x = b using the workspace's factorization. The matrix method solves
+all columns in one blocked multi-RHS solve (BLAS-3 on the CHOLMOD backend) —
+use it instead of a column loop whenever there are many right-hand sides.
 """
 function workspace_solve(ws::GMRFWorkspace, b::AbstractVector)
     ensure_numeric!(ws)
     return backend_solve(ws.backend, b)
+end
+
+function workspace_solve(ws::GMRFWorkspace, B::AbstractMatrix)
+    ensure_numeric!(ws)
+    return backend_solve(ws.backend, B)
 end
 
 """

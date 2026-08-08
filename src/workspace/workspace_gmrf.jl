@@ -6,11 +6,12 @@ export WorkspaceGMRF, ConstraintInfo
     ConstraintInfo{T}
 
 Precomputed constraint quantities for a constrained WorkspaceGMRF.
-Stores the constraint matrix A, vector e, and derived quantities
+Stores the (sparse) constraint matrix A, vector e, and derived quantities
 (Ã^T = Q⁻¹A^T, L_c = chol(AÃ^T), constrained mean, log correction).
+The `Ã^T` solves are performed as one blocked multi-RHS solve.
 """
 struct ConstraintInfo{T}
-    matrix::Matrix{Float64}
+    matrix::SparseMatrixCSC{Float64, Int}
     vector::Vector{Float64}
     A_tilde_T::Matrix{Float64}
     L_c::Cholesky{Float64, Matrix{Float64}}
@@ -29,31 +30,28 @@ function ConstraintInfo(
     m == length(e) ||
         throw(ArgumentError("Constraint matrix rows $(m) != constraint vector length $(length(e))"))
 
-    A_dense = Matrix{Float64}(A)
+    A_sp = A isa SparseMatrixCSC ? A : sparse(A)
     e_vec = Vector{Float64}(e)
 
-    # Ã^T = Q⁻¹A^T via m column solves
-    A_tilde_T = Matrix{Float64}(undef, n, m)
-    for i in 1:m
-        A_tilde_T[:, i] .= workspace_solve(ws, A_dense[i, :])
-    end
+    # Ã^T = Q⁻¹A^T via one blocked multi-RHS solve
+    A_tilde_T = workspace_solve(ws, Matrix{Float64}(transpose(A_sp)))
 
     # AÃ^T and its Cholesky
-    L_c = cholesky(Symmetric(A_dense * A_tilde_T))
+    L_c = cholesky(Symmetric(Matrix(A_sp * A_tilde_T)))
 
     # Constrained mean
-    residual = A_dense * μ - e_vec
+    residual = A_sp * μ - e_vec
     constrained_mean = μ - A_tilde_T * (L_c \ residual)
 
     # Log-density correction (Rue & Held 2005, §2.3.3)
-    resid_e = e_vec - A_dense * μ
+    resid_e = e_vec - A_sp * μ
     r = length(resid_e)
     log_constraint_correction =
         0.5 * (r * log(2π) + logdet(L_c) + dot(resid_e, L_c \ resid_e)) -
-        0.5 * logdet(cholesky(Symmetric(A_dense * A_dense')))
+        0.5 * logdet(cholesky(Symmetric(Matrix(A_sp * A_sp'))))
 
     return ConstraintInfo{T}(
-        A_dense, e_vec, A_tilde_T, L_c, constrained_mean, log_constraint_correction
+        A_sp, e_vec, A_tilde_T, L_c, constrained_mean, log_constraint_correction
     )
 end
 

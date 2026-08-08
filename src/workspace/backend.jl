@@ -105,6 +105,22 @@ function backend_solve(b::CHOLMODBackend, rhs::AbstractVector)
     return b.factor \ rhs
 end
 
+# Multi-RHS solve. The generic fallback loops columns; CHOLMOD gets the
+# blocked (BLAS-3) supernodal solve, which is the difference between m
+# triangular-solve round trips and one — the dominant cost of constraint
+# projections (Q Ãᵀ = Aᵀ with m constraint rows).
+function backend_solve(b::WorkspaceBackend, RHS::AbstractMatrix)
+    X = Matrix{Float64}(undef, size(RHS))
+    for j in axes(RHS, 2)
+        X[:, j] = backend_solve(b, Vector(view(RHS, :, j)))
+    end
+    return X
+end
+
+function backend_solve(b::CHOLMODBackend, RHS::Matrix{Float64})
+    return b.factor \ RHS
+end
+
 function compute_logdet(b::CHOLMODBackend)
     return logdet(b.factor)
 end
