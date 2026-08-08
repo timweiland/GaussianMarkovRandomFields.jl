@@ -306,6 +306,11 @@ function ChainRulesCore.rrule(
         else
             _, hess_pullback = rrule_via_ad(config, loghessian, x_star, obs_lik)
             _, x̄_from_Q, obs_lik_tangent_from_Q = hess_pullback(-Q̄)
+            # rrule_via_ad may hand back Thunks (e.g. from ChainRules' sparse
+            # A*x rule when obs_lik carries a design matrix); `collect` and
+            # `_add_namedtuples` below need materialized tangents.
+            x̄_from_Q = unthunk(x̄_from_Q)
+            obs_lik_tangent_from_Q = unthunk(obs_lik_tangent_from_Q)
         end
 
         # μ̄ path: μ_post = x*, so μ̄ flows directly to x*
@@ -319,6 +324,10 @@ function ChainRulesCore.rrule(
         base_prior = _base_gmrf(prior_gmrf)
         _, ∇_pullback = rrule_via_ad(config, ∇ₓ_neg_log_posterior, base_prior, obs_lik, x_star)
         _, base_prior_tangent, obs_lik_tangent, _ = ∇_pullback(-λ)
+        # A Thunk here would silently fail the `isa Tangent` checks downstream
+        # and drop gradient terms, so materialize defensively.
+        base_prior_tangent = unthunk(base_prior_tangent)
+        obs_lik_tangent = unthunk(obs_lik_tangent)
 
         # Add contribution from ȳ.precision to base prior tangent
         if !_is_zero_tangent(Q̄)
