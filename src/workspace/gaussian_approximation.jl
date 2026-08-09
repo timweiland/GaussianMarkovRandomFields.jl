@@ -200,6 +200,7 @@ function gaussian_approximation(
         newton_dec_tol::Real = 1.0e-5,
         adaptive_stepsize::Bool = true,
         max_linesearch_iter::Int = 10,
+        step_recovery::Symbol = :retry_full,
         verbose::Bool = false
     )
     ws = prior.workspace
@@ -210,7 +211,7 @@ function gaussian_approximation(
     return _workspace_newton_loop(
         prior, ws, obs_lik, prior.constraints, x_init;
         max_iter, mean_change_tol, newton_dec_tol,
-        adaptive_stepsize, max_linesearch_iter, verbose,
+        adaptive_stepsize, max_linesearch_iter, step_recovery, verbose,
     )
 end
 
@@ -235,8 +236,10 @@ function _workspace_newton_loop(
         newton_dec_tol::Real,
         adaptive_stepsize::Bool,
         max_linesearch_iter::Int,
+        step_recovery::Symbol,
         verbose::Bool,
     )
+    retry_full = _retry_full_step(step_recovery)
     diag_idx = _diagonal_indices(ws.Q)
     sparse_hess_map = nothing
     x_k = copy(x_init)
@@ -259,7 +262,7 @@ function _workspace_newton_loop(
         if adaptive_stepsize
             x_new, α = _ga_line_search(
                 prior, Q_p, h, energy_k, obs_lik, x_k, step, α;
-                max_linesearch_iter, newton_dec_tol, verbose,
+                max_linesearch_iter, newton_dec_tol, verbose, retry_full,
             )
         else
             x_new = x_k - step
@@ -311,6 +314,7 @@ function gaussian_approximation(
         newton_dec_tol::Real = 1.0e-5,
         adaptive_stepsize::Bool = true,
         max_linesearch_iter::Int = 10,
+        step_recovery::Symbol = :retry_full,
         verbose::Bool = false
     )
     if has_constraints(prior)

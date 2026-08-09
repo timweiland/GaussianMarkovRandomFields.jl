@@ -384,6 +384,60 @@ using Distributions
         end
     end
 
+    @testset "Step recovery policies" begin
+        # Issue #203: an early backtrack shrinks the persistent step scale to α = 0.1.
+        # `:sqrt` then spends ~8-10 further Newton iterations — each a full factorize
+        # + solve — crawling back to α ≈ 1, while `:retry_full` re-probes the undamped
+        # step every iteration and resumes full Newton as soon as it is accepted.
+        n = 200
+        Q_prior = spdiagm(-1 => fill(-1.0, n - 1), 0 => fill(2.01, n), 1 => fill(-1.0, n - 1))
+        prior_gmrf = GMRF(zeros(n), Q_prior)
+        counts = round.(Int, exp.(3 .* sin.(range(0, 6π; length = n))))
+        obs_lik = ExponentialFamily(Poisson)(PoissonObservations(counts))
+
+        # Distance to the true mode, independent of the iteration path taken there.
+        ∇norm(x) = norm(
+            GaussianMarkovRandomFields.∇ₓ_neg_log_posterior(prior_gmrf, obs_lik, x), Inf
+        )
+        tight = (newton_dec_tol = 1.0e-12, mean_change_tol = 1.0e-12)
+
+        @testset "both policies converge to the same mode" begin
+            res_sqrt = gaussian_approximation(prior_gmrf, obs_lik; step_recovery = :sqrt, tight...)
+            res_full = gaussian_approximation(prior_gmrf, obs_lik; step_recovery = :retry_full, tight...)
+
+            @test mean(res_sqrt) ≈ mean(res_full) atol = 1.0e-6
+            @test precision_matrix(res_sqrt) ≈ precision_matrix(res_full) atol = 1.0e-6
+            @test ∇norm(mean(res_full)) < 1.0e-8
+            @test ∇norm(mean(res_sqrt)) < 1.0e-8
+        end
+
+        @testset ":retry_full is the default" begin
+            res_default = gaussian_approximation(prior_gmrf, obs_lik; max_iter = 8, tight...)
+            res_full = gaussian_approximation(
+                prior_gmrf, obs_lik; max_iter = 8, step_recovery = :retry_full, tight...
+            )
+            @test mean(res_default) == mean(res_full)
+        end
+
+        @testset ":retry_full gets far closer to the mode per iteration" begin
+            # Same iteration budget => same number of factorizations. `:sqrt` is still
+            # taking damped steps at iteration 8; `:retry_full` has already converged.
+            res_sqrt = gaussian_approximation(
+                prior_gmrf, obs_lik; max_iter = 8, step_recovery = :sqrt, tight...
+            )
+            res_full = gaussian_approximation(
+                prior_gmrf, obs_lik; max_iter = 8, step_recovery = :retry_full, tight...
+            )
+            @test ∇norm(mean(res_full)) < 1.0e-3 * ∇norm(mean(res_sqrt))
+        end
+
+        @testset "unknown policy is rejected" begin
+            @test_throws ArgumentError gaussian_approximation(
+                prior_gmrf, obs_lik; step_recovery = :bogus
+            )
+        end
+    end
+
     @testset "Adaptive stepsize - multiple extreme Poisson" begin
         # Multi-dimensional case with varying extreme counts
         n = 5

@@ -57,6 +57,7 @@ function gaussian_approximation(
         newton_dec_tol::Real = 1.0e-5,
         adaptive_stepsize::Bool = true,
         max_linesearch_iter::Int = 10,
+        step_recovery::Symbol = :retry_full,
         verbose::Bool = false,
         hp_kwargs...,
     )
@@ -65,7 +66,7 @@ function gaussian_approximation(
     return gaussian_approximation(
         materialised, obs_lik;
         x0, max_iter, mean_change_tol, newton_dec_tol,
-        adaptive_stepsize, max_linesearch_iter, verbose,
+        adaptive_stepsize, max_linesearch_iter, step_recovery, verbose,
     )
 end
 
@@ -101,6 +102,7 @@ function gaussian_approximation(
         newton_dec_tol::Real = 1.0e-5,
         adaptive_stepsize::Bool = true,
         max_linesearch_iter::Int = 10,
+        step_recovery::Symbol = :retry_full,
         verbose::Bool = false,
         hp_kwargs...,
     )
@@ -114,7 +116,7 @@ function gaussian_approximation(
         return _nongaussian_dualhp_ift(
             prior, obs_lik, θ_full, ws;
             x0, max_iter, mean_change_tol, newton_dec_tol,
-            adaptive_stepsize, max_linesearch_iter, verbose,
+            adaptive_stepsize, max_linesearch_iter, step_recovery, verbose,
         )
     end
 
@@ -130,13 +132,13 @@ function gaussian_approximation(
         return _newton_loop(
             lp, obs_lik, cache, constraints_nt, x_init;
             max_iter, mean_change_tol, newton_dec_tol,
-            adaptive_stepsize, max_linesearch_iter, verbose,
+            adaptive_stepsize, max_linesearch_iter, step_recovery, verbose,
         )
     end
 
     return _workspace_newton_loop(
         lp, ws, obs_lik, constraints_nt, x_init;
         max_iter, mean_change_tol, newton_dec_tol,
-        adaptive_stepsize, max_linesearch_iter, verbose,
+        adaptive_stepsize, max_linesearch_iter, step_recovery, verbose,
     )
 end

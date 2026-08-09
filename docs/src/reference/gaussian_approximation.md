@@ -107,6 +107,29 @@ The package includes significant performance optimizations:
 - **MetaGMRF support** preserves metadata through the approximation process
 - **Type consistency** ensures optimal memory usage and dispatch efficiency
 
+### Step-size line search
+
+Each Newton iteration costs a factorization plus a solve; the backtracking line search that
+guards it costs only merit evaluations (`½xᵀQx - hᵀx` for the prior side plus `loglik`, never
+a `logpdf`, hence never a factorization). The step scale `α` persists across iterations —
+a rejected step shrinks it by 10× — so the policy that grows it back decides how many
+*damped* (but fully factorized) iterations a single early backtrack costs:
+
+- `step_recovery = :retry_full` (default) probes the undamped step `α = 1` at the start of
+  every iteration and falls back to the persistent damped scale only if that step is
+  rejected. Cost: one extra merit evaluation on the iterations where the full step is not
+  yet acceptable. Benefit: full Newton steps resume the moment the iterate reaches the basin
+  where they are accepted.
+- `step_recovery = :sqrt` grows `α` as `sqrt(α)` per accepted step. A backtrack down to
+  `α = 0.1` then takes ~8–10 further iterations to recover, each of them a needlessly damped
+  factorize + solve. Use this if the merit is not convex along the Newton direction (e.g. a
+  [`NonGaussianLatentPrior`](@ref) whose log-density is not concave) and the slow recovery is
+  wanted as an oscillation guard.
+
+For canonical-link exponential families the merit is convex along the Newton direction, so
+the default is both faster and — because it stops the mean-change convergence test from
+firing on an artificially damped step — at least as accurate.
+
 ## Iterated linearisation for non-Gaussian priors
 
 `gaussian_approximation` also accepts an [`AbstractLatentPrior`](@ref) directly as the prior side, which is useful in two situations:
