@@ -295,12 +295,25 @@ end
 # Newton steps taken against the frozen factorization once the look-ahead fires.
 # The gradient is exact at every step and only the Hessian is stale, so this is a
 # chord iteration on the true stationarity condition `∇f(x) = 0`: it converges to
-# the true mode, linearly, at a rate set by how far the Hessian has moved. The
-# first step certifies convergence — its decrement is the certificate — and the
-# rest polish away the error the stale Hessian leaves behind. Measured on Poisson,
-# binomial and custom-likelihood fits each step buys 3–6 orders of magnitude, so
-# three land the mode at or inside where a refactorized final iteration would have
-# put it, for three solves instead of a refactorization.
+# the true mode, linearly, at a rate set by how far the Hessian has moved.
+#
+# Only the *first* step decides anything — its decrement is the convergence
+# certificate, the same quantity the loop's own test uses. The rest cannot change
+# that decision; they only walk the mode closer to the true one, so this count is
+# a quality/cost dial and not a hidden correctness threshold. Its floor is "the
+# returned mode meets `newton_dec_tol`", which step one already establishes.
+#
+# Three is a budget, bounded well under what it buys: three solves is ~1/3 of the
+# refactorization being skipped on a 1D n=500 fit and ~1/10 on 2D/3D grids. The
+# per-step contraction ranges from ~20x (small, ill-scaled fits where the
+# look-ahead fires while the Hessian is still moving) to ~1e6x (warm solves deep
+# in the quadratic regime), and across measured Poisson, binomial,
+# negative-binomial and custom-likelihood fits three steps land the mode at or
+# inside where a refactorized final iteration would have put it. Adaptive
+# stopping rules were measured too — on decrement depth, or on the step-to-step
+# improvement stalling — and neither beat a flat count: the depth rules stop
+# short exactly where the polish matters, the stall rules spend more steps for no
+# gain.
 const _FROZEN_FINISH_STEPS = 3
 
 # `solve_step` maps a gradient to the (constraint-projected) Newton step against the
