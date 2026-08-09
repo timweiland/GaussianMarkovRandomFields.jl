@@ -384,7 +384,7 @@ using Distributions
         end
     end
 
-    @testset "Step recovery policies" begin
+    @testset "Line search behaviour" begin
         # Issue #203: an early backtrack shrinks the persistent step scale to α = 0.1.
         # `:sqrt` then spends ~8-10 further Newton iterations — each a full factorize
         # + solve — crawling back to α ≈ 1, while `:retry_full` re-probes the undamped
@@ -435,6 +435,22 @@ using Distributions
             @test_throws ArgumentError gaussian_approximation(
                 prior_gmrf, obs_lik; step_recovery = :bogus
             )
+        end
+
+        @testset "convergence is not capped by merit rounding noise" begin
+            # Near the mode the merit's true decrease (≈ half the Newton decrement)
+            # falls below the rounding noise of evaluating it, and a strict decrease
+            # test then rejects the undamped Newton step on a 1-2 ULP artifact and
+            # takes a 10x-damped one instead. That put a floor under how close to the
+            # mode the loop could get — ‖∇ₓ neg-log-posterior‖∞ ≈ 2e-10 here — and made
+            # a converged mode fail to be a fixed point of the iteration.
+            res = gaussian_approximation(prior_gmrf, obs_lik; tight...)
+            x_star = mean(res)
+            @test ∇norm(x_star) < 1.0e-12
+
+            res_warm = gaussian_approximation(prior_gmrf, obs_lik; x0 = x_star, tight...)
+            @test mean(res_warm) ≈ x_star atol = 1.0e-10
+            @test ∇norm(mean(res_warm)) < 1.0e-12
         end
     end
 

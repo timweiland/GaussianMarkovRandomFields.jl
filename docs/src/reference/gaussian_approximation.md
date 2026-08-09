@@ -130,6 +130,16 @@ For canonical-link exponential families the merit is convex along the Newton dir
 the default is both faster and — because it stops the mean-change convergence test from
 firing on an artificially damped step — at least as accurate.
 
+A step is accepted when it does not *significantly* increase the merit. The tolerance is
+the merit's own rounding-noise floor (a few dozen ULPs of the magnitude of the terms
+summed to form it). It matters only on the convergence plateau: there the true decrease is
+smaller than the noise in evaluating it, so a strict decrease test rejects a perfectly good
+undamped Newton step on a 1–2 ULP artifact and substitutes a 10× damped one. That put a
+floor under the attainable mode — `‖∇ₓ neg-log-posterior‖∞ ≈ 2e-10` on a 200-variable
+Poisson chain, versus `7e-15` with the tolerance — and meant that re-running
+`gaussian_approximation` from an already-converged mode moved away from it instead of
+staying put.
+
 ## Iterated linearisation for non-Gaussian priors
 
 `gaussian_approximation` also accepts an [`AbstractLatentPrior`](@ref) directly as the prior side, which is useful in two situations:

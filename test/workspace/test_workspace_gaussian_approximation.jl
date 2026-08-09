@@ -206,6 +206,11 @@ using SparseArrays
         )
         @test ∇norm(mean(ws_full)) < 1.0e-3 * ∇norm(mean(ws_sqrt))
 
+        # The merit-rounding-noise tolerance lives in the shared line search, so the
+        # workspace loop reaches the same numerical floor at the mode.
+        ws_converged = gaussian_approximation(WorkspaceGMRF(μ_prior, Q_prior), obs_lik; tight...)
+        @test ∇norm(collect(mean(ws_converged))) < 1.0e-12
+
         @test_throws ArgumentError gaussian_approximation(
             WorkspaceGMRF(μ_prior, Q_prior), obs_lik; step_recovery = :bogus
         )

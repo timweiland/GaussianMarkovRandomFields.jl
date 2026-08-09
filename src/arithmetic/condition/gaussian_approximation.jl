@@ -222,6 +222,19 @@ end
 # Line-search merit: the neg-log-posterior up to an x-independent constant.
 _ga_merit(prior, Q_p, h, obs_lik, x) = _prior_energy(prior, Q_p, h, x) - loglik(x, obs_lik)
 
+# Rounding-noise floor of a merit evaluation. The merit is a difference of two
+# O(n)-term sums (prior energy and log-likelihood), so its achievable precision
+# scales with the magnitude of *those* terms — `abs(merit)` alone underestimates it
+# whenever the two nearly cancel. A few dozen ULPs: the artifacts measured on the
+# convergence plateau are 1-6 ULPs, while the smallest decrease the line search can
+# still act on there is ~1e-11 relative, so this sits well clear of both.
+#
+# `eps(typeof(scale))` rather than `eps(scale)`: the `ChordalGMRF` hyperparameter path
+# differentiates straight through the Newton loop, so `scale` can be a `ForwardDiff.Dual`
+# (for which the type-based `eps` is the value type's). The tolerance is then a Dual too,
+# which is harmless — `obj_accept` is only ever compared with `<=`, on values alone.
+_merit_atol(scale::Real) = 64 * eps(typeof(scale)) * max(scale, one(scale))
+
 # Backtracking line search shared by the cache- and workspace-backed Newton loops.
 # Returns the accepted iterate `x_new` and the (possibly shrunk) step scale `α`. The
 # merit is `_prior_energy(prior, Q_p, h, ·) - loglik(·, obs_lik)` — the neg-log-posterior
@@ -239,11 +252,20 @@ function _ga_line_search(
         max_linesearch_iter::Int, newton_dec_tol::Real, verbose::Bool,
         retry_full::Bool,
     )
-    obj_current = energy_k - loglik(x_k, obs_lik)
+    loglik_k = loglik(x_k, obs_lik)
+    obj_current = energy_k - loglik_k
+    # Accept anything that is not a *significant* increase. Near the mode the true
+    # decrease falls below the merit's own rounding noise, and a strict `<=` then
+    # rejects a perfectly good undamped Newton step over a 1-2 ULP artifact and
+    # replaces it with a 10x-damped one — which is how a warm start from a converged
+    # mode came back with ‖∇ₓ neg-log-posterior‖∞ ≈ 5e-10 instead of ≈ 8e-15. A step
+    # whose merit change is at the noise floor cannot be an overshoot, so there is
+    # nothing for the line search to guard against.
+    obj_accept = obj_current + _merit_atol(abs(energy_k) + abs(loglik_k))
 
     if retry_full && α < one(α)
         x_full = x_k - step
-        if _ga_merit(prior, Q_p, h, obs_lik, x_full) <= obj_current
+        if _ga_merit(prior, Q_p, h, obs_lik, x_full) <= obj_accept
             verbose && println("    Accepted full step (α=1)")
             return x_full, one(α)
         end
@@ -260,7 +282,7 @@ function _ga_line_search(
         candidate = x_k - α * step
         obj_candidate = _ga_merit(prior, Q_p, h, obs_lik, candidate)
 
-        if obj_candidate <= obj_current
+        if obj_candidate <= obj_accept
             x_new = candidate
             α = sqrt(α)
             accept = true
