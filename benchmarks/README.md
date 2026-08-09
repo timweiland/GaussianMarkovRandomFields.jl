@@ -50,7 +50,8 @@ The suite currently covers:
 - **`gmrf/`** — `GMRF` construction (LDLt and CHOLMOD), `logpdf`, `var`
   (selected inversion), `rand` (backward solve).
 - **`gaussian_approximation/`** — Fisher-scoring loop with Poisson
-  observations over an RW1 prior (n=500).
+  observations over an RW1 prior (n=500), both cold and warm-started at a
+  tight tolerance (the outer-loop pattern where factorization count dominates).
 - **`autodiff/`** — ForwardDiff and Zygote gradients through the full
   hyperparameters → GMRF → `gaussian_approximation` → `logpdf` pipeline.
   Tracked separately because forward- and reverse-mode exercise largely

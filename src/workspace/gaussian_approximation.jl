@@ -200,6 +200,7 @@ function gaussian_approximation(
         newton_dec_tol::Real = 1.0e-5,
         adaptive_stepsize::Bool = true,
         max_linesearch_iter::Int = 10,
+        predictive_convergence::Bool = true,
         verbose::Bool = false
     )
     ws = prior.workspace
@@ -210,7 +211,7 @@ function gaussian_approximation(
     return _workspace_newton_loop(
         prior, ws, obs_lik, prior.constraints, x_init;
         max_iter, mean_change_tol, newton_dec_tol,
-        adaptive_stepsize, max_linesearch_iter, verbose,
+        adaptive_stepsize, max_linesearch_iter, predictive_convergence, verbose,
     )
 end
 
@@ -235,12 +236,14 @@ function _workspace_newton_loop(
         newton_dec_tol::Real,
         adaptive_stepsize::Bool,
         max_linesearch_iter::Int,
+        predictive_convergence::Bool,
         verbose::Bool,
     )
     diag_idx = _diagonal_indices(ws.Q)
     sparse_hess_map = nothing
     x_k = copy(x_init)
     α = 1.0
+    dec_prev = 0.0
 
     verbose && println("Starting workspace Fisher scoring...")
 
@@ -279,6 +282,25 @@ function _workspace_newton_loop(
             return _workspace_build_result(prior, ws, obs_lik, constraints, x_new, diag_idx, sparse_hess_map)
         end
 
+        # Look-ahead: finish on the factorization the workspace already holds instead of
+        # refactorizing for the final step (see `_frozen_finish`). `workspace_solve`
+        # reuses the numeric factor as long as nothing invalidates it, and nothing here
+        # does — `_prior_local` on a `WorkspaceGMRF` reads its snapshot fields directly.
+        if predictive_convergence &&
+                _predict_converged(newton_decrement, dec_prev, α, newton_dec_tol, iter)
+            x_final = _frozen_finish(
+                prior, obs_lik, g -> _workspace_constrain_step(workspace_solve(ws, g), ws, constraints),
+                x_new, newton_dec_tol, verbose, iter,
+            )
+            if x_final !== nothing
+                verbose && println("  Converged after $(iter + 1) iterations")
+                return _workspace_build_result(
+                    prior, ws, obs_lik, constraints, x_final, diag_idx, sparse_hess_map
+                )
+            end
+        end
+
+        dec_prev = newton_decrement
         x_k = x_new
     end
 
@@ -311,6 +333,7 @@ function gaussian_approximation(
         newton_dec_tol::Real = 1.0e-5,
         adaptive_stepsize::Bool = true,
         max_linesearch_iter::Int = 10,
+        predictive_convergence::Bool = true,
         verbose::Bool = false
     )
     if has_constraints(prior)
