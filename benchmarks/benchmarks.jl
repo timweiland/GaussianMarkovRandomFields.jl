@@ -72,12 +72,13 @@ const Y_POISSON_SMALL = PoissonObservations(
 const OBS_LIK_POISSON_SMALL = ExponentialFamily(Poisson)(Y_POISSON_SMALL)
 const GMRF_PRIOR_SMALL = GMRF(MU_SMALL, Q_RW1_SMALL, LinearSolve.LDLtFactorization())
 
-# Cold-start Poisson problem whose first Newton step overshoots: the latent field has
-# a large amplitude, so the line search backtracks on iteration 1 and the persistent
+# Cold-start Poisson problem whose first Newton step overshoots hard: the latent field
+# has a large amplitude, so the line search backtracks on iteration 1 and the persistent
 # step scale α drops to 0.1. Guards the step-recovery policy (#203) — under the old
 # `sqrt(α)` recovery this needs ~10 fully factorized Newton iterations, most of them
-# needlessly damped. The mild `poisson_rw1_small` problem above never backtracks, so
-# it cannot see this.
+# needlessly damped. `poisson_rw1_small` above backtracks too, but it is a milder
+# problem on the SymTridiagonal/LDLt path; this one damps harder and runs the sparse
+# CHOLMOD backend.
 const POISSON_LATENT_COLD = 3.0 .* sin.(range(0, 6π; length = N_SMALL))
 const OBS_LIK_POISSON_COLD = ExponentialFamily(Poisson)(
     PoissonObservations(rand.(MersenneTwister(2), Poisson.(exp.(POISSON_LATENT_COLD))))
