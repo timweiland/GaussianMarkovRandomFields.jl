@@ -77,6 +77,21 @@ override `prior_logdensity` with a direct, allocation-light evaluation of
 prior_logdensity(m::AbstractLatentPrior, x::AbstractVector; θ...) =
     local_quadratic(m, x; θ...).logp_ref
 
+# Gaussian latent models with a cheap structural log-determinant (see
+# `precision_logdet`) evaluate their exact unconstrained log-density
+# directly, skipping the materialize-and-factorize path.
+function prior_logdensity(m::LatentModel, x::AbstractVector; θ...)
+    if constraints(m; θ...) === nothing
+        ld = precision_logdet(m; θ...)
+        if ld !== nothing
+            Q = _ensure_sparse(precision_matrix(m; θ...))
+            r = x - mean(m; θ...)
+            return 0.5 * (ld - length(x) * log(2π)) - 0.5 * dot(r, Q, r)
+        end
+    end
+    return local_quadratic(m, x; θ...).logp_ref
+end
+
 # --- IFT hooks (hyperparameter-gradient path) ---
 # The Implicit Function Theorem path needs the prior's latent gradient and Hessian evaluated at
 # a `ForwardDiff.Dual`-valued `x` (and Dual `θ`). Routing these through hooks — rather than

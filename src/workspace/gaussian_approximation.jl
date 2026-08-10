@@ -141,13 +141,10 @@ _workspace_constrain_step(step, ws::GMRFWorkspace, constraints::NamedTuple) =
     _workspace_constrain_with_matrix(step, ws, constraints.A)
 
 function _workspace_constrain_with_matrix(step, ws::GMRFWorkspace, A)
-    m = size(A, 1)
-    n = length(step)
-    A_tilde_T = Matrix{eltype(step)}(undef, n, m)
-    for i in 1:m
-        A_tilde_T[:, i] .= workspace_solve(ws, A[i, :])
-    end
-    L_c = cholesky(Symmetric(A * A_tilde_T))
+    # One blocked multi-RHS solve (BLAS-3 on CHOLMOD) instead of m column
+    # solves — this projection runs once per Newton iterate.
+    A_tilde_T = workspace_solve(ws, Matrix{Float64}(transpose(A)))
+    L_c = cholesky(Symmetric(Matrix(A * A_tilde_T)))
     return step - A_tilde_T * (L_c \ (A * step))
 end
 

@@ -210,6 +210,26 @@ function model_name(::CombinedModel)
     return :combined
 end
 
+"""
+    precision_logdet(model::CombinedModel; θ...) -> Union{Nothing, Real}
+
+Block-diagonal log-determinant as the sum of the components' hooks.
+Returns `nothing` unless *every* component provides a cheap form: for a
+component without one, factorizing its block fresh each evaluation could be
+slower than the workspace's numeric-only refactorization of the joint (the
+joint symbolic analysis is reused; a per-block one would not be).
+"""
+function precision_logdet(model::CombinedModel; kwargs...)
+    total = nothing
+    for (i, component) in enumerate(model.components)
+        comp_params = _extract_component_params(component, i, model, kwargs...)
+        ld = precision_logdet(component; comp_params...)
+        ld === nothing && return nothing
+        total = total === nothing ? ld : total + ld
+    end
+    return total
+end
+
 # Named component access: combined_model.matern, combined_model.iid, etc.
 
 function _component_names(model::CombinedModel)

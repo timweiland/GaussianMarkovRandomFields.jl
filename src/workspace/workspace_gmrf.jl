@@ -6,11 +6,12 @@ export WorkspaceGMRF, ConstraintInfo
     ConstraintInfo{T}
 
 Precomputed constraint quantities for a constrained WorkspaceGMRF.
-Stores the constraint matrix A, vector e, and derived quantities
+Stores the (sparse) constraint matrix A, vector e, and derived quantities
 (Ã^T = Q⁻¹A^T, L_c = chol(AÃ^T), constrained mean, log correction).
+The `Ã^T` solves are performed as one blocked multi-RHS solve.
 """
 struct ConstraintInfo{T}
-    matrix::Matrix{Float64}
+    matrix::SparseMatrixCSC{Float64, Int}
     vector::Vector{Float64}
     A_tilde_T::Matrix{Float64}
     L_c::Cholesky{Float64, Matrix{Float64}}
@@ -29,31 +30,28 @@ function ConstraintInfo(
     m == length(e) ||
         throw(ArgumentError("Constraint matrix rows $(m) != constraint vector length $(length(e))"))
 
-    A_dense = Matrix{Float64}(A)
+    A_sp = A isa SparseMatrixCSC ? A : sparse(A)
     e_vec = Vector{Float64}(e)
 
-    # Ã^T = Q⁻¹A^T via m column solves
-    A_tilde_T = Matrix{Float64}(undef, n, m)
-    for i in 1:m
-        A_tilde_T[:, i] .= workspace_solve(ws, A_dense[i, :])
-    end
+    # Ã^T = Q⁻¹A^T via one blocked multi-RHS solve
+    A_tilde_T = workspace_solve(ws, Matrix{Float64}(transpose(A_sp)))
 
     # AÃ^T and its Cholesky
-    L_c = cholesky(Symmetric(A_dense * A_tilde_T))
+    L_c = cholesky(Symmetric(Matrix(A_sp * A_tilde_T)))
 
     # Constrained mean
-    residual = A_dense * μ - e_vec
+    residual = A_sp * μ - e_vec
     constrained_mean = μ - A_tilde_T * (L_c \ residual)
 
     # Log-density correction (Rue & Held 2005, §2.3.3)
-    resid_e = e_vec - A_dense * μ
+    resid_e = e_vec - A_sp * μ
     r = length(resid_e)
     log_constraint_correction =
         0.5 * (r * log(2π) + logdet(L_c) + dot(resid_e, L_c \ resid_e)) -
-        0.5 * logdet(cholesky(Symmetric(A_dense * A_dense')))
+        0.5 * logdet(cholesky(Symmetric(Matrix(A_sp * A_sp'))))
 
     return ConstraintInfo{T}(
-        A_dense, e_vec, A_tilde_T, L_c, constrained_mean, log_constraint_correction
+        A_sp, e_vec, A_tilde_T, L_c, constrained_mean, log_constraint_correction
     )
 end
 
@@ -76,16 +74,52 @@ refactorization when switching between them).
 - `workspace`: Shared factorization engine.
 - `constraints`: `nothing` or `ConstraintInfo{T}` with precomputed constraint quantities.
 - `version`: Workspace version tag — used by `ensure_loaded!` to detect stale state.
+- `precision_logdet`: `nothing`, or `log |Q|` precomputed cheaply from model
+    structure (see [`precision_logdet`](@ref)). When present, `logdetcov`
+    returns it without touching the workspace — the factorization the
+    workspace would otherwise perform solely for this scalar is skipped.
+    The field's type is a *type parameter* rather than `Union{Nothing, T}`:
+    with `L = Nothing` (every directly constructed `WorkspaceGMRF`) the field
+    is a zero-size ghost and the struct layout is identical to what it was
+    before this field existed — an inline union (or any added concrete field)
+    changes the by-value ABI in a way Enzyme's calling-convention handling
+    aborts on.
 """
 struct WorkspaceGMRF{
         T <: Real, B <: WorkspaceBackend, W <: GMRFWorkspace,
         C <: Union{Nothing, ConstraintInfo{T}},
+        L <: Union{Nothing, T},
     } <: AbstractGMRF{T, SparseMatrixCSC{T, Int}}
     mean::Vector{T}
     precision::SparseMatrixCSC{T, Int}
     workspace::W
     constraints::C
     version::Int
+    precision_logdet::L
+end
+
+# Positional form used throughout the package and its extensions; the
+# precomputed log-determinant defaults to absent (ghost `Nothing` field).
+function WorkspaceGMRF{T, B, W, C}(
+        mean, precision, workspace, constraints, version,
+        precision_logdet::Union{Nothing, Real} = nothing
+    ) where {T <: Real, B <: WorkspaceBackend, W <: GMRFWorkspace, C <: Union{Nothing, ConstraintInfo{T}}}
+    ld = precision_logdet === nothing ? nothing : convert(T, precision_logdet)
+    return WorkspaceGMRF{T, B, W, C, typeof(ld)}(
+        mean, precision, workspace, constraints, version, ld
+    )
+end
+
+# Fully-parametrized positional form without the log-determinant field, used
+# by shadow constructions (e.g. the Enzyme extension building a cotangent
+# buffer as `typeof(primal)(...)`): the field defaults to its neutral value.
+function WorkspaceGMRF{T, B, W, C, L}(
+        mean, precision, workspace, constraints, version
+    ) where {T <: Real, B <: WorkspaceBackend, W <: GMRFWorkspace, C <: Union{Nothing, ConstraintInfo{T}}, L}
+    ld = L === Nothing ? nothing : zero(T)
+    return WorkspaceGMRF{T, B, W, C, L}(
+        mean, precision, workspace, constraints, version, ld
+    )
 end
 
 # --- Constructors ---
@@ -105,31 +139,35 @@ function WorkspaceGMRF(mean::AbstractVector{T}, Q::SparseMatrixCSC{T}) where {T}
 end
 
 """
-    WorkspaceGMRF(mean, Q::SparseMatrixCSC, ws::GMRFWorkspace)
+    WorkspaceGMRF(mean, Q::SparseMatrixCSC, ws::GMRFWorkspace; precision_logdet=nothing)
 
 Create an unconstrained `WorkspaceGMRF` reusing an existing workspace.
-The sparsity pattern of `Q` must match `ws.Q`'s pattern.
+The sparsity pattern of `Q` must match `ws.Q`'s pattern. A precomputed
+`precision_logdet` (from the model-structure hook) lets `logdetcov` answer
+without factorizing the workspace.
 """
 function WorkspaceGMRF(
-        mean::AbstractVector{T}, Q::SparseMatrixCSC{T}, ws::GMRFWorkspace
+        mean::AbstractVector{T}, Q::SparseMatrixCSC{T}, ws::GMRFWorkspace;
+        precision_logdet::Union{Nothing, Real} = nothing
     ) where {T}
     _check_workspace_pattern(Q, ws)
     version = _next_version!(ws)
     B = typeof(ws.backend)
     return WorkspaceGMRF{T, B, typeof(ws), Nothing}(
-        Vector{T}(mean), copy(Q), ws, nothing, version
+        Vector{T}(mean), copy(Q), ws, nothing, version, precision_logdet
     )
 end
 
 """
-    WorkspaceGMRF(mean, Q::SparseMatrixCSC, ws::GMRFWorkspace, A, e)
+    WorkspaceGMRF(mean, Q::SparseMatrixCSC, ws::GMRFWorkspace, A, e; precision_logdet=nothing)
 
 Create a constrained `WorkspaceGMRF` with constraints Ax = e.
 The sparsity pattern of `Q` must match `ws.Q`'s pattern.
 """
 function WorkspaceGMRF(
         mean::AbstractVector{T}, Q::SparseMatrixCSC{T}, ws::GMRFWorkspace,
-        A::AbstractMatrix, e::AbstractVector
+        A::AbstractMatrix, e::AbstractVector;
+        precision_logdet::Union{Nothing, Real} = nothing
     ) where {T}
     _check_workspace_pattern(Q, ws)
     version = _next_version!(ws)
@@ -140,7 +178,7 @@ function WorkspaceGMRF(
     ci = ConstraintInfo(ws, mean, A, e)
     B = typeof(ws.backend)
     return WorkspaceGMRF{T, B, typeof(ws), ConstraintInfo{T}}(
-        Vector{T}(mean), copy(Q), ws, ci, version
+        Vector{T}(mean), copy(Q), ws, ci, version, precision_logdet
     )
 end
 
@@ -212,6 +250,9 @@ function mean(d::WorkspaceGMRF)
 end
 
 function logdetcov(d::WorkspaceGMRF)
+    # A model-structure precomputed log-determinant answers without touching
+    # the (shared) workspace — no reload, no factorization.
+    d.precision_logdet === nothing || return -d.precision_logdet
     ensure_loaded!(d)
     return logdet_cov(d.workspace)
 end

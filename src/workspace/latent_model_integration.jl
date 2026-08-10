@@ -170,11 +170,17 @@ function _evaluate_with_workspace(model::LatentModel, ws::GMRFWorkspace, θ::Nam
 
     update_precision!(ws, Q_for_ws)
 
+    # Structure hook: when the model can compute log|Q| cheaply (Kronecker
+    # factor rule, closed forms, ...), carry it on the prior so `logdetcov`
+    # never factorizes the joint workspace at Q_prior — in fitting loops the
+    # workspace's factor slot then effectively belongs to the posterior.
+    ld = precision_logdet(model; θ...)
+
     if constraint_info === nothing
-        return WorkspaceGMRF(μ, Q_for_ws, ws)
+        return WorkspaceGMRF(μ, Q_for_ws, ws; precision_logdet = ld)
     else
         A, e = constraint_info
-        return WorkspaceGMRF(μ, Q_for_ws, ws, A, e)
+        return WorkspaceGMRF(μ, Q_for_ws, ws, A, e; precision_logdet = ld)
     end
 end
 

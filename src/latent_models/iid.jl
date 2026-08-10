@@ -70,6 +70,9 @@ function _validate_iid_parameters(; τ::Real)
     return nothing
 end
 
+# Closed-form log-determinant: Q = τ I.
+precision_logdet(model::IIDModel; τ::Real, kwargs...) = model.n * log(τ)
+
 function precision_matrix(model::IIDModel; τ::Real, kwargs...)
     _validate_iid_parameters(; τ = τ)
 
