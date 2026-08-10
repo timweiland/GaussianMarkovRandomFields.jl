@@ -74,6 +74,10 @@ refactorization when switching between them).
 - `workspace`: Shared factorization engine.
 - `constraints`: `nothing` or `ConstraintInfo{T}` with precomputed constraint quantities.
 - `version`: Workspace version tag — used by `ensure_loaded!` to detect stale state.
+- `precision_logdet`: `nothing`, or `log |Q|` precomputed cheaply from model
+    structure (see [`precision_logdet`](@ref)). When present, `logdetcov`
+    returns it without touching the workspace — the factorization the
+    workspace would otherwise perform solely for this scalar is skipped.
 """
 struct WorkspaceGMRF{
         T <: Real, B <: WorkspaceBackend, W <: GMRFWorkspace,
@@ -84,6 +88,18 @@ struct WorkspaceGMRF{
     workspace::W
     constraints::C
     version::Int
+    precision_logdet::Union{Nothing, T}
+
+    # Positional five-argument form used throughout the package and its
+    # extensions; the precomputed log-determinant defaults to absent.
+    function WorkspaceGMRF{T, B, W, C}(
+            mean, precision, workspace, constraints, version,
+            precision_logdet = nothing
+        ) where {T <: Real, B <: WorkspaceBackend, W <: GMRFWorkspace, C <: Union{Nothing, ConstraintInfo{T}}}
+        return new{T, B, W, C}(
+            mean, precision, workspace, constraints, version, precision_logdet
+        )
+    end
 end
 
 # --- Constructors ---
@@ -103,31 +119,36 @@ function WorkspaceGMRF(mean::AbstractVector{T}, Q::SparseMatrixCSC{T}) where {T}
 end
 
 """
-    WorkspaceGMRF(mean, Q::SparseMatrixCSC, ws::GMRFWorkspace)
+    WorkspaceGMRF(mean, Q::SparseMatrixCSC, ws::GMRFWorkspace; precision_logdet=nothing)
 
 Create an unconstrained `WorkspaceGMRF` reusing an existing workspace.
-The sparsity pattern of `Q` must match `ws.Q`'s pattern.
+The sparsity pattern of `Q` must match `ws.Q`'s pattern. A precomputed
+`precision_logdet` (from the model-structure hook) lets `logdetcov` answer
+without factorizing the workspace.
 """
 function WorkspaceGMRF(
-        mean::AbstractVector{T}, Q::SparseMatrixCSC{T}, ws::GMRFWorkspace
+        mean::AbstractVector{T}, Q::SparseMatrixCSC{T}, ws::GMRFWorkspace;
+        precision_logdet::Union{Nothing, Real} = nothing
     ) where {T}
     _check_workspace_pattern(Q, ws)
     version = _next_version!(ws)
     B = typeof(ws.backend)
     return WorkspaceGMRF{T, B, typeof(ws), Nothing}(
-        Vector{T}(mean), copy(Q), ws, nothing, version
+        Vector{T}(mean), copy(Q), ws, nothing, version,
+        _convert_logdet(T, precision_logdet)
     )
 end
 
 """
-    WorkspaceGMRF(mean, Q::SparseMatrixCSC, ws::GMRFWorkspace, A, e)
+    WorkspaceGMRF(mean, Q::SparseMatrixCSC, ws::GMRFWorkspace, A, e; precision_logdet=nothing)
 
 Create a constrained `WorkspaceGMRF` with constraints Ax = e.
 The sparsity pattern of `Q` must match `ws.Q`'s pattern.
 """
 function WorkspaceGMRF(
         mean::AbstractVector{T}, Q::SparseMatrixCSC{T}, ws::GMRFWorkspace,
-        A::AbstractMatrix, e::AbstractVector
+        A::AbstractMatrix, e::AbstractVector;
+        precision_logdet::Union{Nothing, Real} = nothing
     ) where {T}
     _check_workspace_pattern(Q, ws)
     version = _next_version!(ws)
@@ -138,9 +159,13 @@ function WorkspaceGMRF(
     ci = ConstraintInfo(ws, mean, A, e)
     B = typeof(ws.backend)
     return WorkspaceGMRF{T, B, typeof(ws), ConstraintInfo{T}}(
-        Vector{T}(mean), copy(Q), ws, ci, version
+        Vector{T}(mean), copy(Q), ws, ci, version,
+        _convert_logdet(T, precision_logdet)
     )
 end
+
+_convert_logdet(::Type{T}, ::Nothing) where {T} = nothing
+_convert_logdet(::Type{T}, ld::Real) where {T} = convert(T, ld)
 
 """
     _check_workspace_pattern(Q::SparseMatrixCSC, ws::GMRFWorkspace)
@@ -210,6 +235,9 @@ function mean(d::WorkspaceGMRF)
 end
 
 function logdetcov(d::WorkspaceGMRF)
+    # A model-structure precomputed log-determinant answers without touching
+    # the (shared) workspace — no reload, no factorization.
+    d.precision_logdet === nothing || return -d.precision_logdet
     ensure_loaded!(d)
     return logdet_cov(d.workspace)
 end

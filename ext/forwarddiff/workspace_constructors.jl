@@ -58,9 +58,11 @@ end
 # 3-arg constructor with an existing workspace. The workspace stays primal;
 # the WorkspaceGMRF holds Dual mean/precision for tangent propagation.
 # Loading into the workspace happens lazily via the Dual `ensure_loaded!`
-# override below (which strips to primal).
+# override below (which strips to primal). A precomputed (possibly Dual)
+# `precision_logdet` is carried through unchanged.
 function _construct_forwarddiff_workspace_gmrf_with_ws(
-        mean::AbstractVector, Q::SparseMatrixCSC, ws::GMRFs.GMRFWorkspace
+        mean::AbstractVector, Q::SparseMatrixCSC, ws::GMRFs.GMRFWorkspace,
+        precision_logdet::Union{Nothing, Real} = nothing
     )
     GMRFs._check_workspace_pattern(Q, ws)
     T = promote_type(eltype(mean), eltype(Q))
@@ -72,32 +74,50 @@ function _construct_forwarddiff_workspace_gmrf_with_ws(
     end
     version = GMRFs._next_version!(ws)
     return GMRFs.WorkspaceGMRF{T, typeof(ws.backend), typeof(ws), Nothing}(
-        Vector{T}(mean_T), copy(Q_T), ws, nothing, version
+        Vector{T}(mean_T), copy(Q_T), ws, nothing, version,
+        GMRFs._convert_logdet(T, precision_logdet)
     )
 end
 
 function GMRFs.WorkspaceGMRF(
         mean::AbstractVector{<:ForwardDiff.Dual},
         Q::SparseMatrixCSC,
-        ws::GMRFs.GMRFWorkspace
+        ws::GMRFs.GMRFWorkspace;
+        precision_logdet::Union{Nothing, Real} = nothing
     )
-    return _construct_forwarddiff_workspace_gmrf_with_ws(mean, Q, ws)
+    return _construct_forwarddiff_workspace_gmrf_with_ws(mean, Q, ws, precision_logdet)
 end
 
 function GMRFs.WorkspaceGMRF(
         mean::AbstractVector,
         Q::SparseMatrixCSC{<:ForwardDiff.Dual},
-        ws::GMRFs.GMRFWorkspace
+        ws::GMRFs.GMRFWorkspace;
+        precision_logdet::Union{Nothing, Real} = nothing
     )
-    return _construct_forwarddiff_workspace_gmrf_with_ws(mean, Q, ws)
+    return _construct_forwarddiff_workspace_gmrf_with_ws(mean, Q, ws, precision_logdet)
 end
 
 function GMRFs.WorkspaceGMRF(
         mean::AbstractVector{<:ForwardDiff.Dual},
         Q::SparseMatrixCSC{<:ForwardDiff.Dual},
-        ws::GMRFs.GMRFWorkspace
+        ws::GMRFs.GMRFWorkspace;
+        precision_logdet::Union{Nothing, Real} = nothing
     )
-    return _construct_forwarddiff_workspace_gmrf_with_ws(mean, Q, ws)
+    return _construct_forwarddiff_workspace_gmrf_with_ws(mean, Q, ws, precision_logdet)
+end
+
+# --- Dual factor log-determinants for the `precision_logdet` hook ---
+#
+# `d logdet(Q) = tr(Q⁻¹ dQ)`: primal Cholesky of the (small) factor plus a
+# selected-inverse contraction against the Dual values — exact, at factor
+# scale, replacing the joint selected inverse the prior term would otherwise
+# need in hyperparameter-gradient passes.
+function GMRFs._factor_logdet(Q::SparseMatrixCSC{<:ForwardDiff.Dual})
+    Q_primal = SparseMatrixCSC(Q.m, Q.n, Q.colptr, Q.rowval, ForwardDiff.value.(Q.nzval))
+    engine = GMRFs.GMRFWorkspace(Q_primal)
+    primal = logdet(engine)
+    tangent = GMRFs.selinv_dot(engine, Q)
+    return ForwardDiff.Dual{ForwardDiff.tagtype(tangent)}(primal, ForwardDiff.partials(tangent)...)
 end
 
 # Dual WorkspaceGMRFs hold Dual-valued precision but the workspace buffer is

@@ -43,6 +43,7 @@ LatentModel
 NonGaussianLatentPrior
 hyperparameters(::AbstractLatentPrior)
 precision_matrix(::LatentModel)
+precision_logdet(::LatentModel)
 mean(::LatentModel)
 constraints(::AbstractLatentPrior)
 model_name(::AbstractLatentPrior)

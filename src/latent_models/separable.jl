@@ -110,6 +110,36 @@ function mean(model::SeparableModel; kwargs...)
     return foldl(kron, means)
 end
 
+"""
+    precision_logdet(model::SeparableModel; θ...) -> Union{Nothing, Real}
+
+`logdet(Q₁ ⊗ ⋯ ⊗ Qₙ) = Σᵢ (N/nᵢ) logdet(Qᵢ)`: the joint log-determinant
+from factor-scale factorizations, never touching the Kronecker product
+itself. Returns `nothing` when the joint `εI` regularization branch of
+[`precision_matrix`](@ref) fires (≥2 constrained components), since the
+materialized precision is then no longer the pure Kronecker product.
+"""
+function precision_logdet(model::SeparableModel; kwargs...)
+    comp_kwargs = _extract_component_kwargs(model, kwargs)
+
+    # Mirror precision_matrix's regularization condition exactly.
+    n_constrained = count(((i, comp),) -> constraints(comp; comp_kwargs[i]...) !== nothing, enumerate(model.components))
+    if n_constrained >= 2
+        regs = [comp.regularization for comp in model.components if hasfield(typeof(comp), :regularization)]
+        isempty(regs) || return nothing
+    end
+
+    dims = Int[length(c) for c in model.components]
+    N = prod(dims)
+    total = nothing
+    for (i, comp) in enumerate(model.components)
+        ld = _component_precision_logdet(comp, comp_kwargs[i])
+        term = (N ÷ dims[i]) * ld
+        total = total === nothing ? term : total + term
+    end
+    return total
+end
+
 function precision_matrix(model::SeparableModel; kwargs...)
     # Extract hyperparameters for each component
     comp_kwargs = _extract_component_kwargs(model, kwargs)
@@ -118,8 +148,11 @@ function precision_matrix(model::SeparableModel; kwargs...)
     Qs = [precision_matrix(comp; comp_kwargs[i]...) for (i, comp) in enumerate(model.components)]
 
     # Kronecker product: Q1 ⊗ Q2
-    # This matches the mean vectorization (comp2 varying fastest)
-    Q = foldl(kron, Qs)
+    # This matches the mean vectorization (comp2 varying fastest).
+    # Factors are lowered to sparse first: `kron` with a SymTridiagonal
+    # factor (AR1/RW1) would otherwise fall back to Base's dense method and
+    # densify the joint precision.
+    Q = foldl(kron, map(_ensure_sparse, Qs))
 
     # When multiple components are rank-deficient (have constraints), the individual
     # component regularizations (ε*I added by RW/Besag) get diluted through the
@@ -239,6 +272,12 @@ function constraints(model::SeparableModel; kwargs...)
     # Stack all constraints vertically
     A_combined = vcat([A for (A, _) in constraint_list]...)
     e_combined = vcat([e for (_, e) in constraint_list]...)
+
+    # A single constrained component expands to I ⊗ A_i ⊗ I, which has full
+    # row rank whenever the component's constraint block does — skip the
+    # (dense, m×N QR) redundancy removal in that case. Redundancy can only
+    # arise when several components contribute constraints.
+    length(constraint_list) == 1 && return (A_combined, e_combined)
 
     # Remove redundant constraints to ensure full row rank
     return _remove_redundant_constraints(A_combined, e_combined)

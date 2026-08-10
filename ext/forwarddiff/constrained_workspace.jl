@@ -70,7 +70,8 @@ function _build_constrained_dual_workspace_gmrf(
         mean::AbstractVector, Q::SparseMatrixCSC, ws::GMRFs.GMRFWorkspace,
         A_dense::AbstractMatrix{Float64}, e_vec::Vector{Float64},
         A_tilde_T_v::Matrix{Float64}, L_c_primal,
-        log_AA_det::Float64, version::Int
+        log_AA_det::Float64, version::Int;
+        precision_logdet::Union{Nothing, Real} = nothing
     )
     T = promote_type(eltype(mean), eltype(Q))
     mean_T = convert(Vector{T}, mean)
@@ -101,13 +102,15 @@ function _build_constrained_dual_workspace_gmrf(
     )
     B = typeof(ws.backend)
     return GMRFs.WorkspaceGMRF{T, B, typeof(ws), GMRFs.ConstraintInfo{T}}(
-        mean_T, copy(Q_T), ws, ci, version
+        mean_T, copy(Q_T), ws, ci, version,
+        GMRFs._convert_logdet(T, precision_logdet)
     )
 end
 
 function _construct_forwarddiff_constrained_workspace_gmrf(
         mean::AbstractVector, Q::SparseMatrixCSC, ws::GMRFs.GMRFWorkspace,
-        A::AbstractMatrix, e::AbstractVector
+        A::AbstractMatrix, e::AbstractVector,
+        precision_logdet::Union{Nothing, Real} = nothing
     )
     GMRFs._check_workspace_pattern(Q, ws)
 
@@ -129,7 +132,8 @@ function _construct_forwarddiff_constrained_workspace_gmrf(
     log_AA_det = logdet(cholesky(Symmetric(Matrix(A_sp * A_sp'))))
 
     return _build_constrained_dual_workspace_gmrf(
-        mean, Q, ws, A_sp, e_vec, A_tilde_T_v, L_c_primal, log_AA_det, version
+        mean, Q, ws, A_sp, e_vec, A_tilde_T_v, L_c_primal, log_AA_det, version;
+        precision_logdet
     )
 end
 
@@ -138,9 +142,10 @@ function GMRFs.WorkspaceGMRF(
         Q::SparseMatrixCSC,
         ws::GMRFs.GMRFWorkspace,
         A::AbstractMatrix,
-        e::AbstractVector
+        e::AbstractVector;
+        precision_logdet::Union{Nothing, Real} = nothing
     )
-    return _construct_forwarddiff_constrained_workspace_gmrf(mean, Q, ws, A, e)
+    return _construct_forwarddiff_constrained_workspace_gmrf(mean, Q, ws, A, e, precision_logdet)
 end
 
 function GMRFs.WorkspaceGMRF(
@@ -148,9 +153,10 @@ function GMRFs.WorkspaceGMRF(
         Q::SparseMatrixCSC{<:ForwardDiff.Dual},
         ws::GMRFs.GMRFWorkspace,
         A::AbstractMatrix,
-        e::AbstractVector
+        e::AbstractVector;
+        precision_logdet::Union{Nothing, Real} = nothing
     )
-    return _construct_forwarddiff_constrained_workspace_gmrf(mean, Q, ws, A, e)
+    return _construct_forwarddiff_constrained_workspace_gmrf(mean, Q, ws, A, e, precision_logdet)
 end
 
 function GMRFs.WorkspaceGMRF(
@@ -158,7 +164,8 @@ function GMRFs.WorkspaceGMRF(
         Q::SparseMatrixCSC{<:ForwardDiff.Dual},
         ws::GMRFs.GMRFWorkspace,
         A::AbstractMatrix,
-        e::AbstractVector
+        e::AbstractVector;
+        precision_logdet::Union{Nothing, Real} = nothing
     )
-    return _construct_forwarddiff_constrained_workspace_gmrf(mean, Q, ws, A, e)
+    return _construct_forwarddiff_constrained_workspace_gmrf(mean, Q, ws, A, e, precision_logdet)
 end
