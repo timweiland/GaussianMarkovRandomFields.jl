@@ -373,13 +373,23 @@ using Distributions
         end
 
         @testset "warm-start converges faster" begin
-            # Warm start from the converged mode should be faster than cold start
-            t_cold = @elapsed for _ in 1:20
-                gaussian_approximation(prior_gmrf, obs_lik)
+            # Warm start from the converged mode should be faster than cold start.
+            # At n = 6 a solve is ~45 µs and fixed per-call overhead (cache setup, the
+            # final refactorization) dominates, so cold start comes in only ~1.15x
+            # slower despite taking 6 Newton iterations to warm start's 1. A single
+            # unwarmed `@elapsed` pair is noisier than that margin under load, so warm
+            # up first and take the best of several rounds.
+            function best_of(f)
+                f()  # warm up
+                rounds = map(1:5) do _
+                    @elapsed for _ in 1:20
+                        f()
+                    end
+                end
+                return minimum(rounds)
             end
-            t_warm = @elapsed for _ in 1:20
-                gaussian_approximation(prior_gmrf, obs_lik; x0 = x_star)
-            end
+            t_cold = best_of(() -> gaussian_approximation(prior_gmrf, obs_lik))
+            t_warm = best_of(() -> gaussian_approximation(prior_gmrf, obs_lik; x0 = x_star))
             @test t_warm < t_cold
         end
     end
