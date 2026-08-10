@@ -66,6 +66,7 @@ const GMRFs = GaussianMarkovRandomFields
         ws = make_workspace(sep; θ...)
         prior = sep(ws; θ...)
         @test prior isa WorkspaceGMRF
+        @test prior.precision_logdet !== nothing
         @test prior.precision_logdet ≈ logdet(Matrix(Q_ref))
 
         # logdetcov answers from the field without factorizing the workspace

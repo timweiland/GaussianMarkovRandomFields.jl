@@ -74,8 +74,7 @@ function _construct_forwarddiff_workspace_gmrf_with_ws(
     end
     version = GMRFs._next_version!(ws)
     return GMRFs.WorkspaceGMRF{T, typeof(ws.backend), typeof(ws), Nothing}(
-        Vector{T}(mean_T), copy(Q_T), ws, nothing, version,
-        GMRFs._convert_logdet(T, precision_logdet)
+        Vector{T}(mean_T), copy(Q_T), ws, nothing, version, precision_logdet
     )
 end
 

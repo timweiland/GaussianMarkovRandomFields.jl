@@ -78,28 +78,48 @@ refactorization when switching between them).
     structure (see [`precision_logdet`](@ref)). When present, `logdetcov`
     returns it without touching the workspace — the factorization the
     workspace would otherwise perform solely for this scalar is skipped.
+    The field's type is a *type parameter* rather than `Union{Nothing, T}`:
+    with `L = Nothing` (every directly constructed `WorkspaceGMRF`) the field
+    is a zero-size ghost and the struct layout is identical to what it was
+    before this field existed — an inline union (or any added concrete field)
+    changes the by-value ABI in a way Enzyme's calling-convention handling
+    aborts on.
 """
 struct WorkspaceGMRF{
         T <: Real, B <: WorkspaceBackend, W <: GMRFWorkspace,
         C <: Union{Nothing, ConstraintInfo{T}},
+        L <: Union{Nothing, T},
     } <: AbstractGMRF{T, SparseMatrixCSC{T, Int}}
     mean::Vector{T}
     precision::SparseMatrixCSC{T, Int}
     workspace::W
     constraints::C
     version::Int
-    precision_logdet::Union{Nothing, T}
+    precision_logdet::L
+end
 
-    # Positional five-argument form used throughout the package and its
-    # extensions; the precomputed log-determinant defaults to absent.
-    function WorkspaceGMRF{T, B, W, C}(
-            mean, precision, workspace, constraints, version,
-            precision_logdet = nothing
-        ) where {T <: Real, B <: WorkspaceBackend, W <: GMRFWorkspace, C <: Union{Nothing, ConstraintInfo{T}}}
-        return new{T, B, W, C}(
-            mean, precision, workspace, constraints, version, precision_logdet
-        )
-    end
+# Positional form used throughout the package and its extensions; the
+# precomputed log-determinant defaults to absent (ghost `Nothing` field).
+function WorkspaceGMRF{T, B, W, C}(
+        mean, precision, workspace, constraints, version,
+        precision_logdet::Union{Nothing, Real} = nothing
+    ) where {T <: Real, B <: WorkspaceBackend, W <: GMRFWorkspace, C <: Union{Nothing, ConstraintInfo{T}}}
+    ld = precision_logdet === nothing ? nothing : convert(T, precision_logdet)
+    return WorkspaceGMRF{T, B, W, C, typeof(ld)}(
+        mean, precision, workspace, constraints, version, ld
+    )
+end
+
+# Fully-parametrized positional form without the log-determinant field, used
+# by shadow constructions (e.g. the Enzyme extension building a cotangent
+# buffer as `typeof(primal)(...)`): the field defaults to its neutral value.
+function WorkspaceGMRF{T, B, W, C, L}(
+        mean, precision, workspace, constraints, version
+    ) where {T <: Real, B <: WorkspaceBackend, W <: GMRFWorkspace, C <: Union{Nothing, ConstraintInfo{T}}, L}
+    ld = L === Nothing ? nothing : zero(T)
+    return WorkspaceGMRF{T, B, W, C, L}(
+        mean, precision, workspace, constraints, version, ld
+    )
 end
 
 # --- Constructors ---
@@ -134,8 +154,7 @@ function WorkspaceGMRF(
     version = _next_version!(ws)
     B = typeof(ws.backend)
     return WorkspaceGMRF{T, B, typeof(ws), Nothing}(
-        Vector{T}(mean), copy(Q), ws, nothing, version,
-        _convert_logdet(T, precision_logdet)
+        Vector{T}(mean), copy(Q), ws, nothing, version, precision_logdet
     )
 end
 
@@ -159,13 +178,9 @@ function WorkspaceGMRF(
     ci = ConstraintInfo(ws, mean, A, e)
     B = typeof(ws.backend)
     return WorkspaceGMRF{T, B, typeof(ws), ConstraintInfo{T}}(
-        Vector{T}(mean), copy(Q), ws, ci, version,
-        _convert_logdet(T, precision_logdet)
+        Vector{T}(mean), copy(Q), ws, ci, version, precision_logdet
     )
 end
-
-_convert_logdet(::Type{T}, ::Nothing) where {T} = nothing
-_convert_logdet(::Type{T}, ld::Real) where {T} = convert(T, ld)
 
 """
     _check_workspace_pattern(Q::SparseMatrixCSC, ws::GMRFWorkspace)

@@ -102,8 +102,7 @@ function _build_constrained_dual_workspace_gmrf(
     )
     B = typeof(ws.backend)
     return GMRFs.WorkspaceGMRF{T, B, typeof(ws), GMRFs.ConstraintInfo{T}}(
-        mean_T, copy(Q_T), ws, ci, version,
-        GMRFs._convert_logdet(T, precision_logdet)
+        mean_T, copy(Q_T), ws, ci, version, precision_logdet
     )
 end
 
