@@ -33,20 +33,26 @@ end
         pc = GaussianMarkovRandomFields._predict_converged
         tol = 1.0e-8
 
-        # Quadratic contraction, undamped: the next decrement is predicted to clear tol.
-        @test pc(1.0e-6, 1.0e-2, 1.0, tol, 2)
+        # Quadratic contraction, both steps undamped: the next decrement is
+        # predicted to clear tol.
+        @test pc(1.0e-6, 1.0e-2, 1.0, 1.0, tol, 2)
 
         # First iteration: no previous decrement to estimate contraction from.
-        @test !pc(1.0e-6, 1.0e-2, 1.0, tol, 1)
+        @test !pc(1.0e-6, 1.0e-2, 1.0, 1.0, tol, 1)
 
         # Damped step (α < 1): quadratic reasoning does not apply.
-        @test !pc(1.0e-6, 1.0e-2, 0.999, tol, 2)
+        @test !pc(1.0e-6, 1.0e-2, 0.999, 1.0, tol, 2)
+
+        # This step undamped but the previous one damped — which `step_recovery =
+        # :retry_full` produces on the first full step after a backtrack. `dec_prev`
+        # then came from a damped step, so the contraction ratio means nothing.
+        @test !pc(1.0e-6, 1.0e-2, 1.0, 0.316, tol, 2)
 
         # Contraction too slow for the next step to clear tol.
-        @test !pc(1.0e-4, 1.0e-2, 1.0, tol, 2)
+        @test !pc(1.0e-4, 1.0e-2, 1.0, 1.0, tol, 2)
 
         # No contraction at all.
-        @test !pc(1.0e-2, 1.0e-2, 1.0, tol, 2)
+        @test !pc(1.0e-2, 1.0e-2, 1.0, 1.0, tol, 2)
     end
 
     # Warm solve in the pattern of an outer hyperparameter loop: solve once, then
@@ -119,17 +125,30 @@ end
     end
 
     @testset "no effect while the line search is damping" begin
-        # Extreme counts under a weak prior: the line search backtracks on the first
-        # step and α only creeps back towards 1, so the gate never opens and the
-        # solve is bit-identical with and without the look-ahead.
+        # Extreme counts under a weak prior: the line search backtracks hard on the
+        # opening steps. Under `step_recovery = :sqrt`, α then only creeps back
+        # towards 1 and never reaches it, so the gate stays shut for the whole solve
+        # and the run is bit-identical with and without the look-ahead.
         m = 5
         weak_prior = GMRF(zeros(m), 0.01 * sparse(I, m, m))
         extreme_lik = ExponentialFamily(Poisson)(PoissonObservations([200, 50, 500, 10, 1000]))
-        post_on = gaussian_approximation(weak_prior, extreme_lik; tolkw...)
+        post_on = gaussian_approximation(
+            weak_prior, extreme_lik; step_recovery = :sqrt, tolkw...
+        )
         post_off = gaussian_approximation(
-            weak_prior, extreme_lik; predictive_convergence = false, tolkw...
+            weak_prior, extreme_lik; step_recovery = :sqrt,
+            predictive_convergence = false, tolkw...
         )
         @test mean(post_on) == mean(post_off)
+
+        # Under the default `:retry_full` this solve does re-enter undamped steps, so
+        # the gate opens near the end rather than never — and the returned mode is
+        # still identical either way.
+        post_on_rf = gaussian_approximation(weak_prior, extreme_lik; tolkw...)
+        post_off_rf = gaussian_approximation(
+            weak_prior, extreme_lik; predictive_convergence = false, tolkw...
+        )
+        @test mean(post_on_rf) == mean(post_off_rf)
     end
 
     @testset "latent-model entry point threads the keyword" begin

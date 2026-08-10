@@ -72,6 +72,22 @@ const Y_POISSON_SMALL = PoissonObservations(
 const OBS_LIK_POISSON_SMALL = ExponentialFamily(Poisson)(Y_POISSON_SMALL)
 const GMRF_PRIOR_SMALL = GMRF(MU_SMALL, Q_RW1_SMALL, LinearSolve.LDLtFactorization())
 
+# Cold-start Poisson problem whose first Newton step overshoots hard: the latent field
+# has a large amplitude, so the line search backtracks on iteration 1 and the persistent
+# step scale α drops to 0.1. Guards the step-recovery policy (#203) — under the old
+# `sqrt(α)` recovery this needs ~10 fully factorized Newton iterations, most of them
+# needlessly damped. `poisson_rw1_small` above backtracks too, but it is a milder
+# problem on the SymTridiagonal/LDLt path; this one damps harder and runs the sparse
+# CHOLMOD backend.
+const POISSON_LATENT_COLD = 3.0 .* sin.(range(0, 6π; length = N_SMALL))
+const OBS_LIK_POISSON_COLD = ExponentialFamily(Poisson)(
+    PoissonObservations(rand.(MersenneTwister(2), Poisson.(exp.(POISSON_LATENT_COLD))))
+)
+const Q_AR1_COLD = spdiagm(
+    -1 => fill(-1.0, N_SMALL - 1), 0 => fill(2.01, N_SMALL), 1 => fill(-1.0, N_SMALL - 1)
+)
+const GMRF_PRIOR_COLD = GMRF(MU_SMALL, Q_AR1_COLD)
+
 # Warm-started solve at a tight tolerance: the outer-loop pattern (hyperparameter
 # optimisation, grid exploration) where the per-solve factorization count dominates.
 # The prior is perturbed away from the one the warm start was computed for, so the
@@ -249,6 +265,10 @@ SUITE["gmrf"]["workspace_selinv_diag"] =
 SUITE["gaussian_approximation"] = BenchmarkGroup()
 SUITE["gaussian_approximation"]["poisson_rw1_small"] =
     @benchmarkable gaussian_approximation($GMRF_PRIOR_SMALL, $OBS_LIK_POISSON_SMALL)
+# Cold start that backtracks on iteration 1: tracks how quickly the line search
+# recovers the full Newton step (#203), i.e. the number of damped factorizations.
+SUITE["gaussian_approximation"]["poisson_cold_start"] =
+    @benchmarkable gaussian_approximation($GMRF_PRIOR_COLD, $OBS_LIK_POISSON_COLD)
 SUITE["gaussian_approximation"]["poisson_rw1_warm_tight"] =
     @benchmarkable gaussian_approximation(
     $GMRF_PRIOR_SMALL_PERTURBED, $OBS_LIK_POISSON_SMALL;

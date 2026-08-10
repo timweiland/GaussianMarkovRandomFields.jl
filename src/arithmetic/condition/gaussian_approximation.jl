@@ -157,6 +157,13 @@ constraint projection when needed.
 - `newton_dec_tol::Real=1e-5`: Newton decrement convergence tolerance
 - `adaptive_stepsize::Bool=true`: Enable adaptive stepsize with backtracking line search
 - `max_linesearch_iter::Int=10`: Maximum line search iterations per Newton step
+- `step_recovery::Symbol=:retry_full`: How the line search recovers the step scale `α`
+  after a backtrack. `:retry_full` probes the undamped step (`α = 1`) at the start of
+  every Newton iteration and only falls back to the damped scale if it is rejected;
+  `:sqrt` instead grows `α` as `sqrt(α)` per accepted step, spreading the recovery over
+  ~8–10 damped (and therefore fully factorized) Newton iterations. Use `:sqrt` if the
+  merit is not convex along the Newton direction and the slow recovery is wanted as an
+  oscillation guard.
 - `predictive_convergence::Bool=true`: When quadratic contraction predicts that the next
   Newton decrement clears `newton_dec_tol`, finish against the factorization already in
   hand instead of refactorizing for the final step. The step's own decrement is the
@@ -192,6 +199,7 @@ function gaussian_approximation(
         newton_dec_tol::Real = 1.0e-5,
         adaptive_stepsize::Bool = true,
         max_linesearch_iter::Int = 10,
+        step_recovery::Symbol = :retry_full,
         predictive_convergence::Bool = true,
         verbose::Bool = false
     )
@@ -202,20 +210,77 @@ function gaussian_approximation(
     return _newton_loop(
         prior_gmrf, obs_lik, solver, constraints, x_init;
         max_iter, mean_change_tol, newton_dec_tol,
-        adaptive_stepsize, max_linesearch_iter, predictive_convergence, verbose,
+        adaptive_stepsize, max_linesearch_iter, step_recovery,
+        predictive_convergence, verbose,
     )
 end
+
+# Resolve the `step_recovery` keyword to "probe the full Newton step first?".
+# Validated here — the two Newton loops are the single funnel every
+# `gaussian_approximation` entry point passes through.
+function _retry_full_step(step_recovery::Symbol)
+    step_recovery === :retry_full && return true
+    step_recovery === :sqrt && return false
+    throw(
+        ArgumentError(
+            "step_recovery must be :retry_full or :sqrt, got :$step_recovery"
+        )
+    )
+end
+
+# Line-search merit: the neg-log-posterior up to an x-independent constant.
+_ga_merit(prior, Q_p, h, obs_lik, x) = _prior_energy(prior, Q_p, h, x) - loglik(x, obs_lik)
+
+# Rounding-noise floor of a merit evaluation. The merit is a difference of two
+# O(n)-term sums (prior energy and log-likelihood), so its achievable precision
+# scales with the magnitude of *those* terms — `abs(merit)` alone underestimates it
+# whenever the two nearly cancel. A few dozen ULPs: the artifacts measured on the
+# convergence plateau are 1-6 ULPs, while the smallest decrease the line search can
+# still act on there is ~1e-11 relative, so this sits well clear of both.
+#
+# `eps(typeof(scale))` rather than `eps(scale)`: the `ChordalGMRF` hyperparameter path
+# differentiates straight through the Newton loop, so `scale` can be a `ForwardDiff.Dual`
+# (for which the type-based `eps` is the value type's). The tolerance is then a Dual too,
+# which is harmless — `obj_accept` is only ever compared with `<=`, on values alone.
+_merit_atol(scale::Real) = 64 * eps(typeof(scale)) * max(scale, one(scale))
 
 # Backtracking line search shared by the cache- and workspace-backed Newton loops.
 # Returns the accepted iterate `x_new` and the (possibly shrunk) step scale `α`. The
 # merit is `_prior_energy(prior, Q_p, h, ·) - loglik(·, obs_lik)` — the neg-log-posterior
 # up to an x-independent constant, so accept/reject decisions match the full merit while
 # never evaluating `logpdf` (no factorization on a shared workspace).
+#
+# `α` persists across Newton iterations: a backtrack shrinks it 10×, an accepted step
+# grows it back as `sqrt(α)`. With `retry_full` (the `:retry_full` policy) the undamped
+# step is probed before that ladder is descended, which is what keeps a single early
+# backtrack from spreading its recovery over ~8-10 damped Newton iterations. The probe is
+# cheap precisely because the merit never factorizes, whereas a damped iteration costs a
+# full factorize + solve.
 function _ga_line_search(
         prior, Q_p, h, energy_k, obs_lik, x_k, step, α;
         max_linesearch_iter::Int, newton_dec_tol::Real, verbose::Bool,
+        retry_full::Bool,
     )
-    obj_current = energy_k - loglik(x_k, obs_lik)
+    loglik_k = loglik(x_k, obs_lik)
+    obj_current = energy_k - loglik_k
+    # Accept anything that is not a *significant* increase. Near the mode the true
+    # decrease falls below the merit's own rounding noise, and a strict `<=` then
+    # rejects a perfectly good undamped Newton step over a 1-2 ULP artifact and
+    # replaces it with a 10x-damped one — which is how a warm start from a converged
+    # mode came back with ‖∇ₓ neg-log-posterior‖∞ ≈ 5e-10 instead of ≈ 8e-15. A step
+    # whose merit change is at the noise floor cannot be an overshoot, so there is
+    # nothing for the line search to guard against.
+    obj_accept = obj_current + _merit_atol(abs(energy_k) + abs(loglik_k))
+
+    if retry_full && α < one(α)
+        x_full = x_k - step
+        if _ga_merit(prior, Q_p, h, obs_lik, x_full) <= obj_accept
+            verbose && println("    Accepted full step (α=1)")
+            return x_full, one(α)
+        end
+        verbose && println("    Full step rejected, resuming at α=$(round(α, digits = 4))")
+    end
+
     accept = false
     # Pre-initialize so `x_new` is provably defined for static analysis: the loop assigns
     # it only on the accept branch, in a way JET cannot track. Always overwritten below —
@@ -224,9 +289,9 @@ function _ga_line_search(
 
     for ls_iter in 1:max_linesearch_iter
         candidate = x_k - α * step
-        obj_candidate = _prior_energy(prior, Q_p, h, candidate) - loglik(candidate, obs_lik)
+        obj_candidate = _ga_merit(prior, Q_p, h, obs_lik, candidate)
 
-        if obj_candidate <= obj_current
+        if obj_candidate <= obj_accept
             x_new = candidate
             α = sqrt(α)
             accept = true
@@ -275,13 +340,17 @@ end
 # - `iter > 1`, so `dec_prev` is a real decrement. It is then also strictly
 #   positive: a non-positive decrement would have converged at iteration
 #   `iter - 1`.
-# - `α == 1`: both this step and the previous one were full Newton steps. The
-#   line search returns `1.0` only for an undamped accepted step and recovers
-#   towards 1 via `sqrt`, so `α == 1` at iteration `k` implies the step at
-#   `k - 1` was undamped too. While the line search is still damping, the
-#   quadratic reasoning does not apply and the attempt would mostly be wasted.
-function _predict_converged(dec_k, dec_prev, α, newton_dec_tol, iter)
-    (iter > 1 && α == 1.0) || return false
+# - `α == 1 && α_prev == 1`: this step and the previous one were both undamped,
+#   so `dec_k` and `dec_prev` are two full Newton steps and their ratio means
+#   what the formula assumes. The two scales are checked separately because
+#   `α == 1` alone no longer implies the previous step was undamped: under
+#   `step_recovery = :retry_full` the line search returns exactly `1.0` the
+#   first time it accepts the full step after a backtrack, whereas the `:sqrt`
+#   policy could only creep back to `1.0` over many undamped iterations. While
+#   the line search is still damping, the quadratic reasoning does not apply and
+#   the attempt would mostly be wasted.
+function _predict_converged(dec_k, dec_prev, α, α_prev, newton_dec_tol, iter)
+    (iter > 1 && α == 1.0 && α_prev == 1.0) || return false
     return dec_k * (dec_k / dec_prev)^2 < newton_dec_tol
 end
 
@@ -364,9 +433,11 @@ function _newton_loop(
         newton_dec_tol::Real,
         adaptive_stepsize::Bool,
         max_linesearch_iter::Int,
+        step_recovery::Symbol,
         predictive_convergence::Bool,
         verbose::Bool,
     )
+    retry_full = _retry_full_step(step_recovery)
     x_k = copy(x_init)
     α = 1.0
     dec_prev = 0.0
@@ -384,10 +455,13 @@ function _newton_loop(
         step = _ga_solve(solver, neg_score_k)
         step = _constrain_step(step, solver, constraints)
 
+        # The scale the previous iteration accepted, kept before the line search
+        # overwrites `α`: `_predict_converged` needs both to be undamped.
+        α_prev = α
         if adaptive_stepsize
             x_new, α = _ga_line_search(
                 prior, Q_p, h, energy_k, obs_lik, x_k, step, α;
-                max_linesearch_iter, newton_dec_tol, verbose,
+                max_linesearch_iter, newton_dec_tol, verbose, retry_full,
             )
         else
             x_new = x_k - step
@@ -404,7 +478,7 @@ function _newton_loop(
         end
 
         if predictive_convergence &&
-                _predict_converged(newton_decrement, dec_prev, α, newton_dec_tol, iter)
+                _predict_converged(newton_decrement, dec_prev, α, α_prev, newton_dec_tol, iter)
             x_final = _frozen_finish(
                 prior, obs_lik, g -> _constrain_step(_ga_solve(solver, g), solver, constraints),
                 x_new, newton_dec_tol, verbose, iter,

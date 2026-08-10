@@ -172,4 +172,47 @@ using SparseArrays
         @test mean(ws_result) ≈ mean(ref_result) rtol = 1.0e-6
         @test precision_matrix(ws_result) ≈ precision_matrix(ref_result) rtol = 1.0e-6
     end
+
+    @testset "Step recovery policies (workspace loop)" begin
+        n = 200
+        Q_prior = spdiagm(-1 => fill(-1.0, n - 1), 0 => fill(2.01, n), 1 => fill(-1.0, n - 1))
+        μ_prior = zeros(n)
+        counts = round.(Int, exp.(3 .* sin.(range(0, 6π; length = n))))
+        obs_lik = ExponentialFamily(Distributions.Poisson)(PoissonObservations(counts))
+        tight = (newton_dec_tol = 1.0e-12, mean_change_tol = 1.0e-12)
+
+        ref_gmrf = GMRF(μ_prior, Q_prior)
+        ∇norm(x) = norm(
+            GaussianMarkovRandomFields.∇ₓ_neg_log_posterior(ref_gmrf, obs_lik, x), Inf
+        )
+
+        # The workspace loop runs the same line search as the cache-backed one, so
+        # every policy must land on the same mode as the GMRF path.
+        for policy in (:retry_full, :sqrt)
+            ref = gaussian_approximation(ref_gmrf, obs_lik; step_recovery = policy, tight...)
+            ws = gaussian_approximation(
+                WorkspaceGMRF(μ_prior, Q_prior), obs_lik; step_recovery = policy, tight...
+            )
+            @test mean(ws) ≈ mean(ref) rtol = 1.0e-8
+        end
+
+        # ... and the default policy must actually be in force here too (issue #203).
+        ws_sqrt = gaussian_approximation(
+            WorkspaceGMRF(μ_prior, Q_prior), obs_lik;
+            max_iter = 8, step_recovery = :sqrt, tight...
+        )
+        ws_full = gaussian_approximation(
+            WorkspaceGMRF(μ_prior, Q_prior), obs_lik; max_iter = 8, tight...
+        )
+        @test ∇norm(mean(ws_full)) < 1.0e-3 * ∇norm(mean(ws_sqrt))
+
+        # The merit-rounding-noise tolerance lives in the shared line search, so the
+        # workspace loop reaches the same numerical floor at the mode.
+        ws_converged = gaussian_approximation(WorkspaceGMRF(μ_prior, Q_prior), obs_lik; tight...)
+        @test ∇norm(collect(mean(ws_converged))) < 1.0e-12
+
+        @test_throws ArgumentError gaussian_approximation(
+            WorkspaceGMRF(μ_prior, Q_prior), obs_lik; step_recovery = :bogus
+        )
+    end
 end
