@@ -50,13 +50,18 @@ end
 Create a pool of `size` independent workspaces, each with its own symbolic
 factorization of `Q`.
 """
-function WorkspacePool(Q::SparseMatrixCSC{T}; size::Int = Threads.nthreads()) where {T}
-    first_ws = GMRFWorkspace(Q)
+function WorkspacePool(Q::SparseMatrixCSC{T}; size::Int = Threads.nthreads(), backend_kwargs...) where {T}
+    # Backend kwargs are forwarded to every member's backend constructor.
+    # NB for algorithmic orderings at scale: resolve the permutation ONCE via
+    # `ordering_permutation(Q, alg)` and pass the vector — pool members share
+    # the sparsity pattern, so recomputing e.g. nested dissection per member
+    # wastes seconds at large n.
+    first_ws = GMRFWorkspace(Q; backend_kwargs...)
     B = typeof(first_ws.backend)
     ch = Channel{GMRFWorkspace{T, B}}(size)
     put!(ch, first_ws)
     for _ in 2:size
-        put!(ch, GMRFWorkspace(copy(Q)))
+        put!(ch, GMRFWorkspace(copy(Q); backend_kwargs...))
     end
     return WorkspacePool{T, B}(ch, size)
 end
