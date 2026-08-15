@@ -1,8 +1,9 @@
 using LinearAlgebra
 using SparseArrays
 using SelectedInversion
+import CliqueTrees
 
-export WorkspaceBackend, CHOLMODBackend
+export WorkspaceBackend, CHOLMODBackend, PinDenseColumns, ordering_permutation
 
 """
     WorkspaceBackend
@@ -59,9 +60,95 @@ mutable struct CHOLMODBackend{T} <: WorkspaceBackend
     selinv_Z_cache::Union{Nothing, AbstractMatrix}
 end
 
-function CHOLMODBackend(Q::Symmetric{T, <:SparseMatrixCSC{T}}) where {T}
+"""
+    PinDenseColumns(inner; frac = 0.5)
+
+Fill-reducing-ordering wrapper: columns with more than `frac * n` nonzeros
+(e.g. the dense border a global fixed effect adds to a precision pattern) are
+pinned to the END of the elimination order, and `inner` — any
+`CliqueTrees.PermutationOrAlgorithm` — orders the remaining sparse block.
+Dense columns join every separator anyway; leaving them in only degrades
+graph partitioners like nested dissection.
+"""
+struct PinDenseColumns{A}
+    inner::A
+    frac::Float64
+end
+PinDenseColumns(inner; frac = 0.5) = PinDenseColumns(inner, frac)
+
+"""
+    ordering_permutation(A::SparseMatrixCSC, ordering) -> Vector{Int}
+
+Resolve an ordering spec to an explicit fill-reducing permutation for `A`'s
+sparsity pattern. `ordering` is anything CliqueTrees accepts — a raw
+permutation, an (order, index) tuple, or an `EliminationAlgorithm` (e.g.
+`CliqueTrees.MMD()`; with Metis.jl loaded,
+`CliqueTrees.ND(CliqueTrees.MMD(), CliqueTrees.METISND())` gives nested
+dissection) — or a [`PinDenseColumns`](@ref) wrapper around one of those.
+
+Use this to resolve an algorithmic ordering ONCE and pass the resulting
+vector to every consumer that shares the pattern (e.g. all members of a
+`WorkspacePool`) instead of recomputing it per factorization.
+"""
+ordering_permutation(A::SparseMatrixCSC, ordering) =
+    collect(Int, CliqueTrees.permutation(A; alg = ordering)[1])
+function ordering_permutation(A::SparseMatrixCSC, w::PinDenseColumns)
+    n = size(A, 2)
+    colptr = SparseArrays.getcolptr(A)
+    rowval = SparseArrays.rowvals(A)
+    dense = findall(j -> colptr[j + 1] - colptr[j] > w.frac * n, 1:n)
+    isempty(dense) && return ordering_permutation(A, w.inner)
+    keep = findall(j -> colptr[j + 1] - colptr[j] <= w.frac * n, 1:n)
+    # Pattern-only sub-CSC in one O(nnz) relabeling pass. `A[keep, keep]`
+    # would search indices per column AND copy the (irrelevant) numeric
+    # values — the ordering only ever sees structure. `keep` is sorted and
+    # the relabeling is monotone on it, so row indices stay sorted per
+    # column and the result is a valid CSC.
+    label = zeros(Int, n)
+    label[keep] .= eachindex(keep)
+    m = length(keep)
+    ptr = Vector{Int}(undef, m + 1)
+    ptr[1] = 1
+    for (jn, j) in enumerate(keep)
+        c = 0
+        for k in colptr[j]:(colptr[j + 1] - 1)
+            label[rowval[k]] != 0 && (c += 1)
+        end
+        ptr[jn + 1] = ptr[jn] + c
+    end
+    rv = Vector{Int}(undef, ptr[end] - 1)
+    p = 1
+    for j in keep
+        for k in colptr[j]:(colptr[j + 1] - 1)
+            l = label[rowval[k]]
+            if l != 0
+                rv[p] = l
+                p += 1
+            end
+        end
+    end
+    S = SparseMatrixCSC(m, m, ptr, rv, fill(true, ptr[end] - 1))
+    inner = ordering_permutation(S, w.inner)
+    return vcat(keep[inner], dense)
+end
+
+"""
+    CHOLMODBackend(Q::Symmetric; ordering = nothing)
+
+Sparse Cholesky workspace backend via CHOLMOD. `ordering = nothing` (default)
+keeps CHOLMOD's built-in fill-reducing ordering (AMD-family — Julia's
+SuiteSparse ships without METIS). Pass anything CliqueTrees accepts — a
+permutation vector or an elimination algorithm — to override it; see
+[`PinDenseColumns`](@ref) for precision patterns with dense borders.
+For space–time or otherwise 3D-like sparsity patterns, nested dissection
+(`CliqueTrees.ND` variants, Metis.jl loaded) can cut factorization AND
+selected-inversion cost several-fold.
+"""
+function CHOLMODBackend(Q::Symmetric{T, <:SparseMatrixCSC{T}}; ordering = nothing) where {T}
+    F = ordering === nothing ? cholesky(Q) :
+        cholesky(Q; perm = ordering_permutation(parent(Q), ordering))
     return CHOLMODBackend{T}(
-        cholesky(Q), SparseArrays.CHOLMOD.Sparse(Q), nothing, nothing, nothing
+        F, SparseArrays.CHOLMOD.Sparse(Q), nothing, nothing, nothing
     )
 end
 

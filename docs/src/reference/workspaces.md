@@ -177,6 +177,26 @@ CHOLMODBackend
 CliqueTreesBackend
 ```
 
+### Fill-reducing orderings
+
+The CHOLMOD backend accepts an `ordering` override — a permutation vector or
+any CliqueTrees elimination algorithm. For space–time or otherwise 3D-like
+sparsity patterns, nested dissection (`CliqueTrees.ND`, with Metis.jl loaded)
+can cut factorization and selected-inversion cost several-fold relative to
+the AMD-family default:
+
+```julia
+using CliqueTrees, Metis
+nd = CliqueTrees.ND(CliqueTrees.MMD(), CliqueTrees.METISND())
+perm = ordering_permutation(Q, PinDenseColumns(nd))   # resolve once…
+pool = WorkspacePool(Q; size = 8, ordering = perm)    # …share everywhere
+```
+
+```@docs
+ordering_permutation
+PinDenseColumns
+```
+
 ## See Also
 
 - [Latent Models](@ref) — the `LatentModel` interface that factory hooks
