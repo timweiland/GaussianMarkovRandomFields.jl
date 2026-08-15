@@ -94,11 +94,41 @@ ordering_permutation(A::SparseMatrixCSC, ordering) =
     collect(Int, CliqueTrees.permutation(A; alg = ordering)[1])
 function ordering_permutation(A::SparseMatrixCSC, w::PinDenseColumns)
     n = size(A, 2)
-    colnnz = diff(SparseArrays.getcolptr(A))
-    dense = findall(>(w.frac * n), colnnz)
+    colptr = SparseArrays.getcolptr(A)
+    rowval = SparseArrays.rowvals(A)
+    dense = findall(j -> colptr[j + 1] - colptr[j] > w.frac * n, 1:n)
     isempty(dense) && return ordering_permutation(A, w.inner)
-    keep = setdiff(1:n, dense)
-    inner = ordering_permutation(A[keep, keep], w.inner)
+    keep = findall(j -> colptr[j + 1] - colptr[j] <= w.frac * n, 1:n)
+    # Pattern-only sub-CSC in one O(nnz) relabeling pass. `A[keep, keep]`
+    # would search indices per column AND copy the (irrelevant) numeric
+    # values — the ordering only ever sees structure. `keep` is sorted and
+    # the relabeling is monotone on it, so row indices stay sorted per
+    # column and the result is a valid CSC.
+    label = zeros(Int, n)
+    label[keep] .= eachindex(keep)
+    m = length(keep)
+    ptr = Vector{Int}(undef, m + 1)
+    ptr[1] = 1
+    for (jn, j) in enumerate(keep)
+        c = 0
+        for k in colptr[j]:(colptr[j + 1] - 1)
+            label[rowval[k]] != 0 && (c += 1)
+        end
+        ptr[jn + 1] = ptr[jn] + c
+    end
+    rv = Vector{Int}(undef, ptr[end] - 1)
+    p = 1
+    for j in keep
+        for k in colptr[j]:(colptr[j + 1] - 1)
+            l = label[rowval[k]]
+            if l != 0
+                rv[p] = l
+                p += 1
+            end
+        end
+    end
+    S = SparseMatrixCSC(m, m, ptr, rv, fill(true, ptr[end] - 1))
+    inner = ordering_permutation(S, w.inner)
     return vcat(keep[inner], dense)
 end
 
