@@ -1,5 +1,6 @@
 export AbstractLatentPrior, LatentModel, NonGaussianLatentPrior,
-    hyperparameters, precision_matrix, mean, constraints, model_name
+    hyperparameters, precision_matrix, mean, constraints, model_name,
+    precision_logdet
 
 """
     AbstractLatentPrior
@@ -109,6 +110,49 @@ precision_matrix(model::LatentModel; kwargs...) = throw(MethodError(precision_ma
 Mean vector of the Gaussian latent prior at hyperparameters `θ`.
 """
 mean(model::LatentModel; kwargs...) = throw(MethodError(mean, (model,)))
+
+"""
+    precision_logdet(model::LatentModel; θ...) -> Union{Nothing, Real}
+
+Optional structure hook: `log |precision_matrix(model; θ...)|` computed
+cheaply from what the model knows about its own structure, or `nothing`
+(the default) when no cheap form exists and callers must factorize.
+
+This is the extension point that lets hyperparameter-fitting loops skip the
+per-evaluation factorization of the joint prior that would otherwise be
+performed solely for this scalar. Implementations exist where structure
+makes the answer cheap:
+
+- `SeparableModel`: `logdet(⊗ᵢ Qᵢ) = Σᵢ (N/nᵢ) logdet(Qᵢ)` — factorize the
+  small factors, never the Kronecker product.
+- `CombinedModel`: sum of the components' hooks (only when every component
+  provides one).
+- `IIDModel` / `FixedEffectsModel`: closed forms.
+
+Any model with exploitable structure — of whatever kind — can implement
+this with one method. The value must equal `logdet` of the *materialized*
+precision exactly; return `nothing` in parameter regimes where that cannot
+be guaranteed (e.g. `SeparableModel`'s joint regularization branch).
+"""
+precision_logdet(model::LatentModel; kwargs...) = nothing
+
+"""
+    _factor_logdet(Q::SparseMatrixCSC) -> Real
+
+Log-determinant of a (small) SPD factor via Cholesky. The eltype is
+deliberately restricted to `AbstractFloat`: Dual-valued factors must go
+through the ForwardDiff extension's exact method (primal factorization plus
+a selected-inverse tangent), never a value-stripping fallback.
+"""
+_factor_logdet(Q::SparseMatrixCSC{<:AbstractFloat}) = logdet(cholesky(Symmetric(Q)))
+
+# Component helper for composite models: prefer the component's own hook,
+# fall back to factorizing its (small) materialized precision.
+function _component_precision_logdet(comp::LatentModel, kw)
+    ld = precision_logdet(comp; kw...)
+    ld === nothing || return ld
+    return _factor_logdet(_ensure_sparse(precision_matrix(comp; kw...)))
+end
 
 """
     (model::LatentModel)(; θ...) -> AbstractGMRF

@@ -171,6 +171,18 @@ GaussianMarkovRandomFields.prior_logdensity(
         @test mean(post) ≈ x_gt atol = 1.0e-6
         Q_post_expected = _qd_neg_hessian(x_gt, τ, a) + (1 / σ^2) * sparse(1.0I, n, n)
         @test Matrix(precision_matrix(post)) ≈ Matrix(Q_post_expected) atol = 1.0e-4
+
+        # `step_recovery` reaches the iterated-linearisation loop, whose line-search
+        # merit is the exact (non-concave) `log p(x | θ)`. Both policies must find the
+        # same mode; `:sqrt` is the opt-out for priors where probing the undamped step
+        # is not wanted.
+        post_sqrt = gaussian_approximation(
+            model, obs_lik; τ = τ, a = a, step_recovery = :sqrt
+        )
+        @test mean(post_sqrt) ≈ x_gt atol = 1.0e-6
+        @test_throws ArgumentError gaussian_approximation(
+            model, obs_lik; τ = τ, a = a, step_recovery = :bogus
+        )
     end
 
     @testset "Laplace marginal: non-Gaussian-prior bias is bounded" begin

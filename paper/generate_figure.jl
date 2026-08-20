@@ -3,12 +3,17 @@
 
 using DataFrames
 using GaussianMarkovRandomFields
+## MaternModel and PointEvaluationObsModel live in the FEM extension, which
+## activates only once all four of its trigger packages are loaded.
+using Ferrite, FerriteGmsh, Gmsh, LibGEOS
 using LinearAlgebra, Random
 using Plots
 
 # Load data
 using CodecBzip2, RData
-local_rda = joinpath(@__DIR__, "..", "docs", "src", "tutorials", "data", "lansing_trees.rda")
+data_dir = joinpath(@__DIR__, "data")
+mkpath(data_dir)
+local_rda = joinpath(data_dir, "lansing_trees.rda")
 
 if !isfile(local_rda)
     repo_url = "https://github.com/spatstat/spatstat.data/raw/refs/heads/master/data/lansing.rda"
@@ -38,7 +43,7 @@ X_test, y_test = X[test_idcs, :], y[test_idcs]
 
 # Latent model
 latent = MaternModel(X; smoothness = 1)
-u = latent(range = 0.2)
+u = latent(τ = 1.0, range = 0.2)
 
 # Bernoulli observations
 import Distributions
@@ -87,8 +92,17 @@ plt = heatmap(
 class0 = findall(==(0), y)
 class1 = findall(==(1), y)
 
-scatter!(plt, X[class1, 1], X[class1, 2]; m = :circle, ms = 2, c = :tomato, label = false)
-scatter!(plt, X[class0, 1], X[class0, 2]; m = :circle, ms = 2, c = :royalblue, label = false)
+## Stroke colour matches the fill: the default dark outline dominates markers this
+## small and muddies the two classes together in print. Distinct marker shapes give
+## a second, colour-independent cue.
+scatter!(
+    plt, X[class1, 1], X[class1, 2]; m = :circle, ms = 2.5, c = :tomato,
+    markerstrokecolor = :tomato, markerstrokewidth = 0.5, label = false
+)
+scatter!(
+    plt, X[class0, 1], X[class0, 2]; m = :diamond, ms = 2.5, c = :royalblue,
+    markerstrokecolor = :royalblue, markerstrokewidth = 0.5, label = false
+)
 
 # Save to paper/ directory
 savefig(plt, joinpath(@__DIR__, "bernoulli_classification.pdf"))

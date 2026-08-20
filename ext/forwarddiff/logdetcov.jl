@@ -11,6 +11,10 @@ function logdetcov(x::GMRF{<:ForwardDiff.Dual})
 end
 
 function logdetcov(x::GMRFs.WorkspaceGMRF{<:ForwardDiff.Dual})
+    # A precomputed Dual log-determinant (from the `precision_logdet` model
+    # hook) already carries exact factor-scale tangents — skip the joint
+    # factorization and joint selected inverse entirely.
+    x.precision_logdet === nothing || return -x.precision_logdet
     GMRFs.ensure_loaded!(x)
     primal = GMRFs.logdet_cov(x.workspace)
     # tr(Q⁻¹ Q̇) = dot(selinv(Q), Q_dual). `selinv_dot` contracts straight against

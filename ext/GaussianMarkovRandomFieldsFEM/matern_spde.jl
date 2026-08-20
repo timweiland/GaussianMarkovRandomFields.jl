@@ -231,6 +231,40 @@ function _matern_precision_only(
 end
 
 """
+    _matern_structural_pattern(G::SparseMatrixCSC, ch, constraint_noise, α::Integer)
+
+κ-invariant structural sparsity pattern of the precision produced by
+[`_matern_precision_only`](@ref), as a `(; colptr, rowval)` NamedTuple.
+
+Runs the α-recursion's product chain once with all-ones matrices: every
+structurally reachable entry stays strictly positive, so sparse arithmetic
+cannot drop any of them, and the numeric precision's stored pattern at any κ
+is a subset of this pattern (issue #183). `K = κ²C + G` carries the pattern
+`diag ∪ G` at every κ (`C` is lumped/diagonal); constraint handling can insert
+entries for affine constraints, so it is mirrored on the ones matrix and
+unioned with the unconstrained pattern (the inner recursion multiplies
+unconstrained `K`s).
+"""
+function _matern_structural_pattern(G::SparseMatrixCSC, ch, constraint_noise, α::Integer)
+    n = size(G, 1)
+    S = spdiagm(0 => ones(n)) + _ones_pattern(G)
+    if ch !== nothing && !isempty(ch.prescribed_dofs)
+        S_con = copy(S)
+        apply_soft_constraints!(ch, constraint_noise; K = S_con)
+        S = _ones_pattern(S) + _ones_pattern(S_con)
+    end
+    P = _pattern_product_recursion(S, α)
+    return (colptr = P.colptr, rowval = P.rowval)
+end
+
+# Pattern of the α-recursion products: α=1 → K, α=2 → Kᵀ·diag·K, α≥3 → Kᵀ·P_{α-2}·K.
+function _pattern_product_recursion(S::SparseMatrixCSC, α::Integer)
+    α == 1 && return S
+    α == 2 && return S' * S
+    return S' * _pattern_product_recursion(S, α - 2) * S
+end
+
+"""
     assemble_matern_C_G(disc::FEMDiscretization{D}) where {D}
 
 Assemble the κ-independent FEM matrices for a Matérn discretization: the lumped
@@ -240,17 +274,37 @@ be assembled once and reused across `precision_matrix` / `matern_precision_only`
 calls with different κ.
 """
 function assemble_matern_C_G(disc::FEMDiscretization{D}) where {D}
-    cellvalues = CellValues(
-        disc.quadrature_rule,
-        disc.interpolation,
-        disc.geom_interpolation,
-    )
+    cellvalues = assembly_cellvalues(disc)
     diffusion_factor = Matrix{Float64}(I, D, D)
     return assemble_C_G_matrices(
         cellvalues,
         disc.dof_handler,
         disc.interpolation,
         diffusion_factor,
+    )
+end
+
+"""
+    _embedding_diffusion_factor(df::AbstractMatrix, sdim::Int)
+
+Return a diffusion factor sized for the embedding dimension `sdim` (the
+dimension of the spatial gradients it multiplies). Uniform scalings `δ * I` of
+the wrong size (e.g. the `MaternSPDE{2}` default on a surface mesh embedded in
+3D) are expanded to `sdim`×`sdim`; genuinely anisotropic factors of the wrong
+size are an error, since they must be specified in embedding coordinates.
+"""
+function _embedding_diffusion_factor(df::AbstractMatrix, sdim::Int)
+    size(df, 1) == sdim && return df
+    if isdiag(df) && all(==(df[1, 1]), diag(df))
+        return Matrix(df[1, 1] * I, sdim, sdim)
+    end
+    throw(
+        ArgumentError(
+            "diffusion factor has size $(size(df)), but the mesh is embedded in " *
+                "$sdim-dimensional space. Anisotropic diffusion on an embedded mesh " *
+                "must be specified as a $sdim×$sdim matrix acting on gradients in " *
+                "embedding coordinates."
+        )
     )
 end
 
@@ -276,15 +330,17 @@ function matern_precision_only(
 end
 
 function matern_precision_only(
-        disc::FEMDiscretization{D},
+        disc::FEMDiscretization,
         smoothness::Integer,
         κ,
         C::SparseMatrixCSC,
         G::SparseMatrixCSC;
         σ² = 1.0,
-    ) where {D}
-    ν = smoothness_to_ν(smoothness, D)
-    α_val = Integer(ν + D // 2)
+    )
+    # The statistical dimension is the manifold dimension (= ndim for flat meshes)
+    d = intrinsic_dim(disc)
+    ν = smoothness_to_ν(smoothness, d)
+    α_val = Integer(ν + d // 2)
 
     # Form K (may carry Dual type from κ)
     K = κ^2 * C + G
@@ -292,7 +348,7 @@ function matern_precision_only(
     # Variance ratio (Dual-safe: gamma is called on constants only)
     ratio = one(typeof(κ))
     if ν > 0
-        σ²_natural = gamma(ν) / (gamma(ν + D / 2) * (4π)^(D / 2) * κ^(2 * ν))
+        σ²_natural = gamma(ν) / (gamma(ν + d / 2) * (4π)^(d / 2) * κ^(2 * ν))
         ratio = σ²_natural / σ²
     end
 
@@ -300,27 +356,37 @@ function matern_precision_only(
 end
 
 """
-    discretize(𝒟::MaternSPDE{D}, discretization::FEMDiscretization{D})::AbstractGMRF where {D}
+    discretize(𝒟::MaternSPDE{D}, discretization::FEMDiscretization)::AbstractGMRF where {D}
 
 Discretize a Matérn SPDE using a Finite Element Method (FEM) discretization.
 Computes the stiffness and (lumped) mass matrix, and then forms the precision matrix
 of the GMRF discretization.
+
+The SPDE dimension `D` must match the *intrinsic* (manifold) dimension of the
+discretization. For flat meshes this is simply the spatial dimension; for a
+surface mesh embedded in 3D (e.g. a triangulated sphere), use `MaternSPDE{2}` —
+the Laplacian then acts as the Laplace–Beltrami operator on the surface.
 """
 function discretize(
         𝒟::MaternSPDE{D},
-        discretization::FEMDiscretization{D};
+        discretization::FEMDiscretization;
         algorithm = nothing,
     )::GMRF where {D}
-    cellvalues = CellValues(
-        discretization.quadrature_rule,
-        discretization.interpolation,
-        discretization.geom_interpolation,
+    d = intrinsic_dim(discretization)
+    D == d || throw(
+        ArgumentError(
+            "MaternSPDE{$D} cannot be discretized on a mesh of intrinsic " *
+                "(manifold) dimension $d. The SPDE dimension must match the " *
+                "element dimension: e.g. use MaternSPDE{2} on a surface mesh " *
+                "embedded in 3D."
+        )
     )
+    cellvalues = assembly_cellvalues(discretization)
     C̃, G = assemble_C_G_matrices(
         cellvalues,
         discretization.dof_handler,
         discretization.interpolation,
-        𝒟.diffusion_factor,
+        _embedding_diffusion_factor(𝒟.diffusion_factor, ndim(discretization)),
     )
     K = 𝒟.κ^2 * C̃ + G
 

@@ -8,10 +8,11 @@ using LinearSolve
 using DifferentiationInterface
 using Enzyme, FiniteDiff, ForwardDiff, Zygote
 
+# Enzyme is deliberately absent: its `gaussian_approximation` rule was removed
+# because it returned silently wrong gradients whenever the precision matrix had
+# Cholesky fill-in, and it now raises instead. The refusal is asserted in
+# `test_enzyme_support.jl`.
 backends = Any[("Zygote", AutoZygote()), ("ForwardDiff", AutoForwardDiff())]
-if get(ENV, "GMRF_TEST_ENZYME", "false") == "true"
-    push!(backends, ("Enzyme", AutoEnzyme(; function_annotation = Enzyme.Const)))
-end
 
 @testset "$backend_name gaussian_approximation autodiff tests" for (backend_name, backend) in backends
     # Set seed for reproducibility

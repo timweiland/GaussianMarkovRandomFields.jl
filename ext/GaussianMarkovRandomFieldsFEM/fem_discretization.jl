@@ -101,6 +101,27 @@ Return the number of degrees of freedom in the discretization.
 """
 ndofs(f::FEMDiscretization) = f.dof_handler.ndofs
 
+intrinsic_dim(f::FEMDiscretization) = Ferrite.getrefdim(f.interpolation)
+
+"""
+    assembly_cellvalues(f::FEMDiscretization)
+
+Build the `CellValues` used for matrix assembly on `f`. For meshes embedded in
+a higher-dimensional space (`intrinsic_dim(f) < ndim(f)`, e.g. a surface mesh
+in 3D), the geometric interpolation is vectorized to the embedding dimension so
+that Ferrite treats the elements as embedded: shape function gradients are then
+tangent to the manifold (computed via the Jacobian pseudo-inverse) and
+`getdetJdV` measures surface area.
+"""
+function assembly_cellvalues(f::FEMDiscretization)
+    geom_interpolation = f.geom_interpolation
+    sdim = ndim(f)
+    if sdim != Ferrite.getrefdim(geom_interpolation)
+        geom_interpolation = geom_interpolation^sdim
+    end
+    return CellValues(f.quadrature_rule, f.interpolation, geom_interpolation)
+end
+
 """
     evaluation_matrix(f::FEMDiscretization, X)
 
@@ -118,6 +139,13 @@ When `X` is a matrix, it should be N×D where N is the number of points and D is
 function evaluation_matrix(f::FEMDiscretization, X::AbstractVector; field = :default)
     if field == :default
         field = first(f.dof_handler.field_names)
+    end
+    if intrinsic_dim(f) < ndim(f)
+        # Embedded manifold: query points generally lie slightly off the faceted
+        # mesh surface (e.g. points on the true sphere vs. its triangulation),
+        # so Ferrite's PointEvalHandler cannot locate them. Project onto the
+        # mesh instead.
+        return _embedded_evaluation_matrix(f, X; field = field)
     end
     dof_idcs = dof_range(f.dof_handler, field)
     peh = PointEvalHandler(f.grid, X; warn = false)
@@ -146,6 +174,154 @@ function evaluation_matrix(f::FEMDiscretization, X::AbstractVector; field = :def
             Ferrite.reference_shape_value(f.interpolation, peh.local_coords[i], j) for
                 j in 1:getnbasefunctions(f.interpolation)
         ]
+        # Point location tolerates local coordinates slightly outside the
+        # reference cell (Ferrite ≥ 1.5 returns such coordinates for points
+        # exactly on cell boundaries), which puts affine shape values a
+        # roundoff outside [0, 1]. Clamp first-order Lagrange weights, for
+        # which [0, 1] is a true invariant; higher-order shape functions take
+        # legitimate values outside [0, 1] inside the cell and pass through.
+        if f.interpolation isa Lagrange{<:Any, 1}
+            vals = clamp.(vals, 0.0, 1.0)
+        end
+        append!(Vs, vals)
+    end
+    return sparse(Is, Js, Vs, length(X), ndofs(f))
+end
+
+"""
+    _closest_point_on_triangle(p, a, b, c)
+
+Barycentric coordinates `(w_a, w_b, w_c)` of the point on triangle `(a, b, c)`
+closest to `p` (Ericson, *Real-Time Collision Detection*, §5.1.5).
+"""
+function _closest_point_on_triangle(p, a, b, c)
+    ab = b - a
+    ac = c - a
+    ap = p - a
+    d1 = ab ⋅ ap
+    d2 = ac ⋅ ap
+    (d1 <= 0 && d2 <= 0) && return (1.0, 0.0, 0.0)
+    bp = p - b
+    d3 = ab ⋅ bp
+    d4 = ac ⋅ bp
+    (d3 >= 0 && d4 <= d3) && return (0.0, 1.0, 0.0)
+    vc = d1 * d4 - d3 * d2
+    if vc <= 0 && d1 >= 0 && d3 <= 0
+        v = d1 / (d1 - d3)
+        return (1.0 - v, v, 0.0)
+    end
+    cp = p - c
+    d5 = ab ⋅ cp
+    d6 = ac ⋅ cp
+    (d6 >= 0 && d5 <= d6) && return (0.0, 0.0, 1.0)
+    vb = d5 * d2 - d1 * d6
+    if vb <= 0 && d2 >= 0 && d6 <= 0
+        w = d2 / (d2 - d6)
+        return (1.0 - w, 0.0, w)
+    end
+    va = d3 * d6 - d5 * d4
+    if va <= 0 && (d4 - d3) >= 0 && (d5 - d6) >= 0
+        w = (d4 - d3) / ((d4 - d3) + (d5 - d6))
+        return (0.0, 1.0 - w, w)
+    end
+    denom = 1.0 / (va + vb + vc)
+    v = vb * denom
+    w = vc * denom
+    return (1.0 - v - w, v, w)
+end
+
+"""
+    _embedded_evaluation_matrix(f::FEMDiscretization, X::AbstractVector; field)
+
+Evaluation matrix for meshes embedded in a higher-dimensional space (e.g. a
+triangulated sphere surface in 3D). Each query point is projected onto the
+closest point of the faceted mesh surface, located via a nearest-neighbor
+search over the mesh nodes; the basis functions are evaluated at the local
+coordinates of that projection. A point is rejected (with an error) if its
+distance to the mesh exceeds the longest edge of the candidate cell — such a
+point does not lie on (a discretization of) the manifold.
+
+Currently supports triangular surface meshes with affine geometry
+(`Lagrange{RefTriangle, 1}` geometric interpolation).
+"""
+function _embedded_evaluation_matrix(f::FEMDiscretization, X::AbstractVector; field)
+    f.geom_interpolation isa Lagrange{RefTriangle, 1} || throw(
+        ArgumentError(
+            "Point evaluation on embedded meshes currently supports triangular " *
+                "surface meshes with affine geometry (Lagrange{RefTriangle, 1}), " *
+                "got $(typeof(f.geom_interpolation)).",
+        ),
+    )
+    grid = f.grid
+    dof_idcs = dof_range(f.dof_handler, field)
+
+    # Nearest-neighbor search over mesh nodes, then search the cells incident
+    # to the nearest nodes for the closest surface point.
+    D = ndim(f)
+    node_mat = zeros(D, Ferrite.getnnodes(grid))
+    for (i, node) in enumerate(grid.nodes)
+        node_mat[:, i] .= node.x
+    end
+    tree = KDTree(node_mat)
+    node_cells = [Int[] for _ in 1:Ferrite.getnnodes(grid)]
+    for (cell_idx, cell) in enumerate(Ferrite.getcells(grid))
+        for n in cell.nodes
+            push!(node_cells[n], cell_idx)
+        end
+    end
+
+    cc = CellCache(f.dof_handler)
+    Is = Int64[]
+    Js = Int64[]
+    Vs = Float64[]
+    for (i, p) in enumerate(X)
+        p_vec = Vec{D}(Tuple(p))
+        nearest_nodes, _ = knn(tree, collect(p_vec), min(3, Ferrite.getnnodes(grid)))
+        best_cell = 0
+        best_dist = Inf
+        best_bary = (0.0, 0.0, 0.0)
+        for node in nearest_nodes, cell_idx in node_cells[node]
+            cell = Ferrite.getcells(grid)[cell_idx]
+            # The cell's vertices come first in Ferrite's node ordering.
+            a = grid.nodes[cell.nodes[1]].x
+            b = grid.nodes[cell.nodes[2]].x
+            c = grid.nodes[cell.nodes[3]].x
+            bary = _closest_point_on_triangle(p_vec, a, b, c)
+            dist = norm(p_vec - (bary[1] * a + bary[2] * b + bary[3] * c))
+            if dist < best_dist
+                best_dist = dist
+                best_cell = cell_idx
+                best_bary = bary
+            end
+        end
+        cell = Ferrite.getcells(grid)[best_cell]
+        a = grid.nodes[cell.nodes[1]].x
+        b = grid.nodes[cell.nodes[2]].x
+        c = grid.nodes[cell.nodes[3]].x
+        max_edge = max(norm(b - a), norm(c - b), norm(a - c))
+        best_dist <= max_edge || throw(
+            ArgumentError(
+                "evaluation_matrix: query point $i at $(p) is at distance " *
+                    "$(best_dist) from the mesh surface, which exceeds the local " *
+                    "cell size $(max_edge). Restrict evaluation to points on the " *
+                    "(discretized) manifold.",
+            ),
+        )
+        # Local (reference) coordinates from the barycentric weights: Ferrite's
+        # RefTriangle has reference coordinates (1,0), (0,1), (0,0) for the
+        # cell's three vertices, so ξ = (w_a, w_b).
+        ξ = Vec(best_bary[1], best_bary[2])
+        Ferrite.reinit!(cc, best_cell)
+        dofs = celldofs(cc)[dof_idcs]
+        append!(Is, repeat([i], length(dofs)))
+        append!(Js, dofs)
+        vals = [
+            Ferrite.reference_shape_value(f.interpolation, ξ, j) for
+                j in 1:getnbasefunctions(f.interpolation)
+        ]
+        if f.interpolation isa Lagrange{<:Any, 1}
+            vals = clamp.(vals, 0.0, 1.0)
+        end
         append!(Vs, vals)
     end
     return sparse(Is, Js, Vs, length(X), ndofs(f))

@@ -50,18 +50,24 @@ mutable struct GMRFWorkspace{T <: Real, B <: WorkspaceBackend} <: AbstractLatent
 end
 
 """
-    GMRFWorkspace(Q::SparseMatrixCSC{T}) where {T}
+    GMRFWorkspace(Q::SparseMatrixCSC{T}; backend_kwargs...) where {T}
 
 Create a workspace from a sparse SPD precision matrix using the default
 CHOLMOD backend. Performs the initial symbolic + numeric Cholesky factorization.
 Subsequent calls to `update_precision!` with matrices of the same sparsity
 pattern will only redo the numeric phase.
+
+Keyword arguments are forwarded verbatim to the backend constructor — the
+workspace itself is backend-agnostic. E.g. the CHOLMOD backend accepts
+`ordering` (a permutation vector or a CliqueTrees elimination algorithm; see
+[`CHOLMODBackend`](@ref), [`ordering_permutation`](@ref) and
+[`PinDenseColumns`](@ref)).
 """
-function GMRFWorkspace(Q::SparseMatrixCSC{T}) where {T}
+function GMRFWorkspace(Q::SparseMatrixCSC{T}; backend_kwargs...) where {T}
     n = size(Q, 1)
     size(Q, 1) == size(Q, 2) || throw(ArgumentError("Q must be square"))
 
-    backend = CHOLMODBackend(Symmetric(Q))
+    backend = CHOLMODBackend(Symmetric(Q); backend_kwargs...)
 
     return GMRFWorkspace{T, typeof(backend)}(
         copy(Q),
@@ -192,12 +198,20 @@ end
 
 """
     workspace_solve(ws::GMRFWorkspace, b::AbstractVector) -> Vector
+    workspace_solve(ws::GMRFWorkspace, B::AbstractMatrix) -> Matrix
 
-Solve Q x = b using the workspace's factorization.
+Solve Q x = b using the workspace's factorization. The matrix method solves
+all columns in one blocked multi-RHS solve (BLAS-3 on the CHOLMOD backend) —
+use it instead of a column loop whenever there are many right-hand sides.
 """
 function workspace_solve(ws::GMRFWorkspace, b::AbstractVector)
     ensure_numeric!(ws)
     return backend_solve(ws.backend, b)
+end
+
+function workspace_solve(ws::GMRFWorkspace, B::AbstractMatrix)
+    ensure_numeric!(ws)
+    return backend_solve(ws.backend, B)
 end
 
 """

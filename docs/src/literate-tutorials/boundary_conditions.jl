@@ -55,7 +55,12 @@ x = discretize(matern_spde, disc)
 # the variance vanishes at the boundary:
 using CairoMakie
 CairoMakie.activate!()
-plot(x, disc)
+plot(
+    x, disc; axis = (;
+        xlabel = "x", ylabel = "u(x)",
+        title = "Homogeneous Neumann boundary",
+    )
+)
 
 # ### Periodic boundary
 # We can also define a periodic boundary condition in terms of an affine
@@ -85,7 +90,12 @@ x_periodic = discretize(matern_spde, disc_periodic)
 
 # Verify for yourself that the values at the left and right boundary match
 # for all samples:
-plot(x_periodic, disc)
+plot(
+    x_periodic, disc; axis = (;
+        xlabel = "x", ylabel = "u(x)",
+        title = "Periodic boundary",
+    )
+)
 
 # ## Spatiotemporal example: Advection-Diffusion SPDE
 # This works just as well in the spatiotemporal case.
@@ -115,19 +125,19 @@ x_adv_diff_dirichlet = linear_condition(x_adv_diff_dirichlet; A = A_ic, Q_ϵ = 1
 x_adv_diff_periodic = linear_condition(x_adv_diff_periodic; A = A_ic, Q_ϵ = 1.0e8, y = ys_ic)
 
 # First, check the initial observations:
-plot(x_adv_diff_dirichlet, 1)
+plot(x_adv_diff_dirichlet, 1; axis = (; xlabel = "x", ylabel = "u(x)", title = "Dirichlet, t = 0"))
 
 # Now, let's see how the process evolves over time:
-plot(x_adv_diff_dirichlet, N_t ÷ 2)
+plot(x_adv_diff_dirichlet, N_t ÷ 2; axis = (; xlabel = "x", ylabel = "u(x)", title = "Dirichlet, t = T/2"))
 
 #
-plot(x_adv_diff_dirichlet, N_t)
+plot(x_adv_diff_dirichlet, N_t; axis = (; xlabel = "x", ylabel = "u(x)", title = "Dirichlet, t = T"))
 
 # Compare to this to the periodic case:
-plot(x_adv_diff_periodic, N_t ÷ 2)
+plot(x_adv_diff_periodic, N_t ÷ 2; axis = (; xlabel = "x", ylabel = "u(x)", title = "Periodic, t = T/2"))
 
 #
-plot(x_adv_diff_periodic, N_t)
+plot(x_adv_diff_periodic, N_t; axis = (; xlabel = "x", ylabel = "u(x)", title = "Periodic, t = T"))
 
 # ## Conclusion
 # We have seen how to specify more complex boundary conditions for GMRFs.

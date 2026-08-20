@@ -1,6 +1,6 @@
 name = "GaussianMarkovRandomFields"
 uuid = "d5f06795-35bb-4323-9f0b-405ef76cfc5b"
-version = "0.12.3"
+version = "0.14.0"
 authors = ["Tim Weiland <hello@timwei.land> and contributors"]
 
 [deps]
@@ -60,7 +60,7 @@ GaussianMarkovRandomFieldsZygote = "Zygote"
 AMD = "0.5"
 Aqua = "0.8"
 ChainRulesCore = "1"
-CliqueTrees = "1.19.1"
+CliqueTrees = "1.19.5"
 DataStructures = "0.14 - 0.19"
 DifferentiationInterface = "0.6, 0.7"
 Distributions = "0.25"

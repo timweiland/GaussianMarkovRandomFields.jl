@@ -8,6 +8,7 @@ discretize
 ```@docs
 FEMDiscretization
 ndim
+intrinsic_dim
 Ferrite.ndofs(::FEMDiscretization)
 ```
 

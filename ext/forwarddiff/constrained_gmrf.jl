@@ -3,19 +3,25 @@
 # `log_constraint_correction` is captured correctly) and dispatch hooks
 # for Dual-prior and Float64-prior + Dual-obs cases.
 
-# Override for Dual `base_gmrf`: ConstrainedGMRF's inner constructor stores
-# `A_tilde_T` and `L_c` as Float64, so the default `_constraint_info` drops
-# Q-path partials through `log_constraint_correction`. Here we rebuild
-# `A_tilde_T` as a Dual matrix via implicit differentiation
-# (Q * Ã^T = A'  ⇒  Q_v * Ã^T_p = -Q_p * Ã^T_v per partial direction),
-# then form a Dual `L_c` by dense Cholesky of A * A_tilde_T_dual. The
-# resulting constrained_mean and log_constraint_correction carry correct
-# μ- and Q-path partials.
-function GMRFs._constraint_info(
+"""
+    _dual_constraint_factors(base_gmrf, A_dense, A_tilde_T_v)
+        -> (A_tilde_T_dual, L_c_dual)
+
+Rebuild `Ã^T = Q⁻¹Aᵀ` and `L_c = chol(A Ã^T)` as Dual-valued quantities.
+
+`ConstrainedGMRF` stores both as `Float64` — they fall out of the primal
+factorization — so every consumer that reads the stored fields directly loses
+the Q-path partials. Implicit differentiation of `Q Ã^T = Aᵀ` recovers them:
+
+    Q_v * Ã^T_p = -Q_p * Ã^T_v    (one primal solve per constraint row and
+                                   partial direction)
+
+Shared by `_constraint_info` (for `log_constraint_correction`) and `var`.
+"""
+function _dual_constraint_factors(
         base_gmrf::GMRFs.GMRF{D},
-        A_dense::AbstractMatrix, e_vec::AbstractVector,
+        A_dense::AbstractMatrix,
         A_tilde_T_v::Matrix{Float64},
-        L_c_v::LinearAlgebra.Cholesky{Float64, Matrix{Float64}}
     ) where {D <: ForwardDiff.Dual}
     Tag = ForwardDiff.tagtype(D)
     V = ForwardDiff.valtype(D)
@@ -52,8 +58,20 @@ function GMRFs._constraint_info(
     end
 
     # Dual L_c via dense m×m Cholesky.
-    AAtt_dual = A_dense * A_tilde_T_dual
-    L_c_dual = cholesky(Symmetric(AAtt_dual))
+    L_c_dual = cholesky(Symmetric(A_dense * A_tilde_T_dual))
+
+    return A_tilde_T_dual, L_c_dual
+end
+
+function GMRFs._constraint_info(
+        base_gmrf::GMRFs.GMRF{D},
+        A_dense::AbstractMatrix, e_vec::AbstractVector,
+        A_tilde_T_v::Matrix{Float64},
+        L_c_v::LinearAlgebra.Cholesky{Float64, Matrix{Float64}}
+    ) where {D <: ForwardDiff.Dual}
+    m = size(A_dense, 1)
+    A_tilde_T_dual, L_c_dual =
+        _dual_constraint_factors(base_gmrf, A_dense, A_tilde_T_v)
 
     μ_base = GMRFs.mean(base_gmrf)
     residual = A_dense * μ_base - e_vec

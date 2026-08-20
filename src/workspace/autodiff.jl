@@ -52,6 +52,44 @@ function ChainRulesCore.rrule(::typeof(logpdf), x::WorkspaceGMRF, z::AbstractVec
     return val, workspace_logpdf_pullback
 end
 
+# --- logdetcov rrule for WorkspaceGMRF ---
+
+# ∂logdetcov/∂Q = -Q⁻¹ on Q's own sparsity pattern; see the commentary in
+# src/autodiff/logdetcov.jl for why the selected inverse is exact here.
+#
+# Constraints do not appear: `logdetcov(::WorkspaceGMRF)` is the *base*
+# log-determinant, and the Rue-Held correction is a separate term that `logpdf`
+# adds on top of it. So this rule is the same whether or not `x` is constrained,
+# and it must NOT pick up a constraint contribution — the regression test pins
+# that by checking a constrained workspace against the unconstrained
+# -logdet(Q) reference.
+function ChainRulesCore.rrule(::typeof(logdetcov), x::WorkspaceGMRF)
+    val = logdetcov(x)
+
+    function workspace_logdetcov_pullback(ȳ)
+        c = -unthunk(ȳ)
+        # Skip the selected inversion entirely when the result is unused.
+        c isa AbstractZero && return NoTangent(), ZeroTangent()
+
+        # The workspace is shared and may have been refactorized at a different
+        # Q since the forward pass, so re-load before reading the selected
+        # inverse (matching the logpdf pullback above).
+        ensure_loaded!(x)
+        Q̄ = c * selinv(x.workspace)
+
+        x̄ = Tangent{typeof(x)}(;
+            mean = ZeroTangent(),
+            precision = Q̄,
+            workspace = NoTangent(),
+            constraints = NoTangent(),
+            version = NoTangent(),
+        )
+        return NoTangent(), x̄
+    end
+
+    return val, workspace_logdetcov_pullback
+end
+
 # --- WorkspaceGMRF constructor rrules ---
 
 function ChainRulesCore.rrule(
@@ -123,6 +161,11 @@ function ChainRulesCore.rrule(
         else
             _, hess_pullback = rrule_via_ad(config, loghessian, x_star, obs_lik)
             _, x_tangent_from_hess, obs_lik_tangent_from_Q̄ = hess_pullback(-Q̄)
+            # rrule_via_ad may hand back Thunks (e.g. from ChainRules' sparse
+            # A*x rule when obs_lik carries a design matrix); `collect` and
+            # `_add_namedtuples` below need materialized tangents.
+            x_tangent_from_hess = unthunk(x_tangent_from_hess)
+            obs_lik_tangent_from_Q̄ = unthunk(obs_lik_tangent_from_Q̄)
         end
 
         ensure_loaded!(posterior)
@@ -141,6 +184,10 @@ function ChainRulesCore.rrule(
             config, ∇ₓ_neg_log_posterior, base_prior, obs_lik, x_star
         )
         _, prior_tangent, obs_lik_tangent, _ = ∇_pullback(-λ)
+        # A Thunk here would silently fail the `isa Tangent` checks downstream
+        # and drop gradient terms, so materialize defensively.
+        prior_tangent = unthunk(prior_tangent)
+        obs_lik_tangent = unthunk(obs_lik_tangent)
 
         if !_is_zero_tangent(Q̄)
             prior_tangent = _workspace_add_precision_tangent(prior_tangent, prior_gmrf, Q̄)
@@ -152,6 +199,74 @@ function ChainRulesCore.rrule(
     end
 
     return posterior, workspace_ga_pullback
+end
+
+# --- rrule shield for the LatentModel-on-workspace callable ---
+
+# Positional θ-wrappers for rrule_via_ad: ChainRules treats kwargs as
+# non-differentiable, so the hyperparameters are re-exposed as a NamedTuple
+# positional argument that reverse-mode AD can produce tangents for.
+_model_mean_from_θ(model::LatentModel, θ::NamedTuple) = mean(model; θ...)
+_model_precision_from_θ(model::LatentModel, θ::NamedTuple) =
+    _ensure_sparse(precision_matrix(model; θ...))
+
+# Accumulate two tangents where either may be a zero-like tangent.
+_accum_tangent(a, b) = _is_zero_tangent(a) ? b : (_is_zero_tangent(b) ? a : a + b)
+
+"""
+    ChainRulesCore.rrule(config, ::typeof(_evaluate_with_workspace), model, ws, θ)
+
+Shield the `(model::LatentModel)(ws::GMRFWorkspace; θ...)` fast path from
+reverse-mode AD: the primal runs as-is (including the `update_precision!`
+mutation, which Zygote cannot trace), and the pullback routes the
+`WorkspaceGMRF` tangent's `mean`/`precision` components through
+`rrule_via_ad` of `mean(model; θ...)` / `precision_matrix(model; θ...)`.
+
+The workspace itself is non-differentiable state. Constraint quantities
+(`ȳ.constraints`) are ignored, matching the constrained `WorkspaceGMRF`
+constructor rrule above: the constrained-logpdf correction terms already
+arrive folded into `ȳ.mean`/`ȳ.precision`.
+
+`Q̄` may live on the workspace's (possibly obs-padded) sparsity pattern; the
+padded positions hold structural zeros of the model's precision, so the
+pullback of the model's own construction correctly ignores them.
+"""
+function ChainRulesCore.rrule(
+        config::RuleConfig{>:HasReverseMode},
+        ::typeof(_evaluate_with_workspace),
+        model::LatentModel, ws::GMRFWorkspace, θ::NamedTuple
+    )
+    gmrf = _evaluate_with_workspace(model, ws, θ)
+
+    function _evaluate_with_workspace_pullback(ȳ)
+        ȳ = unthunk(ȳ)
+        if ȳ isa AbstractZero
+            return NoTangent(), NoTangent(), NoTangent(), NoTangent()
+        end
+        μ̄ = unthunk(ȳ.mean)
+        Q̄ = unthunk(ȳ.precision)
+
+        model_tangent = NoTangent()
+        θ̄ = NoTangent()
+
+        if !_is_zero_tangent(μ̄)
+            _, mean_pb = rrule_via_ad(config, _model_mean_from_θ, model, θ)
+            _, m̄_mean, θ̄_mean = mean_pb(collect(μ̄))
+            model_tangent = _accum_tangent(model_tangent, unthunk(m̄_mean))
+            θ̄ = _accum_tangent(θ̄, unthunk(θ̄_mean))
+        end
+
+        if !_is_zero_tangent(Q̄)
+            _, prec_pb = rrule_via_ad(config, _model_precision_from_θ, model, θ)
+            _, m̄_prec, θ̄_prec = prec_pb(Q̄)
+            model_tangent = _accum_tangent(model_tangent, unthunk(m̄_prec))
+            θ̄ = _accum_tangent(θ̄, unthunk(θ̄_prec))
+        end
+
+        return NoTangent(), model_tangent, NoTangent(), θ̄
+    end
+
+    return gmrf, _evaluate_with_workspace_pullback
 end
 
 # --- Helper: add Q̄ to prior tangent for WorkspaceGMRF ---

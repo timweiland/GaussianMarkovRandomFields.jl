@@ -4,7 +4,8 @@ using GaussianMarkovRandomFields
 using GaussianMarkovRandomFields: hermdiff, ensure_factorization!,
     ensure_loaded!, ensure_numeric!, has_constraints,
     _has_gauss_newton_jacobian, _reverse_mode_gauss_newton_error,
-    _constraint_shift, _constraint_log_correction, _constraint_var_correction
+    _constraint_shift, _constraint_log_correction, _constraint_var_correction,
+    _logdet_cov_impl, _selinv_diag_impl, _selinv_impl, _backward_solve_impl
 using Statistics: mean
 using Distributions: logpdf, logdetcov, var
 using Mooncake
@@ -13,6 +14,7 @@ using MooncakeSparse
 using SparseArrays: nonzeros, SparseMatrixCSC
 using LinearAlgebra: Hermitian, Symmetric, cholesky, diag, dot, logdet, I
 using LinearSolve
+using LinearSolve: CHOLMODFactorization
 using CliqueTrees.Multifrontal: ChordalCholesky
 import CliqueTrees.Multifrontal as Multifrontal
 
@@ -611,5 +613,7 @@ for (P, L) in Iterators.product(
         return _mooncake_ga_ift(prior, posterior, obslik)
     end
 end
+
+include("mooncake/unsupported.jl")
 
 end

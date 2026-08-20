@@ -36,8 +36,8 @@ using SparseArrays
     κ_fast = 10 * κ_slow
     H_fast = 10 * H_slow
     τ = 0.1
-    γ_left = [0.25]
-    γ_right = [-0.25]
+    γ_left = [-0.25]
+    γ_right = [0.25]
     γ_static = [0.0]
 
 

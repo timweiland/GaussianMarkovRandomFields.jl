@@ -7,11 +7,23 @@
 # gradients through GMRF operations to optimize hyperparameters like precision parameters,
 # mean field values, and other model parameters.
 #
-# We currently support AD via Zygote, Mooncake, Enzyme, and ForwardDiff.
+# Four backends have hand-written rules in this package: ForwardDiff, Zygote,
+# Enzyme and Mooncake. Which of them works depends on the operation and on the
+# GMRF type -- differentiating through a sparse Cholesky factorization is not
+# something a general-purpose AD system can do unaided, so each supported
+# combination rests on a rule written for it. ForwardDiff is the only backend
+# that covers every type and every operation, and it is what we use below.
 #
-# !!! note "AD may break"
-#     Our current AD rules cover the most common workflows with GMRFs.
-#     Less common operations may or may not work.
+# The [Automatic Differentiation Reference](@ref) has the full support matrix,
+# checked against finite differences. Combinations without a rule raise an
+# explicit error rather than returning a wrong number.
+#
+# !!! note "A different question: your own likelihoods"
+#     The matrix above is about differentiating *through* the package's own
+#     linear algebra. When you supply your own log-likelihood to
+#     `AutoDiffObservationModel`, the package differentiates your function
+#     through [DifferentiationInterface.jl](https://github.com/JuliaDiff/DifferentiationInterface.jl)
+#     instead, and any DI-compatible backend works there -- no rule needed.
 #     If one of these backends breaks for your use case, please open an issue.
 
 # ## Basic Setup
@@ -138,12 +150,17 @@ println("  Converged: $(Optim.converged(result))")
 # If n is sufficiently small or n << m, use forward-mode.
 # Else, use reverse-mode.
 #
-# This same advice applies here. ForwardDiff, Zygote, Mooncake, and Enzyme all
-# support AD through Gaussian approximations. Constrained priors (e.g. RW, Besag)
-# are supported by ForwardDiff and Zygote.
+# This same advice applies here. All four backends support AD through Gaussian
+# approximations. Constrained priors (e.g. RW, Besag) are supported by
+# ForwardDiff and Zygote everywhere, by Enzyme on Julia 1.12, and by Mooncake on
+# the CliqueTrees backend.
 #
-# All backends produce identical gradients, so the choice between them
-# comes down to performance and ease of use.
+# Coverage differs between backends, though: which operations and GMRF types each
+# one handles varies, and a few combinations need a recent Julia version. The
+# [Automatic Differentiation Reference](@ref) has the support matrix, checked
+# against finite differences — worth a look before settling on a backend for a
+# long-running fit. For the model in this tutorial, Zygote and Enzyme agree, so
+# the choice comes down to performance and ease of use.
 #
 # Zygote has low pre-compilation times and works in most cases.
 # By contrast, Enzyme incurs large pre-compilation overheads and may not work in

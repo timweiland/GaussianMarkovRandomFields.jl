@@ -183,11 +183,11 @@ function GMRF(
 
     # Set up LinearSolve cache
     if linsolve_cache === nothing
-        # Configure algorithm with optimal defaults for GMRF operations
-        configured_alg = configure_algorithm(alg)
-        # Prepare matrix for LinearSolve based on algorithm requirements
-        prob = LinearProblem(prepare_for_linsolve(precision, configured_alg), copy(mean))
-        linsolve_cache = init(prob, configured_alg)
+        # Prepare the matrix for LinearSolve and resolve the algorithm, falling back to
+        # LinearSolve's default when `alg` cannot handle this precision's storage type
+        A_linsolve, resolved_alg = resolve_linsolve(precision, alg)
+        prob = LinearProblem(A_linsolve, copy(mean))
+        linsolve_cache = init(prob, resolved_alg)
     end
 
     return GMRF{T, typeof(mean), Nothing, typeof(precision), typeof(Q_sqrt), typeof(linsolve_cache), typeof(rbmc_strategy)}(mean, nothing, precision, Q_sqrt, linsolve_cache, rbmc_strategy)
@@ -208,10 +208,13 @@ function GMRF(
 
     # Set up LinearSolve cache and solve for mean
     if linsolve_cache === nothing
-        # Configure algorithm with optimal defaults for GMRF operations
-        configured_alg = configure_algorithm(alg)
-        prob = LinearProblem(prepare_for_linsolve(precision, configured_alg), copy(information.data))
-        linsolve_cache = init(prob, configured_alg)
+        # Prepare the matrix for LinearSolve and resolve the algorithm, falling back to
+        # LinearSolve's default when `alg` cannot handle this precision's storage type.
+        # Conditioning inherits `alg` from the prior, whose precision may be stored
+        # differently than the posterior's (e.g. SymTridiagonal prior -> sparse posterior).
+        A_linsolve, resolved_alg = resolve_linsolve(precision, alg)
+        prob = LinearProblem(A_linsolve, copy(information.data))
+        linsolve_cache = init(prob, resolved_alg)
     else
         # Reuse provided cache but update RHS for solving
         linsolve_cache.b .= information.data
@@ -294,13 +297,35 @@ function _rand_impl!(rng::AbstractRNG, d::GMRF, x::AbstractVector, ::Val{false})
     return x
 end
 
+"""
+    var(d::GMRF)
+
+Marginal variances `diag(Q⁻¹)`, as a dense `Vector`.
+
+How they are obtained depends on the GMRF's linear solver:
+
+- Solvers that support selected inversion (`CHOLMODFactorization`,
+  `CholeskyFactorization`, `LDLtFactorization`, `DiagonalFactorization`,
+  `PardisoJL`, and the default solver whenever it resolves to one of these)
+  give **exact** variances.
+- Any other solver falls back to [`RBMCStrategy`](@ref), a **stochastic** Monte
+  Carlo estimator. Repeated calls then return slightly different numbers, and
+  finite-difference checks against them are meaningless.
+
+Only the exact path is differentiable: differentiating `var` through a solver
+without selected inversion throws rather than silently returning a zero
+gradient. Pass a selinv-capable solver explicitly if you need gradients, e.g.
+`GMRF(mean, precision, LinearSolve.CHOLMODFactorization())`.
+"""
 function var(d::GMRF)
     return _var_impl(d, supports_selinv(d.linsolve_cache.alg))
 end
 
 function _var_impl(d::GMRF, ::Val{true})
-    # Use selected inversion
-    return selinv_diag(d.linsolve_cache)
+    # Use selected inversion. `selinv_diag` hands back a `SparseVector` whose
+    # every entry is stored — marginal variances are structurally dense — and a
+    # sparse result breaks `ForwardDiff.jacobian`, so densify.
+    return Vector(selinv_diag(d.linsolve_cache))
 end
 
 function _var_impl(d::GMRF, ::Val{false})

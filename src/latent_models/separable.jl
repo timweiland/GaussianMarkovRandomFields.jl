@@ -1,6 +1,7 @@
 using LinearAlgebra
 using SparseArrays
 using LinearMaps
+using ChainRulesCore
 
 export SeparableModel
 
@@ -109,6 +110,36 @@ function mean(model::SeparableModel; kwargs...)
     return foldl(kron, means)
 end
 
+"""
+    precision_logdet(model::SeparableModel; θ...) -> Union{Nothing, Real}
+
+`logdet(Q₁ ⊗ ⋯ ⊗ Qₙ) = Σᵢ (N/nᵢ) logdet(Qᵢ)`: the joint log-determinant
+from factor-scale factorizations, never touching the Kronecker product
+itself. Returns `nothing` when the joint `εI` regularization branch of
+[`precision_matrix`](@ref) fires (≥2 constrained components), since the
+materialized precision is then no longer the pure Kronecker product.
+"""
+function precision_logdet(model::SeparableModel; kwargs...)
+    comp_kwargs = _extract_component_kwargs(model, kwargs)
+
+    # Mirror precision_matrix's regularization condition exactly.
+    n_constrained = count(((i, comp),) -> constraints(comp; comp_kwargs[i]...) !== nothing, enumerate(model.components))
+    if n_constrained >= 2
+        regs = [comp.regularization for comp in model.components if hasfield(typeof(comp), :regularization)]
+        isempty(regs) || return nothing
+    end
+
+    dims = Int[length(c) for c in model.components]
+    N = prod(dims)
+    total = nothing
+    for (i, comp) in enumerate(model.components)
+        ld = _component_precision_logdet(comp, comp_kwargs[i])
+        term = (N ÷ dims[i]) * ld
+        total = total === nothing ? term : total + term
+    end
+    return total
+end
+
 function precision_matrix(model::SeparableModel; kwargs...)
     # Extract hyperparameters for each component
     comp_kwargs = _extract_component_kwargs(model, kwargs)
@@ -117,8 +148,11 @@ function precision_matrix(model::SeparableModel; kwargs...)
     Qs = [precision_matrix(comp; comp_kwargs[i]...) for (i, comp) in enumerate(model.components)]
 
     # Kronecker product: Q1 ⊗ Q2
-    # This matches the mean vectorization (comp2 varying fastest)
-    Q = foldl(kron, Qs)
+    # This matches the mean vectorization (comp2 varying fastest).
+    # Factors are lowered to sparse first: `kron` with a SymTridiagonal
+    # factor (AR1/RW1) would otherwise fall back to Base's dense method and
+    # densify the joint precision.
+    Q = foldl(kron, map(_ensure_sparse, Qs))
 
     # When multiple components are rank-deficient (have constraints), the individual
     # component regularizations (ε*I added by RW/Besag) get diluted through the
@@ -239,22 +273,30 @@ function constraints(model::SeparableModel; kwargs...)
     A_combined = vcat([A for (A, _) in constraint_list]...)
     e_combined = vcat([e for (_, e) in constraint_list]...)
 
+    # A single constrained component expands to I ⊗ A_i ⊗ I, which has full
+    # row rank whenever the component's constraint block does — skip the
+    # (dense, m×N QR) redundancy removal in that case. Redundancy can only
+    # arise when several components contribute constraints.
+    length(constraint_list) == 1 && return (A_combined, e_combined)
+
     # Remove redundant constraints to ensure full row rank
     return _remove_redundant_constraints(A_combined, e_combined)
 end
 
 """
-    _extract_component_kwargs(model::SeparableModel, kwargs)
+    _component_param_keymap(model::SeparableModel, kwarg_keys)
 
-Extract hyperparameters for each component from the combined kwargs.
-
-Returns a vector of NamedTuples, one per component.
+Per component, the pair `(local param names, suffixed keys in the combined
+kwargs)`, keeping only keys present in `kwarg_keys`. Pure Symbol bookkeeping —
+marked non-differentiable so that reverse-mode AD only has to trace the value
+extraction in [`_extract_component_kwargs`](@ref), not the `Dict`/`push!`
+bookkeeping here.
 """
-function _extract_component_kwargs(model::SeparableModel, kwargs)
+function _component_param_keymap(model::SeparableModel, kwarg_keys)
     # Track counts of each model name
     name_counts = Dict{Symbol, Int}()
 
-    comp_kwargs = NamedTuple[]
+    keymap = Tuple{Tuple{Vararg{Symbol}}, Tuple{Vararg{Symbol}}}[]
 
     for component in model.components
         comp_model_name = model_name(component)
@@ -264,21 +306,48 @@ function _extract_component_kwargs(model::SeparableModel, kwargs)
         count = get(name_counts, comp_model_name, 0) + 1
         name_counts[comp_model_name] = count
 
-        # Extract parameters for this component
         suffix = count == 1 ? "" : "_$count"
-        comp_kw = NamedTuple()
+        local_names = Symbol[]
+        full_keys = Symbol[]
 
         for param_name in keys(comp_params_template)
             # Look for {param}_{modelname}{suffix} in kwargs
             full_key = Symbol("$(param_name)_$(comp_model_name)$(suffix)")
 
-            if haskey(kwargs, full_key)
-                comp_kw = merge(comp_kw, NamedTuple{(param_name,)}((kwargs[full_key],)))
+            if full_key in kwarg_keys
+                push!(local_names, param_name)
+                push!(full_keys, full_key)
             end
         end
 
-        push!(comp_kwargs, comp_kw)
+        push!(keymap, (Tuple(local_names), Tuple(full_keys)))
     end
 
-    return comp_kwargs
+    return keymap
+end
+
+# Hand-written rather than `@non_differentiable`: the macro also emits a
+# kwargs-forwarding `Core.kwcall` branch, which JET flags as a method error
+# because `_component_param_keymap` has no kwarg method.
+function ChainRulesCore.rrule(::typeof(_component_param_keymap), model::SeparableModel, kwarg_keys)
+    _component_param_keymap_pullback(::Any) = (NoTangent(), NoTangent(), NoTangent())
+    return _component_param_keymap(model, kwarg_keys), _component_param_keymap_pullback
+end
+
+"""
+    _extract_component_kwargs(model::SeparableModel, kwargs)
+
+Extract hyperparameters for each component from the combined kwargs.
+
+Returns a vector of NamedTuples, one per component. Implemented without
+mutation on the value path so reverse-mode AD (Zygote) can differentiate
+hyperparameters through it.
+"""
+function _extract_component_kwargs(model::SeparableModel, kwargs)
+    keymap = _component_param_keymap(model, keys(kwargs))
+    # `map` (not a typed comprehension, which lowers to `setindex!`) so that
+    # Zygote can differentiate the value extraction.
+    return map(keymap) do (local_names, full_keys)
+        NamedTuple{local_names}(map(k -> kwargs[k], full_keys))
+    end
 end

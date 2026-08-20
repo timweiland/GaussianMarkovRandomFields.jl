@@ -56,6 +56,9 @@ function hyperparameters(::FixedEffectsModel)
     return NamedTuple()
 end
 
+# Closed-form log-determinant: Q = λ I (θ-independent).
+precision_logdet(model::FixedEffectsModel; kwargs...) = model.n * log(model.λ)
+
 function precision_matrix(model::FixedEffectsModel; kwargs...)
     return model.λ * I(model.n)
 end

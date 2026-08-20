@@ -12,7 +12,7 @@ hero:
   actions:
     - theme: brand
       text: "Get Started"
-      link: /tutorials/
+      link: /tutorials/getting_started
     - theme: alt
       text: "View on GitHub"
       link: https://github.com/timweiland/GaussianMarkovRandomFields.jl
@@ -38,7 +38,28 @@ features:
 
 ## What are Gaussian Markov Random Fields?
 
-Gaussian Markov Random Fields (GMRFs) are Gaussian distributions with sparse precision (inverse covariance) matrices. This sparsity structure makes them computationally efficient for large-scale problems while maintaining the expressiveness needed for complex spatial and temporal modeling.
+A Gaussian Markov Random Field (GMRF) is a Gaussian distribution whose
+*precision* matrix — the inverse of the covariance — is sparse.
+
+Sparsity in the precision is a modelling statement. A zero in
+entry $(i, j)$ of the precision matrix says precisely that $x_i$ and $x_j$ are
+conditionally independent given all the other variables. Most quantities we
+model in space and time behave that way: the temperature here depends on the
+temperature next door, and only indirectly on the temperature a hundred
+kilometres away. Encoding that structure in the precision matrix is what makes
+the field *Markov*.
+
+This brings nice computational benefits. The covariance matrix of such a distribution is
+usually completely dense, so working with it directly costs $O(n^3)$ and becomes
+hopeless as $n$ grows. The precision matrix is sparse, and sparse Cholesky
+factorization takes advantage of that — which is how GMRFs reach problem sizes
+where a naive Gaussian process cannot keep up.
+
+The difficulty has always been that the interesting priors are awkward to write
+down in precision form. One answer for spatial problems is the SPDE approach:
+state the model as a stochastic partial differential equation, discretize it with
+finite elements, and obtain a GMRF that approximates it.
+[Getting started](@ref) walks through both a hand-written precision matrix and an SPDE-derived one.
 
 ## Quick Start
 
@@ -48,4 +69,41 @@ Install the package:
 using Pkg
 Pkg.add("GaussianMarkovRandomFields")
 using GaussianMarkovRandomFields
+```
+
+## Related packages
+
+[Latte.jl](https://lattejl.org) is a probabilistic programming language for
+latent Gaussian models, built by the same author on top of this package. It
+provides INLA, TMB-style Laplace approximations and HMC-Laplace behind a concise
+model syntax. If you want a complete inference workflow rather than the
+components to build one, start there; this package is what it uses underneath.
+
+## Getting Help
+
+Questions, bug reports and feature requests all belong in the
+[issue tracker](https://github.com/timweiland/GaussianMarkovRandomFields.jl/issues).
+Please open an issue rather than emailing the maintainer, so that answers stay
+searchable for everyone.
+
+The [contribution guidelines](https://github.com/timweiland/GaussianMarkovRandomFields.jl/blob/main/CONTRIBUTING.md)
+describe what to include in an issue, how to contribute code, and what to expect
+regarding response times and project scope.
+
+## Citing
+
+If you use GaussianMarkovRandomFields.jl in your research, please cite it via its
+[Zenodo archive](https://doi.org/10.5281/zenodo.18088214). That DOI always
+resolves to the latest release, and the Zenodo page offers BibTeX and other
+export formats as well as per-version DOIs.
+
+```bibtex
+@software{weiland_gmrf_jl,
+  author    = {Weiland, Tim},
+  title     = {{GaussianMarkovRandomFields.jl}},
+  publisher = {Zenodo},
+  year      = {2025},
+  doi       = {10.5281/zenodo.18088214},
+  url       = {https://doi.org/10.5281/zenodo.18088214}
+}
 ```

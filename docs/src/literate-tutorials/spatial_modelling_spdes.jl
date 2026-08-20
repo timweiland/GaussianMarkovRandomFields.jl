@@ -20,7 +20,11 @@ using Plots
 x = convert(Vector{Float64}, df[:, :x])
 y = convert(Vector{Float64}, df[:, :y])
 zinc = df[:, :zinc]
-scatter(x, y, zcolor = zinc)
+scatter(
+    x, y, zcolor = zinc, xlabel = "x coordinate", ylabel = "y coordinate",
+    title = "Zinc concentration near the Meuse", label = false,
+    colorbar_title = "zinc (ppm)"
+)
 
 # Finally, in classic machine learning fashion, we split the data into a training
 # and a test set. We use about 85% of the data for training and the remaining 15%
@@ -41,7 +45,7 @@ size(X_train, 1), size(X_test, 1)
 # Unfortunately, without using any further tricks, GPs have a cubic runtime
 # complexity. As the size of the dataset grows, this quickly becomes
 # prohibitively expensive.
-# In the tutorial on Autoregressive models, we learned that GMRFs enable highly
+# In [Building autoregressive models](@ref), we learned that GMRFs enable highly
 # efficient Gaussian inference through sparse precision matrices.
 # Can we combine the modelling power of GPs with the efficiency of GMRFs?
 #

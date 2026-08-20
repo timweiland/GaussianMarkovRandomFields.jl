@@ -122,9 +122,11 @@ function GMRFWorkspace(model::LatentModel, obs_lik::ObservationLikelihood; kwarg
     H = loghessian(x_dummy, obs_lik)
     H_sparse = _ensure_sparse_hessian(H, n)
 
-    # Joint pattern: Q_prior + |H| (using absolute values to get the union pattern)
-    # Then copy Q_prior's actual values into the joint pattern
-    Q_joint_pattern = Q_prior + _abs_pattern(H_sparse)
+    # Joint pattern: structural union of Q_prior and H, built from all-ones
+    # copies so that sparse `+` (which drops exact-zero results, including
+    # stored zeros of the operands) cannot lose any position of either pattern.
+    # Then copy Q_prior's actual values into the joint pattern.
+    Q_joint_pattern = _ones_pattern(Q_prior) + _ones_pattern(H_sparse)
     # Reset values to Q_prior (the observation entries become zero)
     _copy_values_into!(Q_joint_pattern, Q_prior)
 
@@ -147,10 +149,18 @@ prior = model(ws; τ=2.0, ρ=0.3)  # WorkspaceGMRF, numeric-only refactorization
 ```
 """
 function (model::LatentModel)(ws::GMRFWorkspace; kwargs...)
-    μ = mean(model; kwargs...)
-    Q = precision_matrix(model; kwargs...)
+    # Delegate to a positional function so that reverse-mode AD can attach an
+    # rrule (see workspace/autodiff.jl). An rrule on this kwargs callable
+    # itself would be useless for hyperparameter gradients: ChainRules treats
+    # kwargs as non-differentiable, so Zygote would silently drop θ tangents.
+    return _evaluate_with_workspace(model, ws, values(kwargs))
+end
+
+function _evaluate_with_workspace(model::LatentModel, ws::GMRFWorkspace, θ::NamedTuple)
+    μ = mean(model; θ...)
+    Q = precision_matrix(model; θ...)
     Q_sparse = _ensure_sparse(Q)
-    constraint_info = constraints(model; kwargs...)
+    constraint_info = constraints(model; θ...)
 
     # Pad Q's values into the workspace's sparsity pattern with zeros at
     # observation-Hessian-only positions. Allows the joint-pattern workspace
@@ -160,11 +170,17 @@ function (model::LatentModel)(ws::GMRFWorkspace; kwargs...)
 
     update_precision!(ws, Q_for_ws)
 
+    # Structure hook: when the model can compute log|Q| cheaply (Kronecker
+    # factor rule, closed forms, ...), carry it on the prior so `logdetcov`
+    # never factorizes the joint workspace at Q_prior — in fitting loops the
+    # workspace's factor slot then effectively belongs to the posterior.
+    ld = precision_logdet(model; θ...)
+
     if constraint_info === nothing
-        return WorkspaceGMRF(μ, Q_for_ws, ws)
+        return WorkspaceGMRF(μ, Q_for_ws, ws; precision_logdet = ld)
     else
         A, e = constraint_info
-        return WorkspaceGMRF(μ, Q_for_ws, ws, A, e)
+        return WorkspaceGMRF(μ, Q_for_ws, ws, A, e; precision_logdet = ld)
     end
 end
 
@@ -177,9 +193,10 @@ _ensure_sparse_hessian(H::Diagonal, n::Int) = sparse(H)
 _ensure_sparse_hessian(H::SparseMatrixCSC, ::Int) = H
 _ensure_sparse_hessian(H::AbstractMatrix, ::Int) = sparse(H)
 
-"""Create a sparse matrix with absolute values of nonzeros (for pattern union)."""
-function _abs_pattern(H::SparseMatrixCSC{T}) where {T}
-    return SparseMatrixCSC(H.m, H.n, H.colptr, H.rowval, abs.(H.nzval))
+"""Create a sparse matrix with `A`'s stored pattern and all-ones values.
+Used for cancellation-free pattern unions and structural pattern products."""
+function _ones_pattern(A::SparseMatrixCSC)
+    return SparseMatrixCSC(A.m, A.n, A.colptr, A.rowval, ones(length(A.rowval)))
 end
 
 """
