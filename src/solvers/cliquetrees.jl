@@ -11,7 +11,16 @@ using CliqueTrees.Multifrontal: ChordalCholesky, selinv!, triangular
 supports_selinv(::LinearSolve.CliqueTreesFactorization) = Val{true}()
 supports_backward_solve(::LinearSolve.CliqueTreesFactorization) = Val{true}()
 
-_cliquetrees_factor(linsolve) = LinearSolve.@get_cacheval(linsolve, :CliqueTreesFactorization)
+# The `::ChordalCholesky` assertion is what keeps this inferrable: `@get_cacheval`
+# returns `Any`, so without it `selinv!` below union-splits across every method
+# it has — including one returning an `Integer`, whose branch has no
+# `_chordal_selinv_diag`/`_chordal_selinv_full` method and which JET's error
+# analysis flags (on Julia 1.11+; 1.10's inference does not reach it). The
+# cacheval for this algorithm is always a `ChordalCholesky`, so the assertion
+# can only fail if LinearSolve changes what it stores — loudly, which is what
+# we would want.
+_cliquetrees_factor(linsolve) =
+    LinearSolve.@get_cacheval(linsolve, :CliqueTreesFactorization)::ChordalCholesky
 
 function _logdet_cov_impl(linsolve, ::LinearSolve.CliqueTreesFactorization)
     return -logdet(_cliquetrees_factor(linsolve))
