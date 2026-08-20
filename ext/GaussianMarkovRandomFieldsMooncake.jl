@@ -403,10 +403,26 @@ end
 # solver, gradients flow to Q), and the small m×m Schur complement uses
 # Mooncake's dense Cholesky rules. The corrections themselves come from the
 # shared `_constraint_*` formulas.
+"""
+    _dense_constraints(A) -> Matrix
+
+The constraint matrix as a dense array. Every differentiated `A * v` below goes
+through this first: MooncakeSparse's pullback for a sparse `A * v` handles
+square `A` only (`selupd_impl!` asserts it), while a constraint matrix is m×n
+with m ≪ n. A constrained `WorkspaceGMRF` stores `A` sparse (the primal
+constraint solves want it that way); `ConstrainedGMRF` already stores it dense,
+and is passed through without a copy.
+"""
+_dense_constraints(A::Matrix) = A
+_dense_constraints(A::AbstractMatrix) = Matrix(A)
+
+# Returns the dense constraint matrix alongside the Schur quantities, so that
+# the shared `_constraint_*` formulas are fed the dense copy.
 function _mooncake_constraint_schur(Q::SparseMatrixCSC, F::ChordalCholesky, A::AbstractMatrix)
-    A_tilde_T = MooncakeSparse.ldivwith(Symmetric(Q), F, Matrix(A'))
-    S_c = cholesky(Symmetric(A * A_tilde_T))
-    return A_tilde_T, S_c
+    A_dense = _dense_constraints(A)
+    A_tilde_T = MooncakeSparse.ldivwith(Symmetric(Q), F, Matrix(A_dense'))
+    S_c = cholesky(Symmetric(A_dense * A_tilde_T))
+    return A_dense, A_tilde_T, S_c
 end
 
 function _ws_constraint_schur(d::WorkspaceGMRF, F::ChordalCholesky)
@@ -414,9 +430,8 @@ function _ws_constraint_schur(d::WorkspaceGMRF, F::ChordalCholesky)
 end
 
 function _ws_constraint_correction(d::WorkspaceGMRF, F::ChordalCholesky)
-    ci = d.constraints
-    _, S_c = _ws_constraint_schur(d, F)
-    return _constraint_log_correction(ci.matrix, ci.vector, d.mean, S_c)
+    A_dense, _, S_c = _ws_constraint_schur(d, F)
+    return _constraint_log_correction(A_dense, d.constraints.vector, d.mean, S_c)
 end
 
 @mooncake_overlay function logpdf(d::WorkspaceGMRF, z::AbstractVector)
@@ -439,7 +454,7 @@ end
     F = _mooncake_workspace_factor(d)
     σ = diag(Multifrontal.selinv(Symmetric(d.precision), F))
     if has_constraints(d)
-        A_tilde_T, S_c = _ws_constraint_schur(d, F)
+        _, A_tilde_T, S_c = _ws_constraint_schur(d, F)
         σ = max.(σ .- _constraint_var_correction(A_tilde_T, S_c), 0.0)
     end
     return σ
@@ -498,16 +513,16 @@ function _constrained_gmrf_schur(d::ConstrainedGMRF)
 end
 
 @mooncake_overlay function logpdf(d::ConstrainedGMRF, z::AbstractVector)
-    _, S_c = _constrained_gmrf_schur(d)
+    A_dense, _, S_c = _constrained_gmrf_schur(d)
     correction = _constraint_log_correction(
-        d.constraint_matrix, d.constraint_vector, d.base_gmrf.mean, S_c
+        A_dense, d.constraint_vector, d.base_gmrf.mean, S_c
     )
     return logpdf(d.base_gmrf, z) + correction
 end
 
 @mooncake_overlay function var(d::ConstrainedGMRF)
     σ = var(d.base_gmrf)
-    A_tilde_T, S_c = _constrained_gmrf_schur(d)
+    _, A_tilde_T, S_c = _constrained_gmrf_schur(d)
     return max.(σ .- _constraint_var_correction(A_tilde_T, S_c), 0.0)
 end
 
@@ -554,11 +569,14 @@ _ift_project(posterior, step) = step
 function _ift_project(posterior::WorkspaceGMRF, step)
     has_constraints(posterior) || return step
     ci = posterior.constraints
-    return step - _constraint_shift(ci.A_tilde_T, ci.L_c, ci.matrix * step)
+    return step - _constraint_shift(
+        ci.A_tilde_T, ci.L_c, _dense_constraints(ci.matrix) * step
+    )
 end
 function _ift_project(posterior::ConstrainedGMRF, step)
     return step - _constraint_shift(
-        posterior.A_tilde_T, posterior.L_c, posterior.constraint_matrix * step
+        posterior.A_tilde_T, posterior.L_c,
+        _dense_constraints(posterior.constraint_matrix) * step,
     )
 end
 

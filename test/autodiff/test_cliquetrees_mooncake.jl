@@ -8,6 +8,33 @@ using Random
 
 using DifferentiationInterface
 using FiniteDiff, Mooncake, MooncakeSparse
+# Activates the sparse-Jacobian backend the NonlinearLeastSquares testset needs.
+# Other test files load these too, but relying on that leaves this file's result
+# dependent on include order — and an *error* here would abort the whole run.
+using SparseConnectivityTracer, SparseMatrixColorings
+
+# 2D lattice Laplacian + τI. Unlike the AR(1) fixture used by the testsets
+# below, its Cholesky factor has genuine structural fill-in — the only kind of
+# precision that can exercise (and did break on) the selected-inversion
+# gradient. See the "Selected-inversion gradient with fill-in" testset.
+function lattice_precision_ct(τ, n)
+    N = n * n
+    idx(i, j) = (j - 1) * n + i
+    rows, cols, vals = Int[], Int[], typeof(τ)[]
+    for i in 1:n, j in 1:n
+        c = idx(i, j)
+        deg = 0
+        for (di, dj) in ((1, 0), (-1, 0), (0, 1), (0, -1))
+            i2, j2 = i + di, j + dj
+            if 1 <= i2 <= n && 1 <= j2 <= n
+                deg += 1
+                push!(rows, c); push!(cols, idx(i2, j2)); push!(vals, -one(τ))
+            end
+        end
+        push!(rows, c); push!(cols, c); push!(vals, deg + τ)
+    end
+    return sparse(rows, cols, vals, N, N)
+end
 
 @testset "Mooncake CliqueTrees-backed GMRF autodiff tests" begin
     Random.seed!(42)
@@ -337,5 +364,69 @@ using FiniteDiff, Mooncake, MooncakeSparse
         grad_mc = DifferentiationInterface.gradient(pipeline, backend, θ)
         grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
         @test grad_mc ≈ grad_fd atol = 1.0e-3 rtol = 5.0e-2
+    end
+
+    # Regression test for an upstream selected-inversion gradient bug
+    # (CliqueTrees < 1.19.5): `selinv(A, F)`'s rules read Σ already projected
+    # onto A's sparsity pattern, so every Σ entry on the factor's fill pattern
+    # but outside A's own was silently taken as zero. The gradient came out
+    # ~5% low. It is exact iff A's pattern is chordal, which is why every
+    # AR(1)-based testset above passes either way — a tridiagonal precision has
+    # no fill-in at all. Any future regression here needs a fill-in precision
+    # to be visible, hence the explicit guard.
+    @testset "Selected-inversion gradient with fill-in" begin
+        n = 5
+        N = n * n
+        w = randn(N)
+        τ = 1.0
+
+        Q = lattice_precision_ct(τ, n)
+        @test nnz(sparse(cholesky(Symmetric(Q)).L)) > nnz(tril(Q))
+
+        # Exact analytic gradient: with Q(τ) = L + τI,
+        # d/dτ dot(w, diag(Q⁻¹)) = -Σᵢ wᵢ (Σ²)ᵢᵢ. This is the reference the
+        # buggy rule missed; finite differences alone would also catch it, but
+        # the closed form leaves no tolerance argument to hide in.
+        Σ = inv(Matrix(Q))
+        Σ² = Σ * Σ
+        exact = -sum(w[i] * Σ²[i, i] for i in 1:N)
+
+        obj_backend(θ) = dot(
+            w, var(GMRF(zeros(N), lattice_precision_ct(θ[1], n), CliqueTreesFactorization()))
+        )
+        obj_chordal(θ) = dot(w, var(ChordalGMRF(zeros(N), lattice_precision_ct(θ[1], n))))
+
+        for obj in (obj_backend, obj_chordal)
+            grad_mc = DifferentiationInterface.gradient(obj, backend, [τ])[1]
+            @test grad_mc ≈ exact rtol = 1.0e-8
+        end
+    end
+
+    @testset "Fill-in precision: logpdf and Laplace marginal likelihood" begin
+        n = 4
+        N = n * n
+        z = randn(N)
+        y = rand(1:4, N)
+
+        logpdf_pipeline(θ) = logpdf(
+            GMRF(θ[2] * ones(N), lattice_precision_ct(θ[1], n), CliqueTreesFactorization()), z
+        )
+
+        function laplace_pipeline(θ)
+            prior = GMRF(
+                θ[2] * ones(N), lattice_precision_ct(θ[1], n), CliqueTreesFactorization()
+            )
+            obs_lik = ExponentialFamily(Poisson)(PoissonObservations(y))
+            posterior = gaussian_approximation(prior, obs_lik)
+            xs = mean(posterior)
+            return logpdf(prior, xs) + loglik(xs, obs_lik) - logpdf(posterior, xs)
+        end
+
+        θ = [1.0, 0.2]
+        for (pipeline, rtol) in ((logpdf_pipeline, 1.0e-4), (laplace_pipeline, 5.0e-2))
+            grad_mc = DifferentiationInterface.gradient(pipeline, backend, θ)
+            grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
+            @test grad_mc ≈ grad_fd atol = 1.0e-3 rtol = rtol
+        end
     end
 end
