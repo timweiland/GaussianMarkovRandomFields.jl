@@ -46,8 +46,12 @@ Reach for a reverse-mode backend when the parameter vector is large enough that
 forward mode's per-parameter cost dominates:
 
 - **Zygote.jl** for `GMRF`, `ChordalGMRF` and `WorkspaceGMRF` priors.
-- **Mooncake.jl** for `ChordalGMRF`, which is what the chordal backend is built
-  for. It refuses a plain `GMRF`.
+- **Mooncake.jl** for anything built on the pure-Julia CliqueTrees
+  factorization — a `GMRF` constructed with `CliqueTreesFactorization()`, a
+  `WorkspaceGMRF` over a `CliqueTreesBackend`, `ChordalGMRF`, and constrained
+  versions of all three. It is the only reverse-mode backend that also covers
+  `var`/`std`, and its cost per gradient does not grow with the number of
+  hyperparameters. It refuses a CHOLMOD-backed GMRF.
 - **Enzyme.jl** for `logpdf`, `logdetcov` and `gaussian_approximation` on `GMRF`
   and `WorkspaceGMRF`. Fast, but it has the most caveats: no `var`/`std`,
   constrained models need Julia 1.12, and `ChordalGMRF` is unreliable.
@@ -61,35 +65,30 @@ failures are invisible with one.
 
 | Operation | ForwardDiff | Zygote | Enzyme | Mooncake |
 |---|---|---|---|---|
-| `logdetcov(::GMRF)` | ✅ | ✅ | ✅ | ❌ raises |
-| `logpdf(::GMRF, z)` | ✅ | ✅ | ✅ | ❌ raises |
-| `gaussian_approximation` (`GMRF`) | ✅ | ✅ | ✅ | ❌ raises |
+| `logdetcov(::GMRF)` | ✅ | ✅ | ✅ | ✅ CliqueTrees only |
+| `logpdf(::GMRF, z)` | ✅ | ✅ | ✅ | ✅ CliqueTrees only |
+| `gaussian_approximation` (`GMRF`) | ✅ | ✅ | ✅ | ✅ CliqueTrees only |
 | `logdetcov(::ChordalGMRF)` | ✅ | ✅ | ⚠️ unreliable | ✅ |
 | `logpdf(::ChordalGMRF, z)` | ✅ | ✅ | ⚠️ unreliable | ✅ |
 | `gaussian_approximation` (`ChordalGMRF`) | ✅ | ✅ | ⚠️ unreliable | ✅ |
-| `logdetcov(::WorkspaceGMRF)` | ✅ | ✅ | ✅ | ❌ raises |
-| `logpdf(::WorkspaceGMRF, z)` | ✅ | ✅ | ✅ | ❌ raises |
-| `gaussian_approximation` (`WorkspaceGMRF`) | ✅ | ✅ | ✅ | ❌ raises |
-| `logpdf(::ConstrainedGMRF, z)` | ✅ | ✅ | Julia 1.12 only | ❌ raises |
-| `gaussian_approximation` (`ConstrainedGMRF`) | ✅ | ✅ | Julia 1.12 only | ❌ raises |
-| `var` / `std` (`GMRF`, `WorkspaceGMRF`) | ✅ | ❌ raises | ❌ raises | ❌ raises |
-| `var` / `std` (`ChordalGMRF`) | ✅ | ❌ raises | ❌ raises | ⚠️ wrong, see below |
+| `logdetcov(::WorkspaceGMRF)` | ✅ | ✅ | ✅ | ✅ CliqueTrees only |
+| `logpdf(::WorkspaceGMRF, z)` | ✅ | ✅ | ✅ | ✅ CliqueTrees only |
+| `gaussian_approximation` (`WorkspaceGMRF`) | ✅ | ✅ | ✅ | ✅ CliqueTrees only |
+| `logpdf(::ConstrainedGMRF, z)` | ✅ | ✅ | Julia 1.12 only | ✅ CliqueTrees only |
+| `gaussian_approximation` (`ConstrainedGMRF`) | ✅ | ✅ | Julia 1.12 only | ✅ CliqueTrees only |
+| `var` / `std` (`GMRF`, `WorkspaceGMRF`) | ✅ | ❌ raises | ❌ raises | ✅ CliqueTrees only |
+| `var` / `std` (`ChordalGMRF`) | ✅ | ❌ raises | ❌ raises | ✅ |
 
 ✅ matches finite differences · ❌ raises an error · ⚠️ see the note for that row
+
+"CliqueTrees only" means the Mooncake rules need the pure-Julia CliqueTrees
+factorization rather than CHOLMOD: build the GMRF with
+`CliqueTreesFactorization()`, or the workspace with `CliqueTreesBackend`. On a
+CHOLMOD-backed one, Mooncake raises. See [Mooncake](#Mooncake) below.
 
 The Enzyme `ChordalGMRF` rows depend on the Julia version *and* the CPU
 architecture; see the note under [Enzyme](#Enzyme) below. The verification above
 ran on aarch64.
-
-The single ⚠️ is `var`/`std` on a `ChordalGMRF` under Mooncake, whose gradient is
-currently around 1% off. The cause sits upstream of this package, in the
-selected-inversion rule for the chordal factorization, and a fix is expected. Use
-ForwardDiff for marginal-variance gradients in the meantime.
-
-Everything else that is not ✅ raises an explicit, actionable error. Combinations
-that cannot be supported refuse rather than falling back to differentiating a
-sparse factorization, because doing the latter produces wrong gradients that no
-test without a finite-difference reference would catch.
 
 Every ❌ in this table is an explicit, actionable error. Combinations that cannot
 be supported raise rather than falling back to differentiating a sparse
@@ -121,38 +120,94 @@ pattern, so the selected inverse is exact there, whereas `∂diag(Q⁻¹)/∂Q` 
 
 ## Mooncake
 
-Mooncake is built for `ChordalGMRF`, whose multifrontal factorization is pure
-Julia and therefore something Mooncake can traverse. `logdetcov`, `logpdf` and
-`gaussian_approximation` are all checked against finite differences on that type.
+Mooncake needs a factorization it can traverse, so its support follows the
+factorization rather than the GMRF type: everything built on **CliqueTrees.jl's
+pure-Julia multifrontal Cholesky** is supported, and CHOLMOD is refused.
 
-A `GMRF` backed by CHOLMOD — what the two-argument constructor resolves to for a
-general sparse precision, and what `ConstrainedGMRF` wraps — raises an
-`ArgumentError` instead. Mooncake reaches CHOLMOD only as pointers into memory
-owned by a C library; left to itself it dereferences one and the process dies
-with a segmentation fault, taking the rest of the session down with it. Refusing
-is the only alternative, since there is nothing there for a generic AD to
-traverse.
+Three constructions get you there, and all of them support `logdetcov`,
+`logpdf`, `var`/`std` and `gaussian_approximation`, constrained or not:
 
-`WorkspaceGMRF` needs no such guard. It owns its `CHOLMOD.Factor` directly rather
-than through the shared solver entry points, and Mooncake gives up on it with a
-`TypeError` well before reaching the factor.
+```julia
+using GaussianMarkovRandomFields, LinearSolve
+using DifferentiationInterface, Mooncake, MooncakeSparse
 
-The refusal fires on the operations that actually consume the factorization —
-`logdetcov` (and so `logpdf`), `var`/`std`, `selinv` and `backward_solve` — not
-on the presence of a `GMRF`. The parts that need no factorization, such as the
-mean or the quadratic form behind `sqmahal`, still differentiate normally.
+x = GMRF(μ, Q, CliqueTreesFactorization())   # a standard GMRF, chordal backend
+x = WorkspaceGMRF(μ, Q, GMRFWorkspace(Q_pattern, CliqueTreesBackend))
+x = ChordalGMRF(μ, Q)                        # the factorization, unwrapped
+```
+
+`MooncakeSparse` must be loaded alongside `Mooncake`; the rules for sparse
+precisions live there.
+
+A typical hyperparameter objective, with the workspace built once outside the
+differentiated function so its symbolic factorization is reused:
+
+```julia
+ws = GMRFWorkspace(Q_pattern, CliqueTreesBackend)
+
+function objective(θ)
+    prior = WorkspaceGMRF(build_mean(θ), build_precision(θ), ws)
+    posterior = gaussian_approximation(prior, obs_lik)
+    return logpdf(posterior, y)
+end
+
+grad = DifferentiationInterface.gradient(objective, AutoMooncake(), θ)
+```
+
+Linear equality constraints (sum-to-zero and friends) differentiate on both
+constrained paths — a `ConstrainedGMRF` over a CliqueTrees-backed `GMRF`, and a
+constrained `WorkspaceGMRF` — including through `mean(posterior)`.
+
+### Why reach for it
+
+Mooncake is the only reverse-mode backend here that covers `var`/`std`, and the
+only one whose cost is flat in the number of hyperparameters: a gradient of the
+Laplace marginal likelihood runs at roughly 1.0–1.7× a primal evaluation
+regardless of how many hyperparameters there are, where ForwardDiff scales
+linearly in them. At n = 4096 with 32 hyperparameters that is about 38× faster
+than ForwardDiff and 20× faster than Zygote on the same objective. With a
+handful of hyperparameters ForwardDiff is still the simpler choice.
+
+`gaussian_approximation` is differentiated with the Implicit Function Theorem —
+one differentiable Newton step at the converged mode — rather than through the
+Fisher-scoring loop, matching the rule the other backends use.
+
+### What raises
+
+A CHOLMOD-backed GMRF — what the two-argument constructor resolves to for a
+general sparse precision — raises an `ArgumentError` naming the construction to
+use instead. This is a guard, not an oversight: Mooncake reaches CHOLMOD only as
+pointers into memory owned by a C library, and left to itself it dereferences
+one and the process dies with a segmentation fault, taking the rest of the
+session with it. A `WorkspaceGMRF` over the default `CHOLMODBackend` raises the
+same way.
+
+The refusal fires on the operations that actually consume the factorization, not
+on the presence of a GMRF; the parts that need none, such as the mean or the
+quadratic form behind `sqmahal`, still differentiate normally.
+
+Gauss–Newton (`NonlinearLeastSquares`) likelihoods raise an actionable error
+under Mooncake, as they do under Zygote and Enzyme: their score needs a
+forward-mode sparse Jacobian that reverse mode cannot differentiate through.
+Use ForwardDiff for those.
 
 As with Enzyme, the *error type* can vary. Where this package's guard refuses
-first you get the `ArgumentError` naming the operation; where Mooncake's own rule
-compiler gives up earlier you get a `MooncakeRuleCompilationError` instead, which
+first you get the `ArgumentError` naming the operation; where Mooncake's own
+rule compiler gives up earlier you get a `MooncakeRuleCompilationError`, which
 says nothing about GMRFs. Known cases of the second: `rand` on every version,
-Julia 1.10 for precision matrices denser than a tridiagonal one, and
-`gaussian_approximation` on x86-64 (where Mooncake stops at the Newton loop;
-aarch64 reaches the guard and gives the actionable message). Both are loud
-failures — never a wrong number, and, which is the point of the guard, never a
-crash.
+and on Julia 1.10 a CHOLMOD-backed GMRF over a precision denser than a
+tridiagonal one. Both are loud failures — never a wrong number, and, which is
+the point of the guard, never a crash.
 
-Use `ChordalGMRF` under Mooncake, or ForwardDiff, which handles every GMRF type.
+!!! note "CliqueTrees 1.19.5 or newer for `var` gradients"
+    Before 1.19.5, CliqueTrees' selected-inversion rule read the selected
+    inverse already projected onto the precision's sparsity pattern, so entries
+    on the factor's fill pattern but outside it were silently taken as zero and
+    `var`/`std` gradients came out a few percent low. The error was exactly zero
+    for precisions whose pattern is chordal — a tridiagonal AR(1) precision, for
+    instance — which is what made it easy to miss. The package's compat bound
+    requires the fixed version; `logdetcov` and `logpdf` gradients were correct
+    throughout.
 
 ## Enzyme
 
@@ -250,8 +305,11 @@ stable than a pure finite-difference Hessian.
 ## Constrained GMRFs
 
 `ConstrainedGMRF` priors (from `RW1Model`, `BesagModel`, …) are supported by
-Zygote, ForwardDiff, and — on Julia 1.12 only — Enzyme. See the note in the
-Enzyme section for why the older versions are excluded.
+Zygote, ForwardDiff, Mooncake (over a CliqueTrees-backed base GMRF) and — on
+Julia 1.12 only — Enzyme. See the note in the Enzyme section for why the older
+versions are excluded. Constrained `WorkspaceGMRF`s are supported by the same
+set except Enzyme, which has no rule for their `Q`-dependent constraint
+correction.
 
 ## Testing your own gradients
 

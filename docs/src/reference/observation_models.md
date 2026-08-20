@@ -192,7 +192,8 @@ AutoDiff observation models require an automatic differentiation backend:
 
 1. **ForwardDiff.jl** — the broadest support, and the right shape for the small
    parameter vectors typical of hyperparameter optimization
-2. **Mooncake.jl** — reverse mode; the backend `ChordalGMRF` is designed for
+2. **Mooncake.jl** — reverse mode for GMRFs built on the pure-Julia CliqueTrees
+   factorization; the only one that also covers `var`/`std`
 3. **Zygote.jl** — reverse mode for `GMRF` and `WorkspaceGMRF` priors
 4. **Enzyme.jl** — fastest where it applies, but it covers the fewest
    operations and GMRF types
