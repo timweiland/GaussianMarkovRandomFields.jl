@@ -24,12 +24,12 @@ import CliqueTrees.Multifrontal as Multifrontal
 # actionable error), so other backends fail loudly instead of deep in AD.
 const SparseGMRF = GMRF{<:Real, <:AbstractVector, <:Any, <:SparseMatrixCSC}
 
+include("mooncake/unsupported.jl")
 include("mooncake/chordal.jl")
 include("mooncake/gmrf.jl")
 include("mooncake/constraints.jl")
 include("mooncake/workspace.jl")
 include("mooncake/constrained.jl")
 include("mooncake/gaussian_approximation.jl")
-include("mooncake/unsupported.jl")
 
 end

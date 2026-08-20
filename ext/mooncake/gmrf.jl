@@ -17,12 +17,9 @@ the factor only acts as a solver, gradients flow through the two-arg
 function _mooncake_chordal_factor(cache::LinearSolve.LinearCache)
     ensure_factorization!(cache)
     F = cache.cacheval
-    F isa ChordalCholesky || throw(
-        ArgumentError(
-            "Mooncake AD through a GMRF requires the CliqueTrees backend. " *
-                "Construct the GMRF with `GMRF(μ, Q, LinearSolve.CliqueTreesFactorization())`."
-        )
-    )
+    # A CHOLMOD-backed GMRF reaches this before it reaches the solver-level
+    # guards in unsupported.jl, since `logdetcov`/`var` are overlaid here.
+    F isa ChordalCholesky || mooncake_wrong_factorization("a GMRF")
     return F
 end
 

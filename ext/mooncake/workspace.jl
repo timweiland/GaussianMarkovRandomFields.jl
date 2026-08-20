@@ -8,12 +8,7 @@
 # formulas (see constraints.jl), with Q entering through `ldivwith`.
 
 function _require_cliquetrees_backend(ws::GMRFWorkspace)
-    ws.backend isa CliqueTreesBackend || throw(
-        ArgumentError(
-            "Mooncake AD through a WorkspaceGMRF requires the CliqueTrees backend. " *
-                "Construct the workspace with `GMRFWorkspace(Q, CliqueTreesBackend)`."
-        )
-    )
+    ws.backend isa CliqueTreesBackend || mooncake_wrong_factorization("a WorkspaceGMRF")
     return nothing
 end
 
