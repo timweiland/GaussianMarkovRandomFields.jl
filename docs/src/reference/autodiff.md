@@ -161,12 +161,16 @@ constrained `WorkspaceGMRF` — including through `mean(posterior)`.
 ### Why reach for it
 
 Mooncake is the only reverse-mode backend here that covers `var`/`std`, and the
-only one whose cost is flat in the number of hyperparameters: a gradient of the
-Laplace marginal likelihood runs at roughly 1.0–1.7× a primal evaluation
-regardless of how many hyperparameters there are, where ForwardDiff scales
-linearly in them. At n = 4096 with 32 hyperparameters that is about 38× faster
-than ForwardDiff and 20× faster than Zygote on the same objective. With a
-handful of hyperparameters ForwardDiff is still the simpler choice.
+only one whose cost is flat in the number of hyperparameters. On a Laplace
+marginal likelihood over a 64×64 lattice (n = 4096), a gradient costs under 2×
+a primal evaluation whether the objective has 2 hyperparameters or 32, while
+ForwardDiff scales linearly in them — about 17× slower than Mooncake at 2
+hyperparameters and 53× at 32. Hoist the preparation
+(`DifferentiationInterface.prepare_gradient`) out of the optimization loop;
+re-preparing per call roughly triples the gradient cost.
+
+With a handful of hyperparameters ForwardDiff is still the simpler choice, and
+it is the only backend that needs no particular factorization.
 
 `gaussian_approximation` is differentiated with the Implicit Function Theorem —
 one differentiable Newton step at the converged mode — rather than through the
