@@ -88,9 +88,12 @@ end
     end
 
     @testset "Custom elimination ordering" begin
-        # Passing a non-default ordering is broken upstream: LinearSolve's
-        # LinearSolveCliqueTreesExt.makefactor unwraps `alg.alg` twice
-        # (LinearSolve ≤ 3.87). Tripwire so we notice when the fix lands.
+        # Passing a non-default ordering is broken upstream:
+        # LinearSolveCliqueTreesExt calls `makefactor(A, alg.alg, alg.snd)`,
+        # which unwraps `alg.alg` a second time internally. Present in every
+        # LinearSolve release carrying the extension, 3.75 through 5.10.
+        # The default ordering (AMF) is unaffected. Tripwire so we notice when
+        # the fix lands.
         @test_broken (GMRF(μ, Q, CliqueTreesFactorization(alg = CliqueTrees.AMD())); true)
     end
 
