@@ -145,7 +145,7 @@ function _workspace_constrain_with_matrix(step, ws::GMRFWorkspace, A)
     # solves — this projection runs once per Newton iterate.
     A_tilde_T = workspace_solve(ws, Matrix{Float64}(transpose(A)))
     L_c = cholesky(Symmetric(Matrix(A * A_tilde_T)))
-    return step - A_tilde_T * (L_c \ (A * step))
+    return step - _constraint_shift(A_tilde_T, L_c, A * step)
 end
 
 """

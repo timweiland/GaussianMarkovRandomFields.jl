@@ -1,129 +1,35 @@
 module GaussianMarkovRandomFieldsMooncake
 
 using GaussianMarkovRandomFields
-using GaussianMarkovRandomFields: ∇ₓ_neg_log_posterior, hermdiff,
+using GaussianMarkovRandomFields: hermdiff, ensure_factorization!,
+    ensure_loaded!, ensure_numeric!, has_constraints,
+    _has_gauss_newton_jacobian, _reverse_mode_gauss_newton_error,
+    _constraint_shift, _constraint_log_correction, _constraint_var_correction,
     _logdet_cov_impl, _selinv_diag_impl, _selinv_impl, _backward_solve_impl
 using Statistics: mean
+using Distributions: logpdf, logdetcov, var
 using Mooncake
 using Mooncake: @is_primitive, @mooncake_overlay, MinimalCtx, CoDual, NoRData, NoFData, primal, tangent, fdata, zero_tangent
 using MooncakeSparse
 using SparseArrays: nonzeros, SparseMatrixCSC
-using LinearAlgebra: Hermitian
+using LinearAlgebra: Hermitian, Symmetric, cholesky, diag, dot, logdet, I
+using LinearSolve
 using LinearSolve: CHOLMODFactorization
 using CliqueTrees.Multifrontal: ChordalCholesky
+import CliqueTrees.Multifrontal as Multifrontal
 
-@is_primitive MinimalCtx Tuple{Type{ChordalGMRF}, AbstractVector, SparseMatrixCSC}
-
-function Mooncake.rrule!!(
-        ::CoDual{Type{ChordalGMRF}},
-        cdμ::CoDual{<:AbstractVector},
-        cdQ::CoDual{<:SparseMatrixCSC},
-    )
-    μ, Σμ = MooncakeSparse.primaltangent(cdμ)
-    Q, ΣQ = MooncakeSparse.primaltangent(cdQ)
-
-    gmrf = ChordalGMRF(μ, Q)
-    dy = fdata(zero_tangent(gmrf))
-
-    function pullback!!(::NoRData)
-        dμ = MooncakeSparse.toarray(gmrf.μ, dy.data.μ)
-        dQ = MooncakeSparse.toarray(gmrf.Q, dy.data.Q)
-
-        Σμ .+= dμ
-        nonzeros(ΣQ) .+= nonzeros(parent(dQ))
-
-        return NoRData(), NoRData(), NoRData()
-    end
-
-    return CoDual(gmrf, dy), pullback!!
-end
-
-@is_primitive MinimalCtx Tuple{Type{ChordalGMRF}, AbstractVector, Hermitian, ChordalCholesky}
-
-function Mooncake.rrule!!(
-        ::CoDual{Type{ChordalGMRF}},
-        cdμ::CoDual{<:AbstractVector},
-        cdQ::CoDual{<:Hermitian},
-        cdF::CoDual{<:ChordalCholesky},
-    )
-    μ, Σμ = MooncakeSparse.primaltangent(cdμ)
-    Q, ΣQ = MooncakeSparse.primaltangent(cdQ)
-    F = primal(cdF)
-
-    gmrf = ChordalGMRF(μ, Q, F)
-    dy = fdata(zero_tangent(gmrf))
-
-    function pullback!!(::NoRData)
-        dμ = MooncakeSparse.toarray(gmrf.μ, dy.data.μ)
-        dQ = MooncakeSparse.toarray(gmrf.Q, dy.data.Q)
-
-        Σμ .+= dμ
-        nonzeros(parent(ΣQ)) .+= nonzeros(parent(dQ))
-
-        return NoRData(), NoRData(), NoRData(), NoRData()
-    end
-
-    return CoDual(gmrf, dy), pullback!!
-end
-
-function gaussian_approximation_notangent(prior::ChordalGMRF, obslik::ObservationLikelihood; kwargs...)
-    return gaussian_approximation(prior, obslik; kwargs...)
-end
-
-@is_primitive MinimalCtx Tuple{typeof(gaussian_approximation_notangent), ChordalGMRF, ObservationLikelihood}
-@is_primitive MinimalCtx Tuple{typeof(Core.kwcall), Any, typeof(gaussian_approximation_notangent), ChordalGMRF, ObservationLikelihood}
-
-function Mooncake.rrule!!(
-        ::CoDual{typeof(gaussian_approximation_notangent)},
-        cdprior::CoDual{<:ChordalGMRF},
-        cdobslik::CoDual{<:ObservationLikelihood},
-    )
-    prior = primal(cdprior)
-    obslik = primal(cdobslik)
-    posterior = gaussian_approximation_notangent(prior, obslik)
-
-    function pullback!!(::NoRData)
-        return NoRData(), Mooncake.zero_rdata(prior), Mooncake.zero_rdata(obslik)
-    end
-
-    return CoDual(posterior, fdata(zero_tangent(posterior))), pullback!!
-end
-
-function Mooncake.rrule!!(
-        ::CoDual{typeof(Core.kwcall)},
-        cdkwargs::CoDual,
-        ::CoDual{typeof(gaussian_approximation_notangent)},
-        cdprior::CoDual{<:ChordalGMRF},
-        cdobslik::CoDual{<:ObservationLikelihood},
-    )
-    prior = primal(cdprior)
-    obslik = primal(cdobslik)
-    kwargs = primal(cdkwargs)
-    posterior = gaussian_approximation_notangent(prior, obslik; kwargs...)
-
-    function pullback!!(::NoRData)
-        return NoRData(), NoRData(), NoRData(), Mooncake.zero_rdata(prior), Mooncake.zero_rdata(obslik)
-    end
-
-    return CoDual(posterior, fdata(zero_tangent(posterior))), pullback!!
-end
-
-@mooncake_overlay function GaussianMarkovRandomFields.gaussian_approximation(
-        prior::ChordalGMRF,
-        obslik::ObservationLikelihood;
-        kwargs...
-    )
-    posterior = gaussian_approximation_notangent(prior, obslik; kwargs...)
-    x_star = mean(posterior)
-
-    grad = ∇ₓ_neg_log_posterior(prior, obslik, x_star)
-    x_corrected = x_star - posterior.F \ grad
-
-    Q_post = hermdiff(precision_matrix(prior), loghessian(x_corrected, obslik))
-
-    return ChordalGMRF(x_corrected, Q_post, posterior.F)
-end
+# A GMRF whose precision is a plain sparse matrix — the shape produced by the
+# CliqueTrees LinearSolve backend. The overlays below additionally require the
+# linsolve cache to hold a `ChordalCholesky` (enforced at runtime with an
+# actionable error), so other backends fail loudly instead of deep in AD.
+const SparseGMRF = GMRF{<:Real, <:AbstractVector, <:Any, <:SparseMatrixCSC}
 
 include("mooncake/unsupported.jl")
+include("mooncake/chordal.jl")
+include("mooncake/gmrf.jl")
+include("mooncake/constraints.jl")
+include("mooncake/workspace.jl")
+include("mooncake/constrained.jl")
+include("mooncake/gaussian_approximation.jl")
 
 end

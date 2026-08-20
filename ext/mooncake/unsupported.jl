@@ -27,6 +27,25 @@
 # resolves to the concrete algorithm and then calls straight back into these.
 
 """
+    mooncake_supported_routes() -> String
+
+The way out, shared by every refusal in this extension so that a user meets the
+same three options wherever they hit one.
+"""
+function mooncake_supported_routes()
+    return """
+    Mooncake support rests on CliqueTrees' pure-Julia factorization. Any of:
+
+        GMRF(μ, Q, LinearSolve.CliqueTreesFactorization())
+        GMRFWorkspace(Q, CliqueTreesBackend)     # for a WorkspaceGMRF
+        ChordalGMRF(μ, Q)
+
+    ForwardDiff handles every GMRF type. The per-backend support matrix is in \
+    the "Automatic Differentiation" reference page of the documentation.
+    """
+end
+
+"""
     mooncake_unsupported(op)
 
 Refuse to differentiate `op` for a CHOLMOD-backed GMRF rather than letting
@@ -45,11 +64,27 @@ pre-formatted, so that a guard covering two operations can name both.
             process down with a segmentation fault, so this package refuses \
             first.
 
-            Mooncake support covers `ChordalGMRF`, whose factorization is pure \
-            Julia — build the prior with `ChordalGMRF(μ, Q)` instead. \
-            ForwardDiff handles every GMRF type. The per-backend support matrix \
-            is in the "Automatic Differentiation" reference page of the \
-            documentation.
+            $(mooncake_supported_routes())
+            """
+        )
+    )
+end
+
+"""
+    mooncake_wrong_factorization(what)
+
+Refuse an operation whose GMRF reached it carrying a factorization Mooncake has
+no rules for. Distinct from [`mooncake_unsupported`](@ref): that one guards the
+solver entry points a CHOLMOD-backed GMRF reaches, this one fires earlier, in
+the overlays, where the factorization is inspected directly.
+"""
+@noinline function mooncake_wrong_factorization(what)
+    return throw(
+        ArgumentError(
+            """
+            Mooncake AD through $what requires the CliqueTrees factorization.
+
+            $(mooncake_supported_routes())
             """
         )
     )

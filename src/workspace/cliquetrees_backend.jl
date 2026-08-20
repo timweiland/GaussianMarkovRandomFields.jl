@@ -61,22 +61,16 @@ function compute_selinv!(b::CliqueTreesBackend)
     return nothing
 end
 
-function get_selinv(b::CliqueTreesBackend{T}) where {T}
-    # Symmetrize + unpermute from the ChordalCholesky storage
-    L_sel = sparse(triangular(b.selinv_factor))
-    invp = collect(b.selinv_factor.invp)
-    Σ_perm = L_sel + L_sel' - Diagonal(diag(L_sel))
-    return Σ_perm[invp, invp]
-end
+get_selinv(b::CliqueTreesBackend) = _chordal_selinv_full(b.selinv_factor)
 
-function get_selinv_diag(b::CliqueTreesBackend)
-    L_sel = sparse(triangular(b.selinv_factor))
-    invp = collect(b.selinv_factor.invp)
-    return diag(L_sel)[invp]
-end
+get_selinv_diag(b::CliqueTreesBackend) = _chordal_selinv_diag(b.selinv_factor)
 
 function backend_backward_solve(b::CliqueTreesBackend, x::AbstractVector)
-    return b.factor' \ Vector(x)
+    # NOT `b.factor' \ x`: `adjoint(::ChordalCholesky)` is the factorization
+    # itself (Q is symmetric), so that would be a full Q⁻¹x solve. Sampling
+    # needs the backward half-solve x = P⁻¹U⁻¹z so that Cov(x) = Q⁻¹.
+    F = b.factor
+    return F.P \ (F.U \ x)
 end
 
 # --- Helpers ---
