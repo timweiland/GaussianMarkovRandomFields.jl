@@ -8,6 +8,8 @@
 # solver, gradients flow to Q), and the small m×m Schur complement uses
 # Mooncake's dense Cholesky rules. The corrections themselves come from the
 # shared `_constraint_*` formulas.
+# COV_EXCL_START -- runs as Mooncake-derived IR; see the note in
+# ext/GaussianMarkovRandomFieldsMooncake.jl on why coverage cannot see this.
 """
     _dense_constraints(A) -> Matrix
 
@@ -38,3 +40,4 @@ function _ws_constraint_correction(d::WorkspaceGMRF, F::ChordalCholesky)
     A_dense, _, S_c = _ws_constraint_schur(d, F)
     return _constraint_log_correction(A_dense, d.constraints.vector, d.mean, S_c)
 end
+# COV_EXCL_STOP

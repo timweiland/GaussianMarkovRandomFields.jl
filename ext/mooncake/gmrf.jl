@@ -107,6 +107,8 @@ end
 # into `logdetcov` (overlaid here) and `sqmahal`/`gradlogpdf`, which Mooncake
 # traces natively via the MooncakeSparse mul/dot rules.
 
+# COV_EXCL_START -- runs as Mooncake-derived IR; see the note in
+# ext/GaussianMarkovRandomFieldsMooncake.jl on why coverage cannot see this.
 @mooncake_overlay function logdetcov(d::SparseGMRF)
     F = _mooncake_chordal_factor(d.linsolve_cache)
     return -logdet(Symmetric(precision_map(d)), F)
@@ -117,3 +119,4 @@ end
     Σ = Multifrontal.selinv(Symmetric(precision_map(d)), F)
     return diag(Σ)
 end
+# COV_EXCL_STOP

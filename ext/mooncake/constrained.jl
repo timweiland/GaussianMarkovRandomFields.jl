@@ -42,6 +42,8 @@ function Mooncake.rrule!!(
     return CoDual(cgmrf, dy), ConstrainedGMRF_pullback!!
 end
 
+# COV_EXCL_START -- runs as Mooncake-derived IR; see the note in
+# ext/GaussianMarkovRandomFieldsMooncake.jl on why coverage cannot see this.
 function _constrained_gmrf_schur(d::ConstrainedGMRF)
     base = d.base_gmrf
     F = _mooncake_chordal_factor(base.linsolve_cache)
@@ -61,3 +63,4 @@ end
     _, A_tilde_T, S_c = _constrained_gmrf_schur(d)
     return max.(σ .- _constraint_var_correction(A_tilde_T, S_c), 0.0)
 end
+# COV_EXCL_STOP

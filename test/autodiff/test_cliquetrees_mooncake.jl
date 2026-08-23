@@ -186,6 +186,46 @@ end
         @test grad_mc ≈ grad_fd atol = 1.0e-4 rtol = 1.0e-4
     end
 
+    # Keyword arguments reach `gaussian_approximation` through `Core.kwcall`,
+    # which needs its own primitive and its own overlay — a separate code path
+    # from the no-kwargs call every other testset here makes.
+    @testset "gaussian_approximation with keyword arguments" begin
+        k = 8
+        y = [2, 1, 3, 2, 1, 4, 2, 1]
+        x_eval = randn(k) .+ 0.5
+
+        function pipeline(θ)
+            obs_lik = ExponentialFamily(Poisson)(PoissonObservations(y))
+            posterior = gaussian_approximation(
+                prior_ct(θ, k), obs_lik; max_iter = 30, mean_change_tol = 1.0e-6
+            )
+            return logpdf(posterior, x_eval)
+        end
+
+        θ = [0.4, 0.5]
+        grad_mc = DifferentiationInterface.gradient(pipeline, backend, θ)
+        grad_fd = DifferentiationInterface.gradient(pipeline, fd_backend, θ)
+        @test grad_mc ≈ grad_fd atol = 1.0e-3 rtol = 5.0e-2
+    end
+
+    # The two-argument constructor builds its own workspace, which defaults to
+    # the CHOLMOD backend — so this path can only ever refuse. Asserted so the
+    # refusal stays the friendly one rather than something from inside Mooncake.
+    @testset "WorkspaceGMRF: two-argument constructor refuses" begin
+        k = 6
+        z = randn(k)
+        f(θ) = logpdf(WorkspaceGMRF(θ[2] * ones(k), ar_precision_ct(θ[1], k)), z)
+        err = try
+            DifferentiationInterface.gradient(f, backend, [0.4, 0.1])
+            nothing
+        catch e
+            e
+        end
+        @test err isa Exception
+        msg = err === nothing ? "" : sprint(showerror, err)
+        @test occursin("CliqueTrees", msg)
+    end
+
     @testset "WorkspaceGMRF: friendly error for CHOLMOD backend" begin
         k = 6
         z = randn(k)

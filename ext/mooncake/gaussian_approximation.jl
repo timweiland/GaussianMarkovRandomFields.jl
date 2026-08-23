@@ -53,6 +53,8 @@ end
 # exact hyperparameter gradients. The step is shared; small accessors supply
 # the per-type factor, posterior-precision assembly, and rebuild.
 
+# COV_EXCL_START -- runs as Mooncake-derived IR; see the note in
+# ext/GaussianMarkovRandomFieldsMooncake.jl on why coverage cannot see this.
 _ift_factor(posterior::ChordalGMRF) = posterior.F
 _ift_factor(posterior::GMRF) = _mooncake_chordal_factor(posterior.linsolve_cache)
 _ift_factor(posterior::WorkspaceGMRF) = _mooncake_workspace_factor(posterior)
@@ -150,3 +152,4 @@ for (P, L) in Iterators.product(
         return _mooncake_ga_ift(prior, posterior, obslik)
     end
 end
+# COV_EXCL_STOP

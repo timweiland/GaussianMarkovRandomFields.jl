@@ -138,6 +138,8 @@ end
 
 # --- Factorization-based operations ---
 
+# COV_EXCL_START -- runs as Mooncake-derived IR; see the note in
+# ext/GaussianMarkovRandomFieldsMooncake.jl on why coverage cannot see this.
 @mooncake_overlay function logpdf(d::WorkspaceGMRF, z::AbstractVector)
     F = _mooncake_workspace_factor(d)
     r = z - d.mean
@@ -163,3 +165,4 @@ end
     end
     return σ
 end
+# COV_EXCL_STOP
