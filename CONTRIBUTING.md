@@ -47,7 +47,7 @@ which includes tutorials and a full API reference, and searching existing issues
 
 - Follow the [Julia Style Guide](https://docs.julialang.org/en/v1/manual/style-guide/).
 - Use meaningful variable names and avoid excessive abbreviations.
-- Format your code using [Runic](https://github.com/fredrikekre/runic):
+- Format your code using [Runic](https://github.com/fredrikekre/Runic.jl):
   ```sh
   make format
   # or
