@@ -94,9 +94,9 @@ function ChainRulesCore.rrule(::typeof(logpdf), x::GMRF, z::AbstractVector)
         throw(
             ArgumentError(
                 "Automatic differentiation through logpdf requires an algorithm that supports selected inversion " *
-                    "(CHOLMODFactorization, CholeskyFactorization). " *
+                    "(CHOLMODFactorization, CholeskyFactorization, CliqueTreesFactorization). " *
                     "Got algorithm type: $(typeof(x.linsolve_cache.alg)). " *
-                    "Consider using LinearSolve.CHOLMODFactorization() or LinearSolve.CholeskyFactorization()."
+                    "Consider using LinearSolve.CHOLMODFactorization() or LinearSolve.CliqueTreesFactorization()."
             )
         )
         # COV_EXCL_STOP

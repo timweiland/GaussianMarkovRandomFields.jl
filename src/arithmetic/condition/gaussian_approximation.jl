@@ -54,7 +54,7 @@ function _constrain_step(step, cache, constraints::NamedTuple)
 
     # Schur complement: remove constraint-normal component
     L_c = cholesky(Symmetric(A * A_tilde_T))
-    return step - A_tilde_T * (L_c \ (A * step))
+    return step - _constraint_shift(A_tilde_T, L_c, A * step)
 end
 
 # Set the matrix in the linsolve cache to Q

@@ -85,8 +85,13 @@ mooncake_refusal(e) = e isa ArgumentError && occursin("ChordalGMRF", sprint(show
     @testset "GMRF raises rather than segfaulting" begin
         obs_lik = ExponentialFamily(Poisson)(PoissonObservations(rand(1:4, n)))
 
-        # One entry per guard in `ext/mooncake/unsupported.jl`, reached through
-        # the operation a user would actually write. `rand` is absent on purpose:
+        # One entry per operation a user would actually write that must not be
+        # allowed to reach CHOLMOD. Which guard catches it varies: `logdetcov`,
+        # `logpdf` and `var` are overlaid for the CliqueTrees backend and refuse
+        # there on inspecting the factorization, while `selinv` and
+        # `backward_solve` have no overlay and reach the solver-level primitives
+        # in `ext/mooncake/unsupported.jl`. Both refusals carry the same message
+        # body, which is what the assertions below pin. `rand` is absent on purpose:
         # it is built on `backward_solve`, but Mooncake gives up on `_rand_impl!`
         # before reaching the guard, with a `BoundsError` from its own rule
         # compiler — loud already, and not ours to convert.

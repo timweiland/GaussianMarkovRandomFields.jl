@@ -150,9 +150,10 @@ println("  Converged: $(Optim.converged(result))")
 # If n is sufficiently small or n << m, use forward-mode.
 # Else, use reverse-mode.
 #
-# This same advice applies here. ForwardDiff, Zygote, and Enzyme all support
-# AD through Gaussian approximations. Constrained priors (e.g. RW, Besag) are
-# supported by ForwardDiff and Zygote everywhere, and by Enzyme on Julia 1.12.
+# This same advice applies here. All four backends support AD through Gaussian
+# approximations. Constrained priors (e.g. RW, Besag) are supported by
+# ForwardDiff and Zygote everywhere, by Enzyme on Julia 1.12, and by Mooncake on
+# the CliqueTrees backend.
 #
 # Coverage differs between backends, though: which operations and GMRF types each
 # one handles varies, and a few combinations need a recent Julia version. The
@@ -167,8 +168,18 @@ println("  Converged: $(Optim.converged(result))")
 # The upside is that once pre-compilation is complete, Enzyme is generally much
 # faster than Zygote.
 #
+# Mooncake sits in between: it is actively developed, robust, and fast, but it
+# requires constructing your GMRFs with the pure-Julia CliqueTrees solver:
+#
+# ```julia
+# using Mooncake, MooncakeSparse
+# x = GMRF(μ, Q_sparse, LinearSolve.CliqueTreesFactorization())
+# grad = DifferentiationInterface.gradient(my_objective, AutoMooncake(), θ)
+# ```
+#
 # In practice, our recommendation is:
-# Start with Zygote for prototyping. For large-scale problems, switch to Enzyme.
+# Start with Zygote for prototyping. For large-scale problems, switch to
+# Mooncake or Enzyme.
 #
 # ## Solver Considerations
 #

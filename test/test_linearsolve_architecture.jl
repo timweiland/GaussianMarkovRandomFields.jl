@@ -14,6 +14,7 @@ using LinearAlgebra, SparseArrays, LinearSolve, Distributions
         test_cases = [
             ("CHOLMODFactorization", LinearSolve.CHOLMODFactorization(), Val{true}(), Val{true}()),
             ("CholeskyFactorization", LinearSolve.CholeskyFactorization(), Val{true}(), Val{true}()),
+            ("CliqueTreesFactorization", LinearSolve.CliqueTreesFactorization(), Val{true}(), Val{true}()),
             ("KrylovJL_CG", LinearSolve.KrylovJL_CG(), Val{false}(), Val{false}()),
         ]
 

@@ -119,6 +119,8 @@ A Gaussian Markov Random Field with mean `mean` and precision matrix `precision`
 - `mean::AbstractVector`: The mean vector of the GMRF.
 - `precision::Union{LinearMap, AbstractMatrix}`: The precision matrix (inverse covariance) of the GMRF.
 - `alg`: LinearSolve algorithm to use for linear system solving. Defaults to `LinearSolve.DefaultLinearSolver()`.
+  Common choices for sparse precisions are `LinearSolve.CHOLMODFactorization()` and the pure-Julia
+  `LinearSolve.CliqueTreesFactorization()`; the latter also enables Mooncake reverse-mode AD.
 - `Q_sqrt::Union{Nothing, AbstractMatrix}`: Square root of precision matrix Q, used for sampling when algorithm doesn't support backward solve.
 - `rbmc_strategy`: RBMC strategy for marginal variance computation when selected inversion is unavailable. Defaults to `RBMCStrategy(1000)`.
 - `linsolve_cache::Union{Nothing, LinearSolve.LinearCache}`: Existing LinearSolve cache to reuse. If `nothing`, creates a new cache. Useful for iterative algorithms requiring factorization reuse.
