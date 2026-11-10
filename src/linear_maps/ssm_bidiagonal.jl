@@ -71,7 +71,7 @@ function LinearMaps._unsafe_mul!(
         x::AbstractVector,
     )
     y .= 0
-    y += L.lmap.main_diag' * x[1:(end - Base.size(L.lmap.B, 1))]
+    y .+= L.lmap.main_diag' * x[1:(end - Base.size(L.lmap.B, 1))]
     y .+= L.lmap.off_diag' * x[(Base.size(L.lmap.A, 1) + 1):end]
     return y
 end
