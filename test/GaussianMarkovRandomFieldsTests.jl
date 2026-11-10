@@ -45,6 +45,7 @@ include("formula/test_formula_interface.jl")
 include("utils/test_adjacency.jl")
 include("kl_cholesky/runtests.jl")
 include("workspace/runtests.jl")
+include("test_readme.jl")
 
 @testset "Code quality (Aqua.jl)" begin
     # TODO: Re-enable piracy check once SymTridiagonal AD piracy is fixed
