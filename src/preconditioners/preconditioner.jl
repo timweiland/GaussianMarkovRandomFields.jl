@@ -25,3 +25,5 @@ ldiv!(P::AbstractPreconditioner, x::AbstractVector) =
 
 Base.size(P::AbstractPreconditioner) = throw(MethodError(size, (P,)))
 # COV_EXCL_STOP
+
+Base.size(P::AbstractPreconditioner, i) = size(P)[i]

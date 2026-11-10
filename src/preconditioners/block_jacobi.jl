@@ -16,7 +16,7 @@ end
 function ldiv!(y, P::BlockJacobiPreconditioner, x::AbstractVector)
     start = 1
     for block in P.blocks
-        stop = start + size(block.cho, 1) - 1
+        stop = start + size(block, 1) - 1
         y[start:stop] .= ldiv!(y[start:stop], block, x[start:stop])
         start = stop + 1
     end

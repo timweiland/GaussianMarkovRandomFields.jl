@@ -27,4 +27,19 @@ import Random: MersenneTwister
     @test P \ x ≈ direct_res
     @test ldiv!(P, x) ≈ direct_res
     @test x ≈ direct_res
+
+    @testset "Non-Cholesky blocks" begin
+        L = sprand(rng, N₂, N₁, 0.1)
+        P_gs = TridiagonalBlockGaussSeidelPreconditioner((A₁, A₂), (L,))
+        P_mixed = BlockJacobiPreconditioner([P_gs, P₂])
+
+        @test size(P_gs, 1) == N₁ + N₂
+        @test size(P_mixed, 1) == N₁ + 2N₂
+
+        x_mixed = rand(rng, N₁ + 2N₂)
+        y_mixed = similar(x_mixed)
+        direct_mixed = [P_gs \ x_mixed[1:(N₁ + N₂)]; P₂ \ x_mixed[(N₁ + N₂ + 1):end]]
+        @test ldiv!(y_mixed, P_mixed, x_mixed) ≈ direct_mixed
+        @test y_mixed ≈ direct_mixed
+    end
 end
