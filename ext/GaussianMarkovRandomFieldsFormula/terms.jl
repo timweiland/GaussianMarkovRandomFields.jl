@@ -353,12 +353,12 @@ function StatsModels.apply_schema(
     # This properly leverages StatsModels' existing apply_schema methods for each functor type
     component_terms = Tuple(
         StatsModels.apply_schema(
-                # Create a FunctionTerm(functor, [var_term], expr)
-                # The expr is a dummy since we're constructing this synthetically
-                StatsModels.FunctionTerm(functor, [var_term], :($(Symbol("dummy_", i))($(var_term.sym)))),
-                sch,
-                Typ
-            )
+            # Create a FunctionTerm(functor, [var_term], expr)
+            # The expr is a dummy since we're constructing this synthetically
+            StatsModels.FunctionTerm(functor, [var_term], :($(Symbol("dummy_", i))($(var_term.sym)))),
+            sch,
+            Typ
+        )
             for (i, (functor, var_term)) in enumerate(zip(component_functors, var_terms))
     )
 
