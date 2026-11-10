@@ -70,8 +70,8 @@ end
         x_ref = grid.nodes[1].x
         cov_exact = [
             _sphere_matern_cov(
-                    clamp(x_ref ⋅ n.x / (norm(x_ref) * norm(n.x)), -1, 1), κ, 2
-                ) / σ²_natural
+                clamp(x_ref ⋅ n.x / (norm(x_ref) * norm(n.x)), -1, 1), κ, 2
+            ) / σ²_natural
                 for n in grid.nodes
         ]
         rel_err = norm(S * cov_column - cov_exact) / norm(cov_exact)

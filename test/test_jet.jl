@@ -6,7 +6,7 @@ using JET
         @testset "typo analysis" begin
             JET.test_package(
                 GaussianMarkovRandomFields;
-                target_defined_modules = true,
+                target_modules = (GaussianMarkovRandomFields,),
                 mode = :typo,
                 toplevel_logger = nothing,
             )
@@ -14,7 +14,7 @@ using JET
         @testset "error analysis" begin
             JET.test_package(
                 GaussianMarkovRandomFields;
-                target_defined_modules = true,
+                target_modules = (GaussianMarkovRandomFields,),
                 toplevel_logger = nothing,
             )
         end
