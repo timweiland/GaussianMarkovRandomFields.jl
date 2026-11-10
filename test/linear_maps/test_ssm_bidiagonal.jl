@@ -24,5 +24,12 @@ using LinearAlgebra, LinearMaps, Random, SparseArrays
         y = rand(rng, size(L, 1))
         @test L * x ≈ L_mat * x
         @test L' * y ≈ L_mat' * y
+
+        # In-place application must write into the caller's vector
+        out = zeros(size(L, 2))
+        mul!(out, L', y)
+        @test out ≈ L_mat' * y
+        @test (L' * L) * x ≈ L_mat' * (L_mat * x)
     end
+    @test Matrix(L') ≈ Matrix(L_mat')
 end
