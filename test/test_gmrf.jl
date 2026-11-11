@@ -171,3 +171,13 @@ using Random
         @test size(samples) == (n, 5)
     end
 end
+
+@testset "GMRF show" begin
+    Q = sparse(2.0I, 3, 3)
+    x = GMRF(zeros(3), Q)
+    @test occursin("GMRF{Float64} with 3 variables", repr(MIME"text/plain"(), x))
+    @test occursin("Q_sqrt: not available", repr(MIME"text/plain"(), x))
+    @test occursin("...", repr(MIME"text/plain"(), GMRF(collect(1.0:10.0), sparse(2.0I, 10, 10))))
+    x_sqrt = GMRF(zeros(3), Q; Q_sqrt = sparse(sqrt(2.0) * I, 3, 3))
+    @test occursin("Q_sqrt: available", repr(MIME"text/plain"(), x_sqrt))
+end

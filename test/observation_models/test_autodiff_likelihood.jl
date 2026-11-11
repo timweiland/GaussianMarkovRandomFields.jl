@@ -262,3 +262,11 @@ using ForwardDiff
         @test loghessian(x, obs_lik_optedin) isa Diagonal
     end
 end
+
+@testset "AutoDiff observation model show" begin
+    show_loglik(x; σ = 1.0, y = [1.0, 2.0]) = -sum(abs2, x[1:2] .- y) / (2σ^2)
+    model = AutoDiffObservationModel(show_loglik; n_latent = 3, hyperparams = (:σ, :y))
+    @test startswith(sprint(show, model), "AutoDiffObservationModel(")
+    @test occursin("n_latent=3", sprint(show, model))
+    @test startswith(sprint(show, model([1.0, 2.0]; σ = 1.0)), "AutoDiffLikelihood(")
+end

@@ -153,3 +153,16 @@ using SparseArrays: SparseMatrixCSC
         @inferred loghessian(x, composite_lik)
     end
 end
+
+@testset "Composite observation show" begin
+    yc = CompositeObservations(([1.0, 2.0], collect(1.0:5.0), collect(1.0:9.0)))
+    s = sprint(show, yc)
+    @test startswith(s, "CompositeObservations with 3 components (16 total observations)")
+    @test occursin("(9 elements)", s)
+    @test repr(MIME"text/plain"(), yc) == s
+
+    model = CompositeObservationModel((ExponentialFamily(Normal), ExponentialFamily(Poisson)))
+    @test startswith(sprint(show, model), "CompositeObservationModel with 2 components:")
+    lik = model(CompositeObservations(([0.5, 1.5], PoissonObservations([1, 2]))); σ = 1.0)
+    @test startswith(sprint(show, lik), "CompositeLikelihood with 2 components:")
+end

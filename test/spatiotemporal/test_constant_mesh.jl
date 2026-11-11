@@ -94,3 +94,11 @@ using SparseArrays
         @test preconditioner isa GaussianMarkovRandomFields.AbstractPreconditioner
     end
 end
+
+@testset "ConcreteSTMetadata show" begin
+    disc = FEMDiscretization(generate_grid(Line, (4,)), Lagrange{RefLine, 1}(), QuadratureRule{RefLine}(2))
+    n = 3 * ndofs(disc)
+    st = ConcreteConstantMeshSTGMRF(GMRF(zeros(n), sparse(1.0I, n, n)), disc)
+    @test occursin("spatial × 3 time", sprint(show, st.metadata))
+    @test occursin("Time points: 3", repr(MIME"text/plain"(), st.metadata))
+end

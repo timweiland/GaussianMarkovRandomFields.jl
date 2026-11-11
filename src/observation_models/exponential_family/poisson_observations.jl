@@ -115,7 +115,6 @@ function Base.getproperty(y::PoissonObservations, name::Symbol)
     end
 end
 
-# COV_EXCL_START
 
 function Base.show(io::IO, y::PoissonObservations)
     return print(io, "PoissonObservations($(length(y)) observations)")
@@ -129,5 +128,3 @@ function Base.show(io::IO, ::MIME"text/plain", y::PoissonObservations)
     end
     return
 end
-
-# COV_EXCL_STOP

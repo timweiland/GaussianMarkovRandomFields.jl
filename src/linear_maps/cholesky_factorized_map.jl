@@ -72,7 +72,6 @@ function linmap_cholesky(::Val{:default}, C::CholeskyFactorizedMap{T, <:Union{Ch
     return C.cho
 end
 
-# COV_EXCL_START
 function Base.show(io::IO, C::CholeskyFactorizedMap)
     println(
         io,
@@ -80,4 +79,3 @@ function Base.show(io::IO, C::CholeskyFactorizedMap)
     )
     return print(io, C.cho)
 end
-# COV_EXCL_STOP

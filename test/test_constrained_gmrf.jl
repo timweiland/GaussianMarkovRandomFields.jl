@@ -246,3 +246,12 @@ using Random
         end
     end
 end
+
+@testset "ConstrainedGMRF show" begin
+    x = GMRF(zeros(3), sparse(2.0I, 3, 3))
+    xc = ConstrainedGMRF(x, ones(1, 3), [0.0])
+    @test sprint(show, xc) == "ConstrainedGMRF{Float64}(n=3, constraints=1)"
+    @test occursin("1 constraint\n", repr(MIME"text/plain"(), xc))
+    xc2 = ConstrainedGMRF(x, [1.0 1.0 0.0; 0.0 1.0 1.0], [0.0, 0.0])
+    @test occursin("2 constraints", repr(MIME"text/plain"(), xc2))
+end

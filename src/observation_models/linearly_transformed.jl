@@ -377,7 +377,6 @@ function conditional_distribution(ltom::LinearlyTransformedObservationModel, x_f
     return conditional_distribution(ltom.base_model, η; kwargs...)
 end
 
-# COV_EXCL_START
 _offset_descr(::Nothing) = "none"
 _offset_descr(b::AbstractVector) = "fixed($(length(b)))"
 _offset_descr(spec::ParameterizedOffset) = "parameterized($(isempty(spec.hp_names) ? "none" : join(spec.hp_names, ", ")))"
@@ -392,4 +391,3 @@ function Base.show(io::IO, model::LinearlyTransformedObservationModel)
     end
     return print(io, "LinearlyTransformedObservationModel(base=$(typeof(model.base_model)), A=$(A_str), offset=$(_offset_descr(model.offset)))")
 end
-# COV_EXCL_STOP

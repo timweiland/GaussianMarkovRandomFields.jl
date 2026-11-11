@@ -104,7 +104,6 @@ function Base.getproperty(y::NegativeBinomialObservations, name::Symbol)
     end
 end
 
-# COV_EXCL_START
 
 function Base.show(io::IO, y::NegativeBinomialObservations)
     return print(io, "NegativeBinomialObservations($(length(y)) observations)")
@@ -118,5 +117,3 @@ function Base.show(io::IO, ::MIME"text/plain", y::NegativeBinomialObservations)
     end
     return
 end
-
-# COV_EXCL_STOP

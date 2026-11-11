@@ -139,7 +139,6 @@ end
 
 hyperparameters(lik::CompositeLikelihood) = lik.hyperparameter_names
 
-# COV_EXCL_START
 function Base.show(io::IO, model::CompositeObservationModel)
     n_components = length(model.components)
     print(io, "CompositeObservationModel with $n_components component$(n_components == 1 ? "" : "s"):")
@@ -169,4 +168,3 @@ function Base.show(io::IO, lik::CompositeLikelihood)
     end
     return
 end
-# COV_EXCL_STOP

@@ -311,7 +311,6 @@ function Base.show(io::IO, d::WorkspaceGMRF{T}) where {T}
     return print(io, "WorkspaceGMRF{$T}(n=$(length(d))$(c_str))")
 end
 
-# COV_EXCL_START
 function Base.show(io::IO, ::MIME"text/plain", d::WorkspaceGMRF{T}) where {T}
     n = length(d)
     if has_constraints(d)
@@ -328,4 +327,3 @@ function Base.show(io::IO, ::MIME"text/plain", d::WorkspaceGMRF{T}) where {T}
     end
     return print(io, "  Backend: $(typeof(d.workspace.backend))")
 end
-# COV_EXCL_STOP

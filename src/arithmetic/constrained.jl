@@ -227,7 +227,6 @@ function Distributions.logpdf(d::ConstrainedGMRF, z::AbstractVector)
 end
 
 # Display methods
-# COV_EXCL_START
 function Base.show(io::IO, d::ConstrainedGMRF{T}) where {T}
     m, n = size(d.constraint_matrix)
     return print(io, "ConstrainedGMRF{$T}(n=$n, constraints=$m)")
@@ -240,4 +239,3 @@ function Base.show(io::IO, ::MIME"text/plain", d::ConstrainedGMRF{T}) where {T}
     println(io, "  Constraints: $(m)×$(n) matrix")
     return print(io, "  Constraint values: $(d.constraint_vector)")
 end
-# COV_EXCL_STOP
