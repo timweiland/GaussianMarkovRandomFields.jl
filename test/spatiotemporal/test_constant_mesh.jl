@@ -1,4 +1,3 @@
-using Test
 using GaussianMarkovRandomFields
 using Ferrite
 using LinearAlgebra
