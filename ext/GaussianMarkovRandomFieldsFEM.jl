@@ -6,16 +6,20 @@ using GaussianMarkovRandomFields:
     ExponentialFamily, LinearlyTransformedObservationModel,
     SPDE,
     AbstractSpatiotemporalGMRF,
-    FEMDiscretization, MaternSPDE, AdvectionDiffusionSPDE,
-    JointSSMMatrices, ImplicitEulerSSM, ImplicitEulerJointSSMMatrices,
+    JointSSMMatrices,
     ImplicitEulerMetadata, ConcreteSTMetadata,
-    ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMeshSTGMRF,
     ConstantMeshSTGMRF,
-    MaternModel, BarrierModel,
     precision_map, to_matrix, make_chunks,
     SymmetricBlockTridiagonalMap, SSMBidiagonalMap, ZeroMap,
     temporal_block_gauss_seidel,
     _process_constraint, _ones_pattern
+
+# Types whose constructors this extension adds methods to
+import GaussianMarkovRandomFields:
+    FEMDiscretization, MaternSPDE, AdvectionDiffusionSPDE,
+    ImplicitEulerSSM, ImplicitEulerJointSSMMatrices,
+    ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMeshSTGMRF,
+    MaternModel, BarrierModel
 
 import GaussianMarkovRandomFields:
     ndim, intrinsic_dim, evaluation_matrix, node_selection_matrix,
