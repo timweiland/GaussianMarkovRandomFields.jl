@@ -51,10 +51,13 @@ To install it, launch the Julia REPL and type `] add GaussianMarkovRandomFields`
 
 ## Your first GMRF
 
-Let's construct a GMRF approximation to a Matérn process from observation points:
+Let's construct a GMRF approximation to a Matérn process from observation points.
+Meshing and FEM discretization live in a package extension, so this example also
+needs a few optional packages: `] add Distributions Ferrite FerriteGmsh Gmsh LibGEOS`.
 
 ``` julia
 using GaussianMarkovRandomFields
+using Distributions, Ferrite, FerriteGmsh, Gmsh, LibGEOS
 
 # Define observation points  
 points = [0.1 0.0; -0.3 0.55; 0.2 0.8; -0.1 -0.2]  # N×2 matrix
@@ -75,7 +78,6 @@ samp = rand(x)  # Sample
 Q = precision_map(x)  # Sparse precision matrix
 
 # Form posterior under point observations
-using Distributions: Normal
 obs_model = PointEvaluationObsModel(model, Normal)
 y = [0.83, 0.12, 0.45, -0.21]
 obs_likelihood = obs_model(y; σ = 0.1)
