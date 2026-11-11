@@ -9,15 +9,20 @@ export BlockJacobiPreconditioner
 A preconditioner that uses a block Jacobi preconditioner, i.e. P = diag(A₁, A₂, ...),
 where each Aᵢ is a preconditioner for a block of the matrix.
 """
-struct BlockJacobiPreconditioner{T} <: AbstractPreconditioner{T}
-    blocks::Vector{<:AbstractPreconditioner{T}}
+struct BlockJacobiPreconditioner{T, V <: AbstractVector{<:AbstractPreconditioner{T}}} <:
+    AbstractPreconditioner{T}
+    blocks::V
+
+    function BlockJacobiPreconditioner(blocks::V) where {T, V <: AbstractVector{<:AbstractPreconditioner{T}}}
+        return new{T, V}(blocks)
+    end
 end
 
 function ldiv!(y, P::BlockJacobiPreconditioner, x::AbstractVector)
     start = 1
     for block in P.blocks
         stop = start + size(block, 1) - 1
-        y[start:stop] .= ldiv!(y[start:stop], block, x[start:stop])
+        ldiv!(view(y, start:stop), block, view(x, start:stop))
         start = stop + 1
     end
     return y

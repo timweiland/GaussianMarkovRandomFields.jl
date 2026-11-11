@@ -5,13 +5,13 @@ using LinearAlgebra, LinearMaps, Zygote
 import LinearMaps: _unsafe_mul!
 
 function GaussianMarkovRandomFields.ADJacobianAdjointMap(
-        f::Function,
+        f,
         x₀::AbstractVector{T},
         N_outputs::Int,
     ) where {T}
     N_outputs > 0 || throw(ArgumentError("N_outputs must be positive"))
     f_val, f_pullback = Zygote.pullback(f, x₀)
-    return ADJacobianAdjointMap{T}(f, x₀, N_outputs, f_val, f_pullback)
+    return ADJacobianAdjointMap(f, x₀, N_outputs, f_val, f_pullback)
 end
 
 function LinearMaps._unsafe_mul!(y, J::ADJacobianAdjointMap, x::AbstractVector)
