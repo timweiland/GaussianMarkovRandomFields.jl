@@ -11,6 +11,10 @@ cd benchmarks
 julia --project=. -e 'using Pkg; Pkg.instantiate()'
 ```
 
+On Julia 1.11 and later, the `[sources]` entry in `Project.toml` makes this use the
+local checkout of the package. On Julia 1.10, which ignores `[sources]`, run
+`Pkg.develop(path="..")` before instantiating.
+
 ## Running Benchmarks
 
 ### Autodiff Comparison
