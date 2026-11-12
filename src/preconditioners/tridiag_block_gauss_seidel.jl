@@ -5,8 +5,8 @@ export TridiagonalBlockGaussSeidelPreconditioner,
     TridiagSymmetricBlockGaussSeidelPreconditioner
 
 @doc raw"""
-    TridiagonalBlockGaussSeidelPreconditioner{T}(D_blocks, L_blocks)
-    TridiagonalBlockGaussSeidelPreconditioner{T}(D⁻¹_blocks, L_blocks)
+    TridiagonalBlockGaussSeidelPreconditioner(D_blocks, L_blocks)
+    TridiagonalBlockGaussSeidelPreconditioner(D⁻¹_blocks, L_blocks)
 
 Block Gauss-Seidel preconditioner for block tridiagonal matrices.
 For a matrix given by
@@ -40,9 +40,11 @@ The diagonal blocks must be inverted. As such, they may be specified
     `FullCholeskyPreconditioner`s.
  2. in terms of their invertible preconditioners
 """
-struct TridiagonalBlockGaussSeidelPreconditioner{T} <: AbstractPreconditioner{T}
-    D⁻¹_blocks::Tuple{Vararg{AbstractPreconditioner{T}}}
-    L_blocks::Tuple{Vararg{AbstractMatrix{T}}}
+struct TridiagonalBlockGaussSeidelPreconditioner{
+        T, D <: Tuple{Vararg{AbstractPreconditioner{T}}}, L <: Tuple{Vararg{AbstractMatrix{T}}},
+    } <: AbstractPreconditioner{T}
+    D⁻¹_blocks::D
+    L_blocks::L
 
     function TridiagonalBlockGaussSeidelPreconditioner(
             D_blocks::Tuple{AbstractMatrix{T}, Vararg{AbstractMatrix{T}, ND}},
@@ -50,14 +52,15 @@ struct TridiagonalBlockGaussSeidelPreconditioner{T} <: AbstractPreconditioner{T}
         ) where {T, ND, NOD}
         NOD == ND - 1 || throw(ArgumentError("size mismatch"))
         D⁻¹_blocks = FullCholeskyPreconditioner.(D_blocks)
-        return new{T}(D⁻¹_blocks, L_blocks)
+        return new{T, typeof(D⁻¹_blocks), typeof(L_blocks)}(D⁻¹_blocks, L_blocks)
     end
 
     function TridiagonalBlockGaussSeidelPreconditioner(
             D_blocks::Tuple{AbstractMatrix{T}},
             L_blocks::Tuple{},
         ) where {T}
-        return new{T}(FullCholeskyPreconditioner.(D_blocks), L_blocks)
+        D⁻¹_blocks = FullCholeskyPreconditioner.(D_blocks)
+        return new{T, typeof(D⁻¹_blocks), Tuple{}}(D⁻¹_blocks, L_blocks)
     end
 
     function TridiagonalBlockGaussSeidelPreconditioner(
@@ -65,14 +68,14 @@ struct TridiagonalBlockGaussSeidelPreconditioner{T} <: AbstractPreconditioner{T}
             L_blocks::Tuple{AbstractMatrix{T}, Vararg{AbstractMatrix{T}, NOD}},
         ) where {T, ND, NOD}
         NOD == ND - 1 || throw(ArgumentError("size mismatch"))
-        return new{T}(D⁻¹_blocks, L_blocks)
+        return new{T, typeof(D⁻¹_blocks), typeof(L_blocks)}(D⁻¹_blocks, L_blocks)
     end
 
     function TridiagonalBlockGaussSeidelPreconditioner(
             D⁻¹_blocks::Tuple{AbstractPreconditioner{T}},
             L_blocks::Tuple{},
         ) where {T}
-        return new{T}(D⁻¹_blocks, L_blocks)
+        return new{T, typeof(D⁻¹_blocks), Tuple{}}(D⁻¹_blocks, L_blocks)
     end
 end
 
@@ -80,12 +83,12 @@ function ldiv!(y, P::TridiagonalBlockGaussSeidelPreconditioner, x::AbstractVecto
     L_blocks, D⁻¹_blocks = P.L_blocks, P.D⁻¹_blocks
     start = 1
     stop = size(D⁻¹_blocks[1], 1)
-    y[start:stop] .= D⁻¹_blocks[1] \ x[start:stop]
+    y[start:stop] .= D⁻¹_blocks[1] \ view(x, start:stop)
     for (L, D⁻¹) in zip(L_blocks, D⁻¹_blocks[2:end])
         prev_start = start
         start = stop + 1
         stop = start + size(D⁻¹, 1) - 1
-        y[start:stop] .= D⁻¹ \ (x[start:stop] - L * y[prev_start:(start - 1)])
+        y[start:stop] .= D⁻¹ \ (view(x, start:stop) - L * view(y, prev_start:(start - 1)))
     end
     return y
 end
@@ -101,8 +104,8 @@ Base.size(P::TridiagonalBlockGaussSeidelPreconditioner) = reduce(.+, size.(P.D�
 
 
 """
-    TridiagSymmetricBlockGaussSeidelPreconditioner{T}(D_blocks, L_blocks)
-    TridiagSymmetricBlockGaussSeidelPreconditioner{T}(D⁻¹_blocks, L_blocks)
+    TridiagSymmetricBlockGaussSeidelPreconditioner(D_blocks, L_blocks)
+    TridiagSymmetricBlockGaussSeidelPreconditioner(D⁻¹_blocks, L_blocks)
 
 Symmetric Block Gauss-Seidel preconditioner for symmetric block tridiagonal
 matrices.
@@ -119,9 +122,11 @@ The diagonal blocks must be inverted. As such, they may be specified
     `FullCholeskyPreconditioner`s.
  2. in terms of their invertible preconditioners
 """
-struct TridiagSymmetricBlockGaussSeidelPreconditioner{T} <: AbstractPreconditioner{T}
-    D⁻¹_blocks::Tuple{Vararg{AbstractPreconditioner{T}}}
-    L_blocks::Tuple{Vararg{AbstractMatrix{T}}}
+struct TridiagSymmetricBlockGaussSeidelPreconditioner{
+        T, D <: Tuple{Vararg{AbstractPreconditioner{T}}}, L <: Tuple{Vararg{AbstractMatrix{T}}},
+    } <: AbstractPreconditioner{T}
+    D⁻¹_blocks::D
+    L_blocks::L
 
     function TridiagSymmetricBlockGaussSeidelPreconditioner(
             D_blocks::Tuple{AbstractMatrix{T}, Vararg{AbstractMatrix{T}, ND}},
@@ -129,14 +134,15 @@ struct TridiagSymmetricBlockGaussSeidelPreconditioner{T} <: AbstractPrecondition
         ) where {T, ND, NOD}
         NOD == ND - 1 || throw(ArgumentError("size mismatch"))
         D⁻¹_blocks = FullCholeskyPreconditioner.(D_blocks)
-        return new{T}(D⁻¹_blocks, L_blocks)
+        return new{T, typeof(D⁻¹_blocks), typeof(L_blocks)}(D⁻¹_blocks, L_blocks)
     end
 
     function TridiagSymmetricBlockGaussSeidelPreconditioner(
             D_blocks::Tuple{AbstractMatrix{T}},
             L_blocks::Tuple{},
         ) where {T}
-        return new{T}(FullCholeskyPreconditioner.(D_blocks), L_blocks)
+        D⁻¹_blocks = FullCholeskyPreconditioner.(D_blocks)
+        return new{T, typeof(D⁻¹_blocks), Tuple{}}(D⁻¹_blocks, L_blocks)
     end
 
     function TridiagSymmetricBlockGaussSeidelPreconditioner(
@@ -144,14 +150,14 @@ struct TridiagSymmetricBlockGaussSeidelPreconditioner{T} <: AbstractPrecondition
             L_blocks::Tuple{AbstractMatrix{T}, Vararg{AbstractMatrix{T}, NOD}},
         ) where {T, ND, NOD}
         NOD == ND - 1 || throw(ArgumentError("size mismatch"))
-        return new{T}(D⁻¹_blocks, L_blocks)
+        return new{T, typeof(D⁻¹_blocks), typeof(L_blocks)}(D⁻¹_blocks, L_blocks)
     end
 
     function TridiagSymmetricBlockGaussSeidelPreconditioner(
             D⁻¹_blocks::Tuple{AbstractPreconditioner{T}},
             L_blocks::Tuple{},
         ) where {T}
-        return new{T}(D⁻¹_blocks, L_blocks)
+        return new{T, typeof(D⁻¹_blocks), Tuple{}}(D⁻¹_blocks, L_blocks)
     end
 end
 
@@ -161,12 +167,12 @@ function ldiv!(y, P::TridiagSymmetricBlockGaussSeidelPreconditioner, x::Abstract
     # Forward solve
     start = 1
     stop = Base.size(D⁻¹_blocks[1], 1)
-    y[start:stop] .= D⁻¹_blocks[1] \ x[start:stop]
+    y[start:stop] .= D⁻¹_blocks[1] \ view(x, start:stop)
     for (L, D⁻¹) in zip(L_blocks, D⁻¹_blocks[2:end])
         prev_start = start
         start = stop + 1
         stop = start + Base.size(D⁻¹, 1) - 1
-        y[start:stop] .= D⁻¹ \ (x[start:stop] - L * y[prev_start:(start - 1)])
+        y[start:stop] .= D⁻¹ \ (view(x, start:stop) - L * view(y, prev_start:(start - 1)))
     end
 
     # Backward solve
@@ -174,7 +180,7 @@ function ldiv!(y, P::TridiagSymmetricBlockGaussSeidelPreconditioner, x::Abstract
         prev_stop = stop
         stop = start - 1
         start = stop - Base.size(D⁻¹, 1) + 1
-        y[start:stop] .= y[start:stop] - D⁻¹ \ (L' * y[(stop + 1):prev_stop])
+        y[start:stop] .-= D⁻¹ \ (L' * view(y, (stop + 1):prev_stop))
     end
 
     return y

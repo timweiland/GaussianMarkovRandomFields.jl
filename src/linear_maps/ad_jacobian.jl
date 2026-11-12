@@ -3,7 +3,7 @@ using LinearAlgebra, LinearMaps
 export ADJacobianMap, ADJacobianAdjointMap
 
 """
-    ADJacobianMap(f::Function, x₀::AbstractVector{T}, N_outputs::Int)
+    ADJacobianMap(f, x₀::AbstractVector{T}, N_outputs::Int)
 
 A linear map representing the Jacobian of `f` at `x₀`.
 Uses forward-mode AD in a matrix-free way, i.e. we do not actually store
@@ -12,18 +12,18 @@ the Jacobian in memory and only compute JVPs.
 Requires ForwardDiff.jl!
 
 # Arguments
-- `f::Function`: Function to differentiate.
+- `f`: Function (or other callable) to differentiate.
 - `x₀::AbstractVector{T}`: Input vector at which to evaluate the Jacobian.
 - `N_outputs::Int`: Output dimension of `f`.
 """
-struct ADJacobianMap{T} <: LinearMaps.LinearMap{T}
-    f::Function
-    x₀::AbstractVector{T}
+struct ADJacobianMap{T, F, X <: AbstractVector{T}} <: LinearMaps.LinearMap{T}
+    f::F
+    x₀::X
     N_outputs::Int
 
-    function ADJacobianMap(f::Function, x₀::AbstractVector{T}, N_outputs::Int) where {T}
+    function ADJacobianMap(f::F, x₀::X, N_outputs::Int) where {T, F, X <: AbstractVector{T}}
         N_outputs > 0 || throw(ArgumentError("N_outputs must be positive"))
-        return new{T}(f, x₀, N_outputs)
+        return new{T, F, X}(f, x₀, N_outputs)
     end
 end
 
@@ -35,7 +35,7 @@ LinearAlgebra.adjoint(J::ADJacobianMap) = ADJacobianAdjointMap(J.f, J.x₀, J.N_
 LinearAlgebra.transpose(J::ADJacobianMap) = ADJacobianAdjointMap(J.f, J.x₀, J.N_outputs)
 
 """
-    ADJacobianAdjointMap{T}(f::Function, x₀::AbstractVector{T}, N_outputs::Int)
+    ADJacobianAdjointMap(f, x₀::AbstractVector{T}, N_outputs::Int)
 
 A linear map representing the adjoint of the Jacobian of `f` at `x₀`.
 Uses reverse-mode AD in a matrix-free way, i.e. we do not actually store
@@ -44,16 +44,22 @@ the Jacobian in memory and only compute VJPs.
 Requires Zygote.jl!
 
 # Arguments
-- `f::Function`: Function to differentiate.
+- `f`: Function (or other callable) to differentiate.
 - `x₀::AbstractVector{T}`: Input vector at which to evaluate the Jacobian.
 - `N_outputs::Int`: Output dimension of `f`.
 """
-struct ADJacobianAdjointMap{T} <: LinearMaps.LinearMap{T}
-    f::Function
-    x₀::AbstractVector{T}
+struct ADJacobianAdjointMap{T, F, X <: AbstractVector{T}, V, P} <: LinearMaps.LinearMap{T}
+    f::F
+    x₀::X
     N_outputs::Int
-    f_val::Union{Real, AbstractVector}
-    f_pullback::Function
+    f_val::V
+    f_pullback::P
+
+    function ADJacobianAdjointMap(
+            f::F, x₀::X, N_outputs::Int, f_val::V, f_pullback::P
+        ) where {T, F, X <: AbstractVector{T}, V, P}
+        return new{T, F, X, V, P}(f, x₀, N_outputs, f_val, f_pullback)
+    end
 end
 
 # Fallback for the 3-arg `(f, x₀, N_outputs)` constructor, which is implemented in the

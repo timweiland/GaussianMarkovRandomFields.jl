@@ -6,22 +6,22 @@ import Base: size
 export OuterProductMap
 
 """
-    OuterProductMap{T}(
+    OuterProductMap(
         A::LinearMap{T},
         Q::LinearMap{T},
     )
 
 Represents the outer product A' Q A, without actually forming it in memory.
 """
-mutable struct OuterProductMap{T} <: LinearMaps.LinearMap{T}
-    A::LinearMap{T}
-    Q::LinearMap{T}
+mutable struct OuterProductMap{T, TA <: LinearMap{T}, TQ <: LinearMap{T}} <: LinearMaps.LinearMap{T}
+    A::TA
+    Q::TQ
     to_mat_cache::Union{Nothing, AbstractMatrix{T}}
 
     function OuterProductMap(A::LinearMap{T}, Q::LinearMap{T}) where {T}
         Base.size(Q, 1) == Base.size(Q, 2) || throw(ArgumentError("Q must be square"))
         Base.size(A, 1) == Base.size(Q, 1) || throw(ArgumentError("size mismatch"))
-        return new{T}(A, Q, nothing)
+        return new{T, typeof(A), typeof(Q)}(A, Q, nothing)
     end
 end
 

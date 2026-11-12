@@ -19,12 +19,12 @@ too expensive.
 # Keyword arguments
 - `rng::Random.AbstractRNG = Random.default_rng()`: Random number generator.
 """
-struct RBMCStrategy
+struct RBMCStrategy{R <: Random.AbstractRNG}
     n_samples::Int
-    rng::Random.AbstractRNG
+    rng::R
 
     function RBMCStrategy(n_samples::Int; rng::Random.AbstractRNG = Random.default_rng())
-        return new(n_samples, rng)
+        return new{typeof(rng)}(n_samples, rng)
     end
 end
 
@@ -49,9 +49,9 @@ costs.
 - `rng::Random.AbstractRNG = Random.default_rng()`: Random number generator.
 - `enclosure_size::Int = 1`: Size of the blocks.
 """
-struct BlockRBMCStrategy
+struct BlockRBMCStrategy{R <: Random.AbstractRNG}
     n_samples::Int
-    rng::Random.AbstractRNG
+    rng::R
     enclosure_size::Int
 
     function BlockRBMCStrategy(
@@ -59,7 +59,7 @@ struct BlockRBMCStrategy
             rng::Random.AbstractRNG = Random.default_rng(),
             enclosure_size::Int = 1,
         )
-        return new(n_samples, rng, enclosure_size)
+        return new{typeof(rng)}(n_samples, rng, enclosure_size)
     end
 end
 
@@ -74,12 +74,13 @@ function var(gmrf::AbstractGMRF, strategy::RBMCStrategy)
     D⁻¹ = 1 ./ D
 
     samples = [zeros(size(Q, 1)) for _ in 1:strategy.n_samples]
+    μ = mean(gmrf)
     for i in 1:strategy.n_samples
         rand!(strategy.rng, gmrf, samples[i])
         # Remove mean to get centered samples
-        samples[i] .-= mean(gmrf)
+        samples[i] .-= μ
     end
-    sample_mat = hcat(samples...)
+    sample_mat = reduce(hcat, samples)
 
     # Q̃ = Q - Diagonal(D)
     transformed_samples = D⁻¹ .* (Q * sample_mat - D .* sample_mat)
@@ -88,7 +89,7 @@ end
 
 # Helper functions for BlockRBMC
 _all_neighbors(Q, i) = findnz(Q[i, :])[1]
-_enclosure(Q, idcs) = vcat([_all_neighbors(Q, i) for i in idcs]...)
+_enclosure(Q, idcs) = reduce(vcat, (_all_neighbors(Q, i) for i in idcs); init = Int[])
 
 function _build_enclosure_idcs(Q, interior, enclosure_size = 1)
     enclosure_idcs = Int64[]
@@ -105,7 +106,7 @@ end
 
 function _build_disjoint_subsets(Q)
     visited = zeros(Bool, size(Q, 1))
-    subsets = []
+    subsets = Vector{Int}[]
     for i in 1:size(Q, 1)
         if !visited[i]
             idcs = findnz(Q[i, :])[1]
@@ -126,12 +127,13 @@ function var(gmrf::AbstractGMRF, strategy::BlockRBMCStrategy)
     var_estimate = zeros(size(Q, 1))
 
     samples = [zeros(size(Q, 1)) for _ in 1:strategy.n_samples]
+    μ = mean(gmrf)
     for i in 1:strategy.n_samples
         rand!(strategy.rng, gmrf, samples[i])
         # Remove mean to get centered samples
-        samples[i] .-= mean(gmrf)
+        samples[i] .-= μ
     end
-    sample_mat = hcat(samples...)
+    sample_mat = reduce(hcat, samples)
 
     subsets = _build_disjoint_subsets(Q)
 

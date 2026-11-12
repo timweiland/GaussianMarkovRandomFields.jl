@@ -30,7 +30,7 @@ abstract type WorkspaceBackend end
 selinv_dot(b::WorkspaceBackend, B::AbstractMatrix) = dot(get_selinv(b), B)
 
 """
-    CHOLMODBackend{T} <: WorkspaceBackend
+    CHOLMODBackend{T, Ti} <: WorkspaceBackend
 
 CHOLMOD-based factorization backend. Owns a `CHOLMOD.Factor` whose symbolic
 factorization (permutation, elimination tree, supernodes) is computed once
@@ -48,9 +48,9 @@ Materializes the selected inverse lazily: callers needing only the diagonal
 matrix is built only when actually requested. Both caches are reset on
 `refactorize!`.
 """
-mutable struct CHOLMODBackend{T} <: WorkspaceBackend
-    factor::SparseArrays.CHOLMOD.Factor{T}
-    sparse::SparseArrays.CHOLMOD.Sparse{T}
+mutable struct CHOLMODBackend{T, Ti} <: WorkspaceBackend
+    factor::SparseArrays.CHOLMOD.Factor{T, Ti}
+    sparse::SparseArrays.CHOLMOD.Sparse{T, Ti}
     selinv_cache::Union{Nothing, SparseMatrixCSC{T, Int}}
     selinv_diag_cache::Union{Nothing, Vector{T}}
     # Supernodal selected inverse (the Takahashi recursion output, before any
@@ -147,9 +147,13 @@ selected-inversion cost several-fold.
 function CHOLMODBackend(Q::Symmetric{T, <:SparseMatrixCSC{T}}; ordering = nothing) where {T}
     F = ordering === nothing ? cholesky(Q) :
         cholesky(Q; perm = ordering_permutation(parent(Q), ordering))
-    return CHOLMODBackend{T}(
-        F, SparseArrays.CHOLMOD.Sparse(Q), nothing, nothing, nothing
-    )
+    return _cholmod_backend(F, SparseArrays.CHOLMOD.Sparse(Q))
+end
+
+function _cholmod_backend(
+        F::SparseArrays.CHOLMOD.Factor{T, Ti}, S::SparseArrays.CHOLMOD.Sparse{T, Ti}
+    ) where {T, Ti}
+    return CHOLMODBackend{T, Ti}(F, S, nothing, nothing, nothing)
 end
 
 """
