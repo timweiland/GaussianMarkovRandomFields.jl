@@ -161,3 +161,26 @@ import DifferentiationInterface as DI
         @test_throws MethodError loglik(x, lik)
     end
 end
+
+struct GradlessTestLikelihood <: GaussianMarkovRandomFields.ObservationLikelihood end
+struct DependentTestLikelihood <: GaussianMarkovRandomFields.ObservationLikelihood end
+GaussianMarkovRandomFields.observation_independence(::DependentTestLikelihood) = ConditionallyDependent()
+
+@testset "Missing likelihood derivatives and dependent components" begin
+    G = GaussianMarkovRandomFields
+    @test_throws ArgumentError G.loggrad(zeros(2), GradlessTestLikelihood())
+    @test_throws ArgumentError G.loghessian(zeros(2), GradlessTestLikelihood())
+
+    normal = ExponentialFamily(Normal)([0.5, 1.5]; σ = 1.0)
+    composite = G.CompositeLikelihood((normal, DependentTestLikelihood()))
+    @test_throws ArgumentError G.pointwise_loglik(zeros(2), composite)
+    @test_throws ArgumentError G.pointwise_loglik!(zeros(2), zeros(2), composite)
+end
+
+@testset "Pointwise log-likelihood fallbacks" begin
+    G = GaussianMarkovRandomFields
+    @test_throws ArgumentError G.pointwise_loglik(zeros(2), DependentTestLikelihood())
+    @test_throws ArgumentError G.pointwise_loglik!(zeros(2), zeros(2), DependentTestLikelihood())
+    @test_throws MethodError G.pointwise_loglik(zeros(2), GradlessTestLikelihood())
+    @test_throws MethodError G.pointwise_loglik!(zeros(2), zeros(2), GradlessTestLikelihood())
+end

@@ -100,3 +100,16 @@ using LinearAlgebra, SparseArrays, LinearSolve, Distributions
         end
     end
 end
+
+@testset "Unsupported solver algorithms raise informative errors" begin
+    G = GaussianMarkovRandomFields
+    Q = [2.0 -1.0 0.0; -1.0 2.0 -1.0; 0.0 -1.0 2.0]
+    x = GMRF(zeros(3), Q, LinearSolve.LUFactorization())
+    cache = x.linsolve_cache
+    @test_throws ArgumentError G.selinv(cache)
+    @test_throws ArgumentError G.selinv_diag(cache)
+    @test_throws ArgumentError G.logdet_cov(cache)
+    @test_throws ArgumentError G.backward_solve(cache, zeros(3))
+    @test_throws ArgumentError G.ChainRulesCore.rrule(logdetcov, x)
+    @test_throws ArgumentError G.ChainRulesCore.rrule(logpdf, x, zeros(3))
+end

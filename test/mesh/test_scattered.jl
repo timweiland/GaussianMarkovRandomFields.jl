@@ -68,3 +68,13 @@ end
     rmse = (a, b) -> sqrt(mean((a .- b) .^ 2))
     @test rmse(A_test * mean(u_cond), y_test) < 0.25
 end
+
+@testset "generate_mesh rejects 3D points" begin
+    @test_throws ArgumentError GaussianMarkovRandomFields.generate_mesh([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)])
+end
+
+@testset "generate_mesh writes the mesh to save_path" begin
+    path = joinpath(mktempdir(), "mesh.msh")
+    GaussianMarkovRandomFields.generate_mesh([(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)]; save_path = path)
+    @test isfile(path)
+end

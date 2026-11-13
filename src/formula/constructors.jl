@@ -59,7 +59,7 @@ struct IID
     end
 end
 
-(::IID)(args...) = throw(ArgumentError("IID(...) functor is only intended for use inside @formula; not callable directly.")) # COV_EXCL_LINE
+(::IID)(args...) = throw(ArgumentError("IID(...) functor is only intended for use inside @formula; not callable directly."))
 
 """
     RandomWalk(order=1; additional_constraints = nothing, scale_model = false)
@@ -111,7 +111,7 @@ struct RandomWalk
     end
 end
 
-(::RandomWalk)(args...) = throw(ArgumentError("RandomWalk(...) functor is only intended for use inside @formula; not callable directly.")) # COV_EXCL_LINE
+(::RandomWalk)(args...) = throw(ArgumentError("RandomWalk(...) functor is only intended for use inside @formula; not callable directly."))
 
 """
     AR1(; constraint = nothing)
@@ -153,7 +153,7 @@ struct AR1
     end
 end
 
-(::AR1)(args...) = throw(ArgumentError("AR1(...) functor is only intended for use inside @formula; not callable directly.")) # COV_EXCL_LINE
+(::AR1)(args...) = throw(ArgumentError("AR1(...) functor is only intended for use inside @formula; not callable directly."))
 
 """
     AR(order=1; constraint = nothing)
@@ -194,7 +194,7 @@ struct AR
     end
 end
 
-(::AR)(args...) = throw(ArgumentError("AR(...) functor is only intended for use inside @formula; not callable directly.")) # COV_EXCL_LINE
+(::AR)(args...) = throw(ArgumentError("AR(...) functor is only intended for use inside @formula; not callable directly."))
 
 """
     Besag(W; id_to_node = nothing, normalize_var = true, singleton_policy = :gaussian)
@@ -223,7 +223,7 @@ struct Besag{WT <: AbstractMatrix, MT}
     end
 end
 
-(::Besag)(args...) = throw(ArgumentError("Besag(...) functor is only intended for use inside @formula; not callable directly.")) # COV_EXCL_LINE
+(::Besag)(args...) = throw(ArgumentError("Besag(...) functor is only intended for use inside @formula; not callable directly."))
 
 """
     BYM2(W; id_to_node = nothing, normalize_var = true, singleton_policy = :gaussian, additional_constraints = nothing, iid_constraint = nothing)
@@ -318,7 +318,7 @@ struct BYM2{WT <: AbstractMatrix, MT}
     end
 end
 
-(::BYM2)(args...) = throw(ArgumentError("BYM2(...) functor is only intended for use inside @formula; not callable directly.")) # COV_EXCL_LINE
+(::BYM2)(args...) = throw(ArgumentError("BYM2(...) functor is only intended for use inside @formula; not callable directly."))
 
 """
     Matern(; smoothness = 1, element_order = 1, alg = CHOLMODFactorization(), constraint = nothing)
@@ -381,7 +381,7 @@ function Matern(;
     )
 end
 
-(::Matern)(args...) = throw(ArgumentError("Matern(...) functor is only intended for use inside @formula; not callable directly.")) # COV_EXCL_LINE
+(::Matern)(args...) = throw(ArgumentError("Matern(...) functor is only intended for use inside @formula; not callable directly."))
 
 """
     Separable(components...)
@@ -425,9 +425,9 @@ struct Separable{T <: Tuple}
 
     function Separable(components...)
         length(components) >= 2 ||
-            throw(ArgumentError("Separable requires at least 2 components, got $(length(components))")) # COV_EXCL_LINE
+            throw(ArgumentError("Separable requires at least 2 components, got $(length(components))"))
         return new{typeof(components)}(components)
     end
 end
 
-(::Separable)(args...) = throw(ArgumentError("Separable(...) functor is only intended for use inside @formula; not callable directly.")) # COV_EXCL_LINE
+(::Separable)(args...) = throw(ArgumentError("Separable(...) functor is only intended for use inside @formula; not callable directly."))

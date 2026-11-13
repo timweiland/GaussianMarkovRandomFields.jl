@@ -626,3 +626,15 @@ end
         @test size(A_pred, 2) == length(sep_model)
     end
 end
+
+@testset "Formula terms outside @formula" begin
+    W = sparse([0 1 0; 1 0 1; 0 1 0])
+    terms = (
+        IID(), RandomWalk(), AR1(), AR(2), Besag(W), BYM2(W), Matern(smoothness = 1),
+        Separable(RandomWalk(), IID()),
+    )
+    for term in terms
+        @test_throws ArgumentError term(1)
+    end
+    @test_throws ArgumentError Separable(IID())
+end
