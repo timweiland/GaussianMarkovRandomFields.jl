@@ -1,4 +1,3 @@
-# COV_EXCL_START
 # Random-effect term base and mapping helpers
 
 abstract type FormulaRandomEffectTerm <: StatsModels.AbstractTerm end
@@ -418,5 +417,3 @@ function StatsModels.modelcols(term::SeparableTerm, data)
     # Each row is the Kronecker product of the corresponding rows from each indicator
     return foldl(_khatri_rao, indicators)
 end
-
-# COV_EXCL_STOP
