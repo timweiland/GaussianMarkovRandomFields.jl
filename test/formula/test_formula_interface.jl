@@ -638,3 +638,33 @@ end
     end
     @test_throws ArgumentError Separable(IID())
 end
+
+@testset "Response families and input checks" begin
+    G = GaussianMarkovRandomFields
+    iid = IID()
+    f = @formula(y ~ 0 + iid(group))
+    counts = (y = [1, 0, 3], e = [1.0, 2.0, 0.5], group = [1, 2, 1])
+    @test build_formula_components(f, counts; family = Poisson).y isa G.PoissonObservations
+    @test build_formula_components(f, counts; family = Poisson, exposure = :e).y isa G.PoissonObservations
+    @test build_formula_components(f, counts; family = NegativeBinomial).y isa G.NegativeBinomialObservations
+    @test build_formula_components(f, counts; family = NegativeBinomial, exposure = :e).y isa
+        G.NegativeBinomialObservations
+    positive = (y = [0.5, 1.5, 2.5], group = [1, 2, 1])
+    @test build_formula_components(f, positive; family = Gamma).y == [0.5, 1.5, 2.5]
+    @test build_formula_components(f, positive; family = TDist).y == [0.5, 1.5, 2.5]
+
+    # Constraint matrices must match the number of levels (here 2 groups)
+    bad = (ones(1, 3), [0.0])
+    ar_bad = AR(1; constraint = bad)
+    @test_throws DimensionMismatch build_formula_components(@formula(y ~ 0 + ar_bad(group)), positive)
+    rw_bad = RandomWalk(1; additional_constraints = bad)
+    @test_throws DimensionMismatch build_formula_components(@formula(y ~ 0 + rw_bad(group)), positive)
+    ar1_bad = AR1(constraint = bad)
+    @test_throws DimensionMismatch build_formula_components(@formula(y ~ 0 + ar1_bad(group)), positive)
+
+    # Region identifiers missing from the Besag id_to_node map
+    W = sparse([0 1 0; 1 0 1; 0 1 0])
+    besag = Besag(W; id_to_node = Dict("a" => 1, "b" => 2, "c" => 3))
+    regions = (y = [0.5, 1.5], region = ["a", "z"])
+    @test_throws ArgumentError build_formula_components(@formula(y ~ 0 + besag(region)), regions)
+end
