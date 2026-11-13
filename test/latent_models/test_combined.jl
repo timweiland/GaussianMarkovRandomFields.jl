@@ -166,3 +166,9 @@ using GaussianMarkovRandomFields
         @test :iid_3 in pnames
     end
 end
+
+@testset "CombinedModel show" begin
+    s = sprint(show, CombinedModel([IIDModel(3), AR1Model(4)]))
+    @test startswith(s, "CombinedModel with 2 components (total=7):")
+    @test occursin("[2]", s) && occursin("hyperparameters = [", s)
+end

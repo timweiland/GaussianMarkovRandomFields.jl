@@ -174,6 +174,8 @@ end
             model = AR1Model(3)
             Q_f64 = precision_matrix(model; τ = 1.0, ρ = 0.5)
             @test eltype(Q_f64) == Float64
+            Q_mixed = precision_matrix(model; τ = 1, ρ = 0.5)  # Int and Float64 promote
+            @test eltype(Q_mixed) == Float64
             gmrf = model(τ = 1.0, ρ = 0.5)
             @test gmrf isa GMRF{Float64}
         end

@@ -196,7 +196,6 @@ end
 Base.size(P::TridiagSymmetricBlockGaussSeidelPreconditioner) =
     reduce(.+, size.(P.D⁻¹_blocks))
 
-# COV_EXCL_START
 function show(io::IO, P::TridiagonalBlockGaussSeidelPreconditioner)
     return print(
         io,
@@ -210,4 +209,3 @@ function show(io::IO, P::TridiagSymmetricBlockGaussSeidelPreconditioner)
         "TridiagSymmetricBlockGaussSeidelPreconditioner with $(length(P.D⁻¹_blocks)) blocks",
     )
 end
-# COV_EXCL_STOP

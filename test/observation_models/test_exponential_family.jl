@@ -462,3 +462,17 @@ end
         @test latent_dimension(model, y_short) == 2
     end
 end
+
+@testset "Exponential family show" begin
+    yb = BinomialObservations([1, 2], [3, 4])
+    @test sprint(show, yb) == "BinomialObservations(2 observations)"
+    @test occursin("[2]: 2/4", repr(MIME"text/plain"(), yb))
+
+    yp = PoissonObservations([1, 2], [1.0, 2.0])
+    @test sprint(show, yp) == "PoissonObservations(2 observations)"
+    @test occursin("2-element PoissonObservations", repr(MIME"text/plain"(), yp))
+
+    @test startswith(sprint(show, ExponentialFamily(Poisson)), "ExponentialFamily(Poisson, ")
+    @test occursin("LogLink()", sprint(show, ExponentialFamily(Poisson)))
+    @test occursin("indices=1:2", sprint(show, ExponentialFamily(Normal; indices = 1:2)))
+end

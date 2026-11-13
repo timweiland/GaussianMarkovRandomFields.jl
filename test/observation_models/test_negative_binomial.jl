@@ -290,3 +290,9 @@ using SparseArrays
         @test exposure(comp_exp.y) ≈ Float64.(data_exp.pop)
     end
 end
+
+@testset "NegativeBinomialObservations show" begin
+    y = NegativeBinomialObservations([3, 1], [1.0, 2.5])
+    @test occursin("NegativeBinomialObservations", sprint(show, y))
+    @test occursin("NegativeBinomialObservations", repr(MIME"text/plain"(), y))
+end

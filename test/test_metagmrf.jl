@@ -139,3 +139,11 @@ using Test: @test_deprecated
         @test typeof(meta_gmrf) != typeof(spatial_gmrf)
     end
 end
+
+struct ShowTestMetadata <: GMRFMetadata end
+
+@testset "MetaGMRF show" begin
+    xm = MetaGMRF(GMRF(zeros(3), sparse(2.0I, 3, 3)), ShowTestMetadata())
+    @test startswith(sprint(show, xm), "MetaGMRF{ShowTestMetadata}(")
+    @test occursin("ShowTestMetadata()", repr(MIME"text/plain"(), xm))
+end

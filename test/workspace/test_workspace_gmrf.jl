@@ -204,3 +204,13 @@ using Random
         @test logpdf(post_ws, x) ≈ logpdf(post_ref, x) rtol = 1.0e-8
     end
 end
+
+@testset "WorkspaceGMRF show" begin
+    Q = sparse(2.0I, 3, 3)
+    xw = WorkspaceGMRF(zeros(3), Q)
+    @test occursin("WorkspaceGMRF{Float64} with 3 variables", repr(MIME"text/plain"(), xw))
+    @test occursin("Backend:", repr(MIME"text/plain"(), xw))
+    xwc = WorkspaceGMRF(zeros(3), Q, GMRFWorkspace(Q), ones(1, 3), [0.0])
+    @test occursin("1 constraint", repr(MIME"text/plain"(), xwc))
+    @test occursin("...", repr(MIME"text/plain"(), WorkspaceGMRF(collect(1.0:10.0), sparse(2.0I, 10, 10))))
+end

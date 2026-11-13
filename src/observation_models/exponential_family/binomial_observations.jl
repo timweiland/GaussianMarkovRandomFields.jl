@@ -73,7 +73,6 @@ Extract the trials vector from binomial observations.
 trials(y::BinomialObservations) = y.trials
 
 # Display
-# COV_EXCL_START
 function Base.show(io::IO, y::BinomialObservations)
     return print(io, "BinomialObservations($(length(y)) observations)")
 end
@@ -85,4 +84,3 @@ function Base.show(io::IO, ::MIME"text/plain", y::BinomialObservations)
     end
     return
 end
-# COV_EXCL_STOP

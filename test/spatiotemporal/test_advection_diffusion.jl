@@ -144,3 +144,12 @@ using SparseArrays
         end
     end
 end
+
+@testset "ImplicitEulerMetadata show" begin
+    disc = FEMDiscretization(generate_grid(Line, (4,)), Lagrange{RefLine, 1}(), QuadratureRule{RefLine}(2))
+    matern = MaternSPDE{1}(κ = 1.0, smoothness = 1)
+    spde = AdvectionDiffusionSPDE{1}(γ = [0.0], initial_spde = matern, spatial_spde = matern)
+    x = GaussianMarkovRandomFields.discretize(spde, disc, 0:0.1:0.2)
+    @test startswith(sprint(show, x.metadata), "ImplicitEulerMetadata{1}(")
+    @test occursin("SSM type:", repr(MIME"text/plain"(), x.metadata))
+end

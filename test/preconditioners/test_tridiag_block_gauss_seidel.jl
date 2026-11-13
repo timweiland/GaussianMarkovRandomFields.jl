@@ -69,3 +69,12 @@ using LinearAlgebra, LinearMaps, Random, SparseArrays
         end
     end
 end
+
+@testset "Tridiagonal block Gauss-Seidel show" begin
+    D = (sparse(2.0I, 2, 2), sparse(2.0I, 2, 2))
+    L = (sparse(0.1I, 2, 2),)
+    @test sprint(show, TridiagonalBlockGaussSeidelPreconditioner(D, L)) ==
+        "TridiagonalBlockGaussSeidelPreconditioner with 2 blocks"
+    @test sprint(show, TridiagSymmetricBlockGaussSeidelPreconditioner(D, L)) ==
+        "TridiagSymmetricBlockGaussSeidelPreconditioner with 2 blocks"
+end

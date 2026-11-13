@@ -341,7 +341,6 @@ and latent field components, so the latent dimension equals the observation dime
 """
 latent_dimension(ef::ExponentialFamily, y::AbstractVector) = length(y)
 
-# COV_EXCL_START
 function Base.show(io::IO, model::ExponentialFamily)
     print(io, "ExponentialFamily(", nameof(model.family), ", ", model.link)
     if model.indices !== nothing
@@ -355,4 +354,3 @@ function Base.show(io::IO, model::ExponentialFamily)
     print(io, ")")
     return
 end
-# COV_EXCL_STOP

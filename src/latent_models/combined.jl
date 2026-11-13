@@ -325,7 +325,6 @@ end
 
 # The (model::LatentModel)(; kwargs...) method is inherited from the abstract type
 
-# COV_EXCL_START
 function Base.show(io::IO, model::CombinedModel)
     k = length(model.components)
     print(io, "CombinedModel with $(k) component$(k == 1 ? "" : "s") (total=$(model.total_size)):")
@@ -342,4 +341,3 @@ function Base.show(io::IO, model::CombinedModel)
     end
     return
 end
-# COV_EXCL_STOP

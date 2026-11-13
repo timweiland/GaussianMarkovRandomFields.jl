@@ -57,3 +57,8 @@ using GaussianMarkovRandomFields, Ferrite, SparseArrays
     @test row_idcs == 1:length(node_idcs)
     @test all(vals .≈ 1)
 end
+
+@testset "FEMDiscretization show" begin
+    disc = FEMDiscretization(generate_grid(Line, (4,)), Lagrange{RefLine, 1}(), QuadratureRule{RefLine}(2))
+    @test startswith(sprint(show, disc), "FEMDiscretization\n")
+end

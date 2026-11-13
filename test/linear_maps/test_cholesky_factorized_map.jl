@@ -21,3 +21,8 @@ using GaussianMarkovRandomFields, LinearAlgebra, LinearMaps, Random, SparseArray
     @test issymmetric(A_cho_map)
     @test isposdef(A_cho_map)
 end
+
+@testset "CholeskyFactorizedMap show" begin
+    C = CholeskyFactorizedMap(cholesky(sparse(2.0I, 3, 3)))
+    @test startswith(sprint(show, C), "3x3 CholeskyFactorizedMap")
+end

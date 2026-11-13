@@ -224,3 +224,11 @@ using Distributions
     end
 
 end
+
+@testset "LinearlyTransformedObservationModel show" begin
+    ltm = LinearlyTransformedObservationModel(ExponentialFamily(Normal), sparse([1.0 0.0 1.0; 0.0 1.0 0.0]))
+    @test occursin("A=2×3 sparse", sprint(show, ltm))
+    @test occursin("offset=none", sprint(show, ltm))
+    ltm_dense = LinearlyTransformedObservationModel(ExponentialFamily(Normal), [1.0 0.0 1.0])
+    @test occursin("A=1×3 dense", sprint(show, ltm_dense))
+end
