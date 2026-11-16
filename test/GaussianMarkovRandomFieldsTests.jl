@@ -10,6 +10,7 @@ using Aqua
 include("test_utils.jl")  # Shared test utilities
 include("graphical_lasso/test_graphical_lasso.jl")
 include("test_gmrf.jl")
+include("test_chordal_gmrf.jl")
 include("test_metagmrf.jl")
 include("observation_models/runtests.jl")
 include("linear_maps/test_ad_jacobian.jl")

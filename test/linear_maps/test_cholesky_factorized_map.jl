@@ -26,3 +26,19 @@ end
     C = CholeskyFactorizedMap(cholesky(sparse(2.0I, 3, 3)))
     @test startswith(sprint(show, C), "3x3 CholeskyFactorizedMap")
 end
+
+@testset "CholeskyFactorizedMap with a dense factor" begin
+    A = [4.0 1.0 0.0; 1.0 3.0 1.0; 0.0 1.0 2.0]
+    C = CholeskyFactorizedMap(cholesky(A))
+    @test to_matrix(C) ≈ A
+    @test transpose(C) === C
+    @test linmap_sqrt(C) === C.sqrt_map
+    @test GaussianMarkovRandomFields.linmap_cholesky(Val(:default), C) === C.cho
+    @test_logs (:warn, r"User-specified permutation") GaussianMarkovRandomFields.linmap_cholesky(
+        Val(:default), C; perm = [3, 2, 1]
+    )
+
+    # Generic constructor, for factorization types without a dedicated method
+    C_generic = CholeskyFactorizedMap{Float64}(cholesky(A))
+    @test C_generic * ones(3) ≈ A * ones(3)
+end
