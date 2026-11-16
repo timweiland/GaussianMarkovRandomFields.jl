@@ -59,7 +59,6 @@ as the `logpdf` rule.
 """
 function ChainRulesCore.rrule(::typeof(logdetcov), d::GMRF)
     if supports_selinv(d.linsolve_cache.alg) != Val{true}()
-        # COV_EXCL_START
         throw(
             ArgumentError(
                 "Automatic differentiation through logdetcov requires an algorithm that supports selected inversion " *
@@ -68,7 +67,6 @@ function ChainRulesCore.rrule(::typeof(logdetcov), d::GMRF)
                     "Consider using LinearSolve.CHOLMODFactorization() or LinearSolve.CholeskyFactorization()."
             )
         )
-        # COV_EXCL_STOP
     end
 
     val = logdetcov(d)

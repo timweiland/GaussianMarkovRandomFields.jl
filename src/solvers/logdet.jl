@@ -22,7 +22,7 @@ Convenience function that dispatches to logdet_cov(linsolve, linsolve.alg).
 logdet_cov(linsolve) = logdet_cov(linsolve, linsolve.alg)
 
 # Implementation methods (after factorization is ensured)
-_logdet_cov_impl(linsolve, alg) = throw(ArgumentError("Log determinant of covariance not implemented for algorithm $(typeof(alg))")) # COV_EXCL_LINE
+_logdet_cov_impl(linsolve, alg) = throw(ArgumentError("Log determinant of covariance not implemented for algorithm $(typeof(alg))"))
 
 function _logdet_cov_impl(linsolve, ::LinearSolve.CHOLMODFactorization)
     factorization = LinearSolve.@get_cacheval(linsolve, :CHOLMODFactorization)

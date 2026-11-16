@@ -158,3 +158,17 @@ using Distributions
         end
     end
 end
+
+using LinearAlgebra, SparseArrays, Zygote
+
+@testset "Reverse-mode AD through gaussian_approximation is refused" begin
+    residual_fn = x -> [x[1]^2, x[1] * x[2]]
+    lik = NonlinearLeastSquaresModel(residual_fn, 2)([1.0, 0.5]; σ = 0.3)
+    Q = sparse(2.0I, 2, 2)
+    @test_throws "not supported for NonlinearLeastSquares" Zygote.gradient(
+        τ -> logdetcov(gaussian_approximation(GMRF(zeros(2), τ * Q), lik)), 1.0
+    )
+    @test_throws "not supported for NonlinearLeastSquares" Zygote.gradient(
+        τ -> logdetcov(gaussian_approximation(WorkspaceGMRF(zeros(2), τ * Q), lik)), 1.0
+    )
+end

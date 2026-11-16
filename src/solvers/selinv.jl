@@ -65,7 +65,7 @@ Convenience function that dispatches to selinv(linsolve, linsolve.alg).
 selinv(linsolve::LinearSolve.LinearCache) = selinv(linsolve, linsolve.alg)
 
 # Implementation methods (after factorization is ensured)
-_selinv_diag_impl(linsolve, alg) = throw(ArgumentError("Selected inversion not implemented for algorithm $(typeof(alg))")) # COV_EXCL_LINE
+_selinv_diag_impl(linsolve, alg) = throw(ArgumentError("Selected inversion not implemented for algorithm $(typeof(alg))"))
 
 function _selinv_diag_impl(linsolve, ::LinearSolve.CHOLMODFactorization)
     factorization = LinearSolve.@get_cacheval(linsolve, :CHOLMODFactorization)
@@ -102,7 +102,7 @@ function _selinv_diag_impl(linsolve, alg::LinearSolve.DefaultLinearSolver)
 end
 
 # Implementation methods for full selected inverse
-_selinv_impl(linsolve, alg) = throw(ArgumentError("Full selected inversion not implemented for algorithm $(typeof(alg))")) # COV_EXCL_LINE
+_selinv_impl(linsolve, alg) = throw(ArgumentError("Full selected inversion not implemented for algorithm $(typeof(alg))"))
 
 function _selinv_impl(linsolve, ::LinearSolve.CHOLMODFactorization)
     factorization = LinearSolve.@get_cacheval(linsolve, :CHOLMODFactorization)

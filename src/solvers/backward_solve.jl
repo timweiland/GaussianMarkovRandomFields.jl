@@ -45,7 +45,7 @@ Convenience function that dispatches to backward_solve(linsolve, x, linsolve.alg
 backward_solve(linsolve, x) = backward_solve(linsolve, x, linsolve.alg)
 
 # Implementation methods (after factorization is ensured)
-_backward_solve_impl(linsolve, x, alg) = throw(ArgumentError("Backward solve not implemented for algorithm $(typeof(alg))")) # COV_EXCL_LINE
+_backward_solve_impl(linsolve, x, alg) = throw(ArgumentError("Backward solve not implemented for algorithm $(typeof(alg))"))
 
 function _backward_solve_impl(linsolve, x, ::LinearSolve.CHOLMODFactorization)
     factorization = LinearSolve.@get_cacheval(linsolve, :CHOLMODFactorization)

@@ -216,3 +216,11 @@ using SparseArrays
         )
     end
 end
+
+@testset "Likelihood Hessian outside the workspace pattern" begin
+    # A diagonal prior workspace cannot hold the off-diagonal coupling A'WA introduces
+    x = WorkspaceGMRF(zeros(3), sparse(2.0I, 3, 3))
+    A = sparse([1.0 1.0 0.0; 0.0 1.0 1.0])
+    lik = LinearlyTransformedObservationModel(ExponentialFamily(Poisson), A)(PoissonObservations([1, 2]))
+    @test_throws "outside the workspace Q sparsity pattern" gaussian_approximation(x, lik)
+end

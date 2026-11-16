@@ -232,3 +232,10 @@ end
     ltm_dense = LinearlyTransformedObservationModel(ExponentialFamily(Normal), [1.0 0.0 1.0])
     @test occursin("A=1×3 dense", sprint(show, ltm_dense))
 end
+
+@testset "LinearlyTransformedObservationModel input validation" begin
+    base = ExponentialFamily(Normal)
+    @test_throws "offset must be" LinearlyTransformedObservationModel(base, sparse([1.0 0.0]); offset = :invalid)
+    @test_throws "at least one row" LinearlyTransformedObservationModel(base, spzeros(0, 3))
+    @test_throws "at least one column" LinearlyTransformedObservationModel(base, spzeros(2, 0))
+end

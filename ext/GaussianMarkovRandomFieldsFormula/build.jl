@@ -1,4 +1,3 @@
-# COV_EXCL_START
 # LatentModel construction and formula components builder
 
 # LatentModel construction per term
@@ -331,4 +330,3 @@ function GaussianMarkovRandomFields.build_formula_components(
         meta = meta,
     )
 end
-# COV_EXCL_STOP

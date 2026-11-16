@@ -196,24 +196,20 @@ end
 _validate_offset(::Nothing) = nothing
 _validate_offset(::AbstractVector) = nothing
 _validate_offset(::ParameterizedOffset) = nothing
-# COV_EXCL_START
 _validate_offset(offset) = throw(
     ArgumentError(
         "offset must be `nothing`, an `AbstractVector`, or a `ParameterizedOffset`; got $(typeof(offset))."
     )
 )
-# COV_EXCL_STOP
 
 function LinearlyTransformedObservationModel(base_model::ObservationModel, design_matrix::AbstractMatrix; offset = nothing)
     # Validate that design matrix is appropriate
-    # COV_EXCL_START
     if size(design_matrix, 1) == 0
         throw(ArgumentError("Design matrix must have at least one row (observation)"))
     end
     if size(design_matrix, 2) == 0
         throw(ArgumentError("Design matrix must have at least one column (latent component)"))
     end
-    # COV_EXCL_STOP
     if design_matrix isa Matrix
         @warn "Received a dense design matrix. This can lead to major performance bottlenecks!"
     end

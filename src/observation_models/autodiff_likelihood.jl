@@ -151,6 +151,7 @@ const AD_PREFERRED_ORDER = (DI.AutoEnzyme(), DI.AutoMooncake(), DI.AutoZygote(),
 function default_grad_backend()
     ad_idx = findfirst(DI.check_available, AD_PREFERRED_ORDER)
     if ad_idx === nothing
+        # Unreachable from the test suite, which always loads an AD backend.
         # COV_EXCL_START
         throw(
             ArgumentError(
