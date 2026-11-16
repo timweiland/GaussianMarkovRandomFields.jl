@@ -1,3 +1,0 @@
-export sparse_jacobian_map
-
-function sparse_jacobian_map end
