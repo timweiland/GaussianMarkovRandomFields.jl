@@ -32,3 +32,24 @@ end
     @test Wc[1, 2] == 1.0 && Wc[2, 1] == 1.0
     @test Wc[1, 3] == 0.0 && Wc[2, 3] == 0.0
 end
+
+using Shapefile
+import GeoInterface as GI
+
+@testset "contiguity_adjacency from a shapefile" begin
+    # Three unit squares in a row: only neighbours share an edge
+    square(x0) = GI.Polygon([GI.LinearRing([(x0, 0.0), (x0 + 1, 0.0), (x0 + 1, 1.0), (x0, 1.0), (x0, 0.0)])])
+    features = [GI.Feature(square(x); properties = (code = c,)) for (x, c) in zip(0.0:2.0, ["a", "b", "c"])]
+    path = joinpath(mktempdir(), "row.shp")
+    Shapefile.write(path, GI.FeatureCollection(features))
+
+    expected = [0 1 0; 1 0 1; 0 1 0]
+    result = contiguity_adjacency(path; id_field = :code)
+    @test Matrix(result.W) == expected
+    @test result.node_to_id == ["a", "b", "c"]
+    @test result.id_to_node == Dict("a" => 1, "b" => 2, "c" => 3)
+
+    from_table = contiguity_adjacency(Shapefile.Table(path))
+    @test Matrix(from_table.W) == expected
+    @test from_table.node_to_id == [1, 2, 3]
+end

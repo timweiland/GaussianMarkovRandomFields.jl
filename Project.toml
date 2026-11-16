@@ -36,10 +36,8 @@ MooncakeSparse = "85e08d05-c593-4d83-8d7e-0e912d511203"
 Pardiso = "46dd5b70-b6fb-5a00-ae2d-e8fea33afaf2"
 Shapefile = "8e980c4a-a4fe-5da2-b3a7-4b4b0353a2f4"
 SparseConnectivityTracer = "9f842d2f-2579-4b1d-911e-f412cf18a3f5"
-SparseDiffTools = "47a9eef4-7e08-11e9-0b38-333d64bd3804"
 SparseMatrixColorings = "0a514795-09f3-496d-8182-132a7b665d35"
 StatsModels = "3eaba693-59b7-5ba5-a881-562e759f1c8d"
-Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [extensions]
@@ -53,7 +51,6 @@ GaussianMarkovRandomFieldsMooncake = ["Mooncake", "MooncakeSparse"]
 GaussianMarkovRandomFieldsPardiso = "Pardiso"
 GaussianMarkovRandomFieldsShapefile = ["Shapefile", "GeoInterface", "LibGEOS"]
 GaussianMarkovRandomFieldsSparseADLikelihoods = ["SparseConnectivityTracer", "SparseMatrixColorings"]
-GaussianMarkovRandomFieldsSparseJacobian = ["Symbolics", "SparseDiffTools"]
 GaussianMarkovRandomFieldsZygote = "Zygote"
 
 [compat]
@@ -91,13 +88,11 @@ SelectedInversion = "0.2.1"
 Shapefile = "0.12, 0.13"
 SparseArrays = "<0.0.1, 1"
 SparseConnectivityTracer = "1"
-SparseDiffTools = "2"
 SparseMatrixColorings = "0.4"
 SpecialFunctions = "2"
 Statistics = "1"
 StatsFuns = "1, 2"
 StatsModels = "0.7"
-Symbolics = "5, 6, 7"
 Test = "<0.0.1, 1"
 Zygote = "0.6, 0.7"
 julia = "1.10"
@@ -120,6 +115,7 @@ Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
 Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
 MooncakeSparse = "85e08d05-c593-4d83-8d7e-0e912d511203"
 ReTest = "e0db7c4e-2690-44b9-bad6-7687da720f89"
+Shapefile = "8e980c4a-a4fe-5da2-b3a7-4b4b0353a2f4"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 SparseConnectivityTracer = "9f842d2f-2579-4b1d-911e-f412cf18a3f5"
 SparseMatrixColorings = "0a514795-09f3-496d-8182-132a7b665d35"
@@ -128,4 +124,4 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [targets]
-test = ["Aqua", "Distributions", "Enzyme", "Ferrite", "FerriteGmsh", "FiniteDiff", "ForwardDiff", "GeoInterface", "Gmsh", "JET", "LibGEOS", "LinearAlgebra", "LogExpFunctions", "Markdown", "Mooncake", "MooncakeSparse", "ReTest", "SparseArrays", "SparseConnectivityTracer", "SparseMatrixColorings", "StatsModels", "Test", "Zygote"]
+test = ["Aqua", "Distributions", "Enzyme", "Ferrite", "FerriteGmsh", "FiniteDiff", "ForwardDiff", "GeoInterface", "Gmsh", "JET", "LibGEOS", "LinearAlgebra", "LogExpFunctions", "Markdown", "Mooncake", "MooncakeSparse", "ReTest", "Shapefile", "SparseArrays", "SparseConnectivityTracer", "SparseMatrixColorings", "StatsModels", "Test", "Zygote"]
