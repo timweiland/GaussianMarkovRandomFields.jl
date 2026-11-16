@@ -35,5 +35,7 @@ include("workspace/latent_model_integration.jl")
 include("workspace/workspace_pool.jl")
 include("autodiff/autodiff.jl")
 include("workspace/autodiff.jl")
+# Last, so every function and type it names is defined
+include("extension_hints.jl")
 
 end
