@@ -83,3 +83,15 @@ end
         @test length(constrained_gmrf) == 3
     end
 end
+
+struct InterfaceOnlyLatentModel <: GaussianMarkovRandomFields.LatentModel end
+
+@testset "LatentModel interface without implementations" begin
+    model = InterfaceOnlyLatentModel()
+    @test_throws MethodError length(model)
+    @test_throws MethodError hyperparameters(model)
+    @test_throws MethodError constraints(model)
+    @test_throws MethodError model_name(model)
+    @test_throws MethodError precision_matrix(model)
+    @test_throws MethodError GaussianMarkovRandomFields.mean(model)
+end

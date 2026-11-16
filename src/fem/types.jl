@@ -58,11 +58,6 @@ the Matérn SPDE). The implementation lives in the FEM extension.
 """
 function intrinsic_dim end
 
-# Generic `discretize` fallback over (::SPDE, ::FEMDiscretization). Lives here
-# rather than next to the SPDE abstract type because it references
-# `FEMDiscretization`, which is only defined after `spdes/spde.jl` runs.
-discretize(s::SPDE, d::FEMDiscretization) = throw(MethodError(discretize, (s, d))) # COV_EXCL_LINE
-
 # --- SPDEs -------------------------------------------------------------------
 """
     MaternSPDE{D, Tv, Ti}

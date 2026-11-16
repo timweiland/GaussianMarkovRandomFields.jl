@@ -181,3 +181,13 @@ end
     x_sqrt = GMRF(zeros(3), Q; Q_sqrt = sparse(sqrt(2.0) * I, 3, 3))
     @test occursin("Q_sqrt: available", repr(MIME"text/plain"(), x_sqrt))
 end
+
+struct InterfaceOnlyGMRF <: AbstractGMRF{Float64, Matrix{Float64}} end
+
+@testset "AbstractGMRF interface without implementations" begin
+    d = InterfaceOnlyGMRF()
+    @test_throws MethodError precision_map(d)
+    @test_throws MethodError logdetcov(d)
+    @test_throws MethodError var(d)
+    @test_throws MethodError Distributions._rand!(Random.default_rng(), d, zeros(2))
+end

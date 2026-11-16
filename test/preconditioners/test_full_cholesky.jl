@@ -22,3 +22,13 @@ import Random: MersenneTwister
     @test ldiv!(P, x) ≈ cho_res
     @test x ≈ cho_res
 end
+
+struct InterfaceOnlyPreconditioner <: GaussianMarkovRandomFields.AbstractPreconditioner{Float64} end
+
+@testset "AbstractPreconditioner interface without implementations" begin
+    P = InterfaceOnlyPreconditioner()
+    @test_throws MethodError ldiv!(zeros(2), P, ones(2))
+    @test_throws MethodError ldiv!(P, ones(2))
+    @test_throws MethodError P \ ones(2)
+    @test_throws MethodError size(P)
+end

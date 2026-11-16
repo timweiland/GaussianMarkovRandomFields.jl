@@ -35,7 +35,7 @@ abstract type ObservationLikelihood end
 # Default trait implementation: all likelihoods are conditionally independent unless overridden
 observation_independence(::ObservationLikelihood) = ConditionallyIndependent()
 
-loglik(x, obs_lik::ObservationLikelihood) = throw(MethodError(loglik, (x, obs_lik)))
+function loglik end
 (obs_lik::ObservationLikelihood)(x) = loglik(x, obs_lik)
 
 autodiff_gradient_backend(::ObservationLikelihood) = nothing
@@ -250,10 +250,6 @@ function _pointwise_loglik(::ConditionallyDependent, x, obs_lik::ObservationLike
     )
 end
 
-function _pointwise_loglik(::ConditionallyIndependent, x, obs_lik::ObservationLikelihood)
-    throw(MethodError(_pointwise_loglik, (ConditionallyIndependent(), x, obs_lik)))
-end
-
 """
     _pointwise_loglik!(independence_trait, result, x, obs_lik)
 
@@ -276,8 +272,4 @@ function _pointwise_loglik!(::ConditionallyDependent, result, x, obs_lik::Observ
                 * "Pointwise log-likelihoods are only well-defined for conditionally independent observations."
         )
     )
-end
-
-function _pointwise_loglik!(::ConditionallyIndependent, result, x, obs_lik::ObservationLikelihood)
-    throw(MethodError(_pointwise_loglik!, (ConditionallyIndependent(), result, x, obs_lik)))
 end
