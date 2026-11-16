@@ -100,7 +100,8 @@ end
 
 function _rand!(rng::AbstractRNG, d::ChordalGMRF{T}, x::AbstractVector) where {T}
     z = randn(rng, T, length(x))
-    return axpy!(true, d.μ, d.F.P \ ldiv!(d.F.U, z))
+    x .= d.F.P \ ldiv!(d.F.U, z)
+    return axpy!(true, d.μ, x)
 end
 
 function Base.show(io::IO, d::ChordalGMRF{T}) where {T}
