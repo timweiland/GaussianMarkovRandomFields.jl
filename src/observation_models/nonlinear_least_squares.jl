@@ -202,7 +202,6 @@ _has_gauss_newton_jacobian(::NonlinearLeastSquaresLikelihood) = true
 _has_gauss_newton_jacobian(lik::CompositeLikelihood) = any(_has_gauss_newton_jacobian, lik.components)
 _has_gauss_newton_jacobian(lik::LinearlyTransformedLikelihood) = _has_gauss_newton_jacobian(lik.base_likelihood)
 
-# COV_EXCL_START
 function _reverse_mode_gauss_newton_error()
     throw(
         ArgumentError(
@@ -216,7 +215,6 @@ function _reverse_mode_gauss_newton_error()
         )
     )
 end
-# COV_EXCL_STOP
 
 # -------------------------------------------------------------------------------------------------
 # Core likelihood API
