@@ -70,7 +70,7 @@ end
 end
 
 @testset "generate_mesh rejects 3D points" begin
-    @test_throws ArgumentError GaussianMarkovRandomFields.generate_mesh([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)])
+    @test_throws "only supports 1D and 2D" GaussianMarkovRandomFields.generate_mesh([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)])
 end
 
 @testset "generate_mesh writes the mesh to save_path" begin

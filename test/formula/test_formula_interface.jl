@@ -634,9 +634,9 @@ end
         Separable(RandomWalk(), IID()),
     )
     for term in terms
-        @test_throws ArgumentError term(1)
+        @test_throws "only intended for use inside @formula" term(1)
     end
-    @test_throws ArgumentError Separable(IID())
+    @test_throws "at least 2 components" Separable(IID())
 end
 
 @testset "Response families and input checks" begin
@@ -656,15 +656,15 @@ end
     # Constraint matrices must match the number of levels (here 2 groups)
     bad = (ones(1, 3), [0.0])
     ar_bad = AR(1; constraint = bad)
-    @test_throws DimensionMismatch build_formula_components(@formula(y ~ 0 + ar_bad(group)), positive)
+    @test_throws "columns but variable has" build_formula_components(@formula(y ~ 0 + ar_bad(group)), positive)
     rw_bad = RandomWalk(1; additional_constraints = bad)
-    @test_throws DimensionMismatch build_formula_components(@formula(y ~ 0 + rw_bad(group)), positive)
+    @test_throws "columns but variable has" build_formula_components(@formula(y ~ 0 + rw_bad(group)), positive)
     ar1_bad = AR1(constraint = bad)
-    @test_throws DimensionMismatch build_formula_components(@formula(y ~ 0 + ar1_bad(group)), positive)
+    @test_throws "columns but variable has" build_formula_components(@formula(y ~ 0 + ar1_bad(group)), positive)
 
     # Region identifiers missing from the Besag id_to_node map
     W = sparse([0 1 0; 1 0 1; 0 1 0])
     besag = Besag(W; id_to_node = Dict("a" => 1, "b" => 2, "c" => 3))
     regions = (y = [0.5, 1.5], region = ["a", "z"])
-    @test_throws ArgumentError build_formula_components(@formula(y ~ 0 + besag(region)), regions)
+    @test_throws "id_to_node has no entry" build_formula_components(@formula(y ~ 0 + besag(region)), regions)
 end

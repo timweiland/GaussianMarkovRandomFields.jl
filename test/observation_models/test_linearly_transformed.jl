@@ -235,7 +235,7 @@ end
 
 @testset "LinearlyTransformedObservationModel input validation" begin
     base = ExponentialFamily(Normal)
-    @test_throws ArgumentError LinearlyTransformedObservationModel(base, sparse([1.0 0.0]); offset = :invalid)
-    @test_throws ArgumentError LinearlyTransformedObservationModel(base, spzeros(0, 3))
-    @test_throws ArgumentError LinearlyTransformedObservationModel(base, spzeros(2, 0))
+    @test_throws "offset must be" LinearlyTransformedObservationModel(base, sparse([1.0 0.0]); offset = :invalid)
+    @test_throws "at least one row" LinearlyTransformedObservationModel(base, spzeros(0, 3))
+    @test_throws "at least one column" LinearlyTransformedObservationModel(base, spzeros(2, 0))
 end
