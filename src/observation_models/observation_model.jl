@@ -115,6 +115,8 @@ latent_dimension(LinearlyTransformedObservationModel(base, A), y) == size(A, 2)
 """
 latent_dimension(obs_model::ObservationModel, y::AbstractVector) = nothing
 
+function conditional_distribution end
+
 """
     conditional_distribution(obs_model::ObservationModel, x; kwargs...) -> Distribution
 
@@ -149,8 +151,4 @@ y = rand(dist)  # Sample observations
 # Implementation
 All observation models should implement this method. The default throws an error.
 """
-# COV_EXCL_START
-function conditional_distribution(obs_model::ObservationModel, x; kwargs...)
-    throw(MethodError(conditional_distribution, (obs_model, x)))
-end
-# COV_EXCL_STOP
+conditional_distribution(::ObservationModel, x)

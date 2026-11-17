@@ -72,12 +72,16 @@ Number of latent variables in the prior.
 """
 Base.length(prior::AbstractLatentPrior) = throw(MethodError(length, (prior,)))
 
+function hyperparameters end
+
 """
     hyperparameters(prior::AbstractLatentPrior) -> NamedTuple
 
 `NamedTuple` describing the hyperparameter names and their expected types.
 """
-hyperparameters(prior::AbstractLatentPrior) = throw(MethodError(hyperparameters, (prior,)))
+hyperparameters(::AbstractLatentPrior)
+
+function constraints end
 
 """
     constraints(prior::AbstractLatentPrior; θ...) -> Union{Nothing, Tuple}
@@ -86,7 +90,9 @@ Linear-equality constraint information for the prior at hyperparameters
 `θ`. Either `nothing` (unconstrained) or a tuple `(A, e)` such that
 `A x = e` is enforced.
 """
-constraints(prior::AbstractLatentPrior; kwargs...) = throw(MethodError(constraints, (prior,)))
+constraints(::AbstractLatentPrior)
+
+function model_name end
 
 """
     model_name(prior::AbstractLatentPrior) -> Symbol
@@ -95,14 +101,16 @@ Symbol used as a parameter-name suffix when this prior is composed with
 others in a `CombinedModel` (so e.g. `τ` from two priors becomes
 `τ_ar1` and `τ_besag`).
 """
-model_name(prior::AbstractLatentPrior) = throw(MethodError(model_name, (prior,)))
+model_name(::AbstractLatentPrior)
+
+function precision_matrix end
 
 """
     precision_matrix(model::LatentModel; θ...) -> AbstractMatrix
 
 Precision matrix of the Gaussian latent prior at hyperparameters `θ`.
 """
-precision_matrix(model::LatentModel; kwargs...) = throw(MethodError(precision_matrix, (model,)))
+precision_matrix(::LatentModel)
 
 """
     mean(model::LatentModel; θ...) -> AbstractVector

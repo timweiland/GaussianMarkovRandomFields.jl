@@ -35,10 +35,6 @@ struct FEMDiscretization{D, S, G, I, Q, GI, H, CH}
     constraint_noise::Vector{Float64}
 end
 
-# COV_EXCL_START
-FEMDiscretization(args...; kwargs...) = _fem_extension_required("FEMDiscretization")
-(::Type{<:FEMDiscretization})(args...; kwargs...) = _fem_extension_required("FEMDiscretization")
-# COV_EXCL_STOP
 
 """
     ndim(f::FEMDiscretization)
@@ -62,11 +58,6 @@ the Matérn SPDE). The implementation lives in the FEM extension.
 """
 function intrinsic_dim end
 
-# Generic `discretize` fallback over (::SPDE, ::FEMDiscretization). Lives here
-# rather than next to the SPDE abstract type because it references
-# `FEMDiscretization`, which is only defined after `spdes/spde.jl` runs.
-discretize(s::SPDE, d::FEMDiscretization) = throw(MethodError(discretize, (s, d))) # COV_EXCL_LINE
-
 # --- SPDEs -------------------------------------------------------------------
 """
     MaternSPDE{D, Tv, Ti}
@@ -81,10 +72,6 @@ struct MaternSPDE{D, Tv <: Real, Ti <: Integer} <: SPDE
     diffusion_factor::Matrix{Tv}
 end
 
-# COV_EXCL_START
-MaternSPDE(args...; kwargs...) = _fem_extension_required("MaternSPDE")
-(::Type{<:MaternSPDE})(args...; kwargs...) = _fem_extension_required("MaternSPDE")
-# COV_EXCL_STOP
 
 ndim(::MaternSPDE{D}) where {D} = D
 
@@ -109,10 +96,6 @@ struct AdvectionDiffusionSPDE{D} <: SPDE
     initial_spde::SPDE
 end
 
-# COV_EXCL_START
-AdvectionDiffusionSPDE(args...; kwargs...) = _fem_extension_required("AdvectionDiffusionSPDE")
-(::Type{<:AdvectionDiffusionSPDE})(args...; kwargs...) = _fem_extension_required("AdvectionDiffusionSPDE")
-# COV_EXCL_STOP
 
 # --- State-space models ------------------------------------------------------
 """
@@ -143,9 +126,6 @@ struct ImplicitEulerSSM{X, S, GF, MF, MIF, BF, BIF, TS, C, V}
     constraint_noise::V
 end
 
-# COV_EXCL_START
-ImplicitEulerSSM(args...; kwargs...) = _fem_extension_required("ImplicitEulerSSM")
-# COV_EXCL_STOP
 
 """
     ImplicitEulerJointSSMMatrices
@@ -162,10 +142,6 @@ struct ImplicitEulerJointSSMMatrices{T, GM, MM, SM, SQRT, C, V} <: JointSSMMatri
     constraint_noise::V
 end
 
-# COV_EXCL_START
-ImplicitEulerJointSSMMatrices(args...; kwargs...) =
-    _fem_extension_required("ImplicitEulerJointSSMMatrices")
-# COV_EXCL_STOP
 
 # --- Spatiotemporal constant-mesh metadata ----------------------------------
 # Internal metadata wrappers for the implicit-Euler and concrete spatiotemporal
@@ -204,12 +180,6 @@ const ConcreteConstantMeshSTGMRF{D, T, P, G} =
 const ConstantMeshSTGMRF{D} =
     Union{ImplicitEulerConstantMeshSTGMRF{D}, ConcreteConstantMeshSTGMRF}
 
-# COV_EXCL_START
-ImplicitEulerConstantMeshSTGMRF(args...; kwargs...) =
-    _fem_extension_required("ImplicitEulerConstantMeshSTGMRF")
-ConcreteConstantMeshSTGMRF(args...; kwargs...) =
-    _fem_extension_required("ConcreteConstantMeshSTGMRF")
-# COV_EXCL_STOP
 
 # --- Matérn latent model -----------------------------------------------------
 """
@@ -232,10 +202,6 @@ struct MaternModel{F, S <: Integer, Alg, C, P, M} <: LatentModel
     fem_matrices::M
 end
 
-# COV_EXCL_START
-MaternModel(args...; kwargs...) = _fem_extension_required("MaternModel")
-(::Type{<:MaternModel})(args...; kwargs...) = _fem_extension_required("MaternModel")
-# COV_EXCL_STOP
 
 # --- Barrier Matérn latent model ---------------------------------------------
 """
@@ -266,8 +232,3 @@ struct BarrierModel{F, Alg, C, P, M} <: LatentModel
     observation_points::P
     fem_matrices::M
 end
-
-# COV_EXCL_START
-BarrierModel(args...; kwargs...) = _fem_extension_required("BarrierModel")
-(::Type{<:BarrierModel})(args...; kwargs...) = _fem_extension_required("BarrierModel")
-# COV_EXCL_STOP

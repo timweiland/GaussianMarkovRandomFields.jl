@@ -28,12 +28,16 @@ at a given time.
 """
 abstract type AbstractSpatiotemporalGMRF{T <: Real, PrecisionMap <: LinearMap{T}} <: AbstractGMRF{T, PrecisionMap} end
 
+function N_t end
+
 """
     N_t(::AbstractSpatiotemporalGMRF)
 
 Return the number of time points in the spatiotemporal GMRF.
 """
-N_t(d::AbstractSpatiotemporalGMRF) = throw(MethodError(N_t, (d,))) # COV_EXCL_LINE
+N_t(::AbstractSpatiotemporalGMRF)
+
+function time_means end
 
 """
     time_means(::AbstractSpatiotemporalGMRF)
@@ -43,7 +47,9 @@ Return the means of the spatiotemporal GMRF at each time point.
 # Returns
 - A vector of means of length Nₜ, one for each time point.
 """
-time_means(d::AbstractSpatiotemporalGMRF) = throw(MethodError(time_means, (d,))) # COV_EXCL_LINE
+time_means(::AbstractSpatiotemporalGMRF)
+
+function time_vars end
 
 """
     time_vars(::AbstractSpatiotemporalGMRF)
@@ -53,7 +59,9 @@ Return the marginal variances of the spatiotemporal GMRF at each time point.
 # Returns
 - A vector of marginal variances of length Nₜ, one for each time point.
 """
-time_vars(d::AbstractSpatiotemporalGMRF) = throw(MethodError(time_vars, (d,))) # COV_EXCL_LINE
+time_vars(::AbstractSpatiotemporalGMRF)
+
+function time_stds end
 
 """
     time_stds(::AbstractSpatiotemporalGMRF)
@@ -63,7 +71,9 @@ Return the marginal standard deviations of the spatiotemporal GMRF at each time 
 # Returns
 - A vector of marginal standard deviations of length Nₜ, one for each time point.
 """
-time_stds(d::AbstractSpatiotemporalGMRF) = throw(MethodError(time_stds, (d,))) # COV_EXCL_LINE
+time_stds(::AbstractSpatiotemporalGMRF)
+
+function time_rands end
 
 """
     time_rands(::AbstractSpatiotemporalGMRF, rng::AbstractRNG)
@@ -74,11 +84,13 @@ Draw samples from the spatiotemporal GMRF at each time point.
 - A vector of sample values of length Nₜ, one sample value vector
   for each time point.
 """
-time_rands(d::AbstractSpatiotemporalGMRF, rng::AbstractRNG) = throw(MethodError(time_rands, (d, rng))) # COV_EXCL_LINE
+time_rands(::AbstractSpatiotemporalGMRF, ::AbstractRNG)
+
+function discretization_at_time end
 
 """
     discretization_at_time(::AbstractSpatiotemporalGMRF, t::Int)
 
 Return the spatial discretization at time `t`.
 """
-discretization_at_time(d::AbstractSpatiotemporalGMRF, t::Int) = throw(MethodError(discretization_at_time, (d, t))) # COV_EXCL_LINE
+discretization_at_time(::AbstractSpatiotemporalGMRF, ::Int)
