@@ -6,6 +6,7 @@ GaussianMarkovRandomFields.jl uses [LinearSolve.jl](https://github.com/SciML/Lin
 Our goal is to provide sane defaults that "just work" for most users, while
 still allowing power users to customize the behavior through LinearSolve.jl algorithms.
 Read further to learn about the available capabilities and how to use them.
+For which operation each quantity needs (solves, backward solves, selected inversion, RBMC), see [How computations work](@ref).
 
 ## Direct Methods (Cholesky, LU)
 [CHOLMOD](https://github.com/DrTimothyAldenDavis/SuiteSparse) and other direct solvers are 
