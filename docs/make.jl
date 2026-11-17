@@ -64,6 +64,7 @@ makedocs(
                 "Automatic Differentiation" => "reference/autodiff.md",
             ],
             "Computation and performance" => [
+                "How computations work" => "reference/how_computations_work.md",
                 "Solvers" => "reference/solvers.md",
                 "Preconditioners" => "reference/preconditioners.md",
                 "Workspaces" => "reference/workspaces.md",
