@@ -1,7 +1,5 @@
 import Distributions: logpdf
 
-export WorkspaceGMRF, ConstraintInfo
-
 """
     ConstraintInfo{T}
 

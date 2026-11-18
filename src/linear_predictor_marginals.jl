@@ -1,5 +1,3 @@
-export linear_predictor_marginals
-
 """
     linear_predictor_marginals(ga, obs_lik) -> (μ_η, v_η, eta_likelihood)
 

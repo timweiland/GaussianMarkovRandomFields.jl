@@ -1,5 +1,3 @@
-using LinearAlgebra
-
 # Small, inlined helpers to centralize indexing and offset handling.
 
 @inline _eta(::ExponentialFamilyLikelihood{L, Nothing}, x) where {L} = x

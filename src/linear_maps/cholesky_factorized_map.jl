@@ -1,10 +1,4 @@
-using LinearAlgebra
-using LinearMaps
-using SparseArrays
-
 import Base: getproperty
-
-export CholeskyFactorizedMap
 
 """
     CholeskyFactorizedMap{T,C}(cho::C) where {T,C}

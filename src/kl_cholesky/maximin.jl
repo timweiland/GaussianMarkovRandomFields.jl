@@ -1,8 +1,3 @@
-using NearestNeighbors, DataStructures
-using SparseArrays
-
-export reverse_maximin_ordering, reverse_maximin_ordering_and_sparsity_pattern, sparsity_pattern_from_ordering, form_supernodes
-
 """
     reverse_maximin_ordering(X::AbstractMatrix; point_tree = KDTree(X))
 

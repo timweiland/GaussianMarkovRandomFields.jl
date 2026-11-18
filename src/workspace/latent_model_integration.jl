@@ -1,7 +1,3 @@
-using SparseArrays
-
-export make_workspace, make_workspace_pool
-
 """
     make_workspace(m::LatentModel; θ_ref...) -> AbstractLatentWorkspace
 

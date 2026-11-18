@@ -1,8 +1,3 @@
-using StatsFuns
-
-export LinkFunction, IdentityLink, LogLink, LogitLink
-export apply_link, apply_invlink
-
 """
     LinkFunction
 

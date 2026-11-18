@@ -1,6 +1,3 @@
-using ChainRulesCore
-using LinearAlgebra
-
 """
     _is_zero_tangent(x) -> Bool
 

@@ -1,7 +1,4 @@
-using ChainRulesCore
 using Distributions: logpdf
-using LinearAlgebra
-using SparseArrays
 
 # --- logpdf rrule for WorkspaceGMRF (handles both constrained and unconstrained) ---
 

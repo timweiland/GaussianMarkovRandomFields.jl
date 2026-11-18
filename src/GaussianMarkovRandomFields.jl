@@ -1,5 +1,121 @@
 module GaussianMarkovRandomFields
 
+# --- Dependencies -------------------------------------------------------------
+# Packages loaded in full. More targeted imports (`using X: f`, `import X: f`) sit next to the
+# code that needs them; like these, they apply to the whole module.
+using AMD
+using ChainRulesCore
+import CliqueTrees
+using DataStructures
+import DifferentiationInterface as DI
+using Distributions
+using Graphs
+using LinearAlgebra
+using LinearMaps
+using LinearSolve
+using NearestNeighbors
+using Random
+using SelectedInversion
+using SparseArrays
+using StatsFuns
+
+# --- Public API ---------------------------------------------------------------
+
+# GMRF types and core operations
+export AbstractGMRF, GMRF, ChordalGMRF, MetaGMRF, GMRFMetadata, ConstrainedGMRF,
+    InformationVector, information_vector, precision_map, precision_matrix, mean, std,
+    joint_gmrf
+
+# Conditioning and Gaussian approximations
+export gaussian_approximation, linear_condition, linear_predictor_marginals,
+    marginal_loglikelihood
+
+# Latent models
+export AbstractLatentPrior, LatentModel, NonGaussianLatentPrior, hyperparameters,
+    constraints, model_name, precision_logdet, IIDModel, ARModel, AR1Model, RWModel,
+    RW1Model, RW2Model, BesagModel, BYM2Model, FixedEffectsModel, CombinedModel,
+    component_model, SeparableModel, AutoDiffLatentPrior, StructuredLatentPrior,
+    LatentFactorGroup, LocalLatentQuadratic, local_quadratic, prior_logdensity
+
+# Formula interface
+export IID, RandomWalk, AR1, AR, Besag, BYM2, Separable, Matern, build_formula_components,
+    predict_cols
+
+# Observation models and likelihoods
+export ObservationModel, ObservationLikelihood, latent_dimension, conditional_distribution,
+    loglik, loggrad, loghessian, pointwise_loglik, pointwise_loglik!,
+    ObservationIndependence, ConditionallyIndependent, ConditionallyDependent,
+    observation_independence, ZeroLikelihood, AutoDiffObservationModel, AutoDiffLikelihood,
+    LinearlyTransformedObservationModel, LinearlyTransformedLikelihood,
+    ParameterizedMatrix, ParameterizedOffset, NonlinearLeastSquaresModel,
+    NonlinearLeastSquaresLikelihood, StructuredObservationModel, ObsFactorGroup,
+    CompositeObservations, CompositeObservationModel, CompositeLikelihood
+
+# Exponential families
+export ExponentialFamily, ExponentialFamilyLikelihood, NormalLikelihood, PoissonLikelihood,
+    BernoulliLikelihood, BinomialLikelihood, NegBinLikelihood, GammaLikelihood,
+    StudentTLikelihood, LinkFunction, IdentityLink, LogLink, LogitLink, apply_link,
+    apply_invlink, BinomialObservations, successes, trials, PoissonObservations,
+    NegativeBinomialObservations, counts, exposure
+
+# SPDEs and SPDE-based models
+export SPDE, ndim, intrinsic_dim, discretize, MaternSPDE, AdvectionDiffusionSPDE,
+    MaternModel, BarrierModel, product_matern, range_to_κ, smoothness_to_ν,
+    barrier_triangles
+
+# FEM discretizations and meshes
+export FEMDiscretization, evaluation_matrix, node_selection_matrix, derivative_matrices,
+    second_derivative_matrices, assemble_mass_matrix, assemble_diffusion_matrix,
+    assemble_advection_matrix, assemble_streamline_diffusion_matrix, lump_matrix,
+    apply_soft_constraints!, assemble_C_G_matrices, generate_mesh,
+    create_inflated_rectangle, PointEvaluationObsModel, PointDerivativeObsModel,
+    PointSecondDerivativeObsModel
+
+# Spatiotemporal GMRFs
+export AbstractSpatiotemporalGMRF, N_t, time_means, time_vars, time_stds, time_rands,
+    discretization_at_time, spatial_to_spatiotemporal,
+    kronecker_product_spatiotemporal_model, joint_ssm, JointSSMMatrices, ImplicitEulerSSM,
+    ImplicitEulerJointSSMMatrices, ImplicitEulerMetadata, ConcreteSTMetadata,
+    ConstantMeshSTGMRF, ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMeshSTGMRF
+
+# Spatial utilities
+export contiguity_adjacency, generate_car_model
+
+# Solvers and marginal variances
+export selinv, backward_solve, logdet_cov, AbstractVarianceStrategy, RBMCStrategy,
+    BlockRBMCStrategy
+
+# Workspaces
+export GMRFWorkspace, WorkspaceGMRF, ConstraintInfo, WorkspaceBackend, CHOLMODBackend,
+    CliqueTreesBackend, PinDenseColumns, ordering_permutation, update_precision!,
+    update_precision_values!, ensure_numeric!, ensure_selinv!, dimension,
+    AbstractLatentWorkspace, AbstractLatentWorkspacePool, make_workspace,
+    make_workspace_pool, WorkspacePool, checkout, checkin, with_workspace
+
+# Linear maps
+export CholeskyFactorizedMap, CholeskySqrt, LinearMapWithSqrt, OuterProductMap,
+    SSMBidiagonalMap, SymmetricBlockTridiagonalMap, ZeroMap, linmap_sqrt, to_matrix
+
+# Preconditioners
+export AbstractPreconditioner, FullCholeskyPreconditioner, BlockJacobiPreconditioner,
+    TridiagonalBlockGaussSeidelPreconditioner,
+    TridiagSymmetricBlockGaussSeidelPreconditioner, temporal_block_gauss_seidel
+
+# Sparse approximate Cholesky (KL-optimal)
+export approximate_gmrf_kl, sparse_approximate_cholesky, sparse_approximate_cholesky!,
+    reverse_maximin_ordering, reverse_maximin_ordering_and_sparsity_pattern,
+    sparsity_pattern_from_ordering, form_supernodes, SupernodeClustering, PermutedMatrix
+
+# Graphical lasso
+export graphical_lasso
+
+# Deprecated: `condition_on_observations`, exported by its `@deprecate` in
+# `arithmetic/condition/linear.jl`
+
+# Plotting (Makie extension)
+export gmrf_fem_1d_plot, gmrf_fem_1d_plot!, gmrf_fem_1d_spatiotemporal_plot,
+    gmrf_fem_1d_spatiotemporal_plot!
+
 include("typedefs.jl")
 include("utils/utils.jl")
 include("linear_maps/linear_maps.jl")

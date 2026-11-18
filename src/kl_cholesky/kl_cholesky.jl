@@ -1,7 +1,3 @@
-using LinearAlgebra, LinearSolve, SparseArrays
-
-export sparse_approximate_cholesky!, sparse_approximate_cholesky, approximate_gmrf_kl
-
 """
     sparse_approximate_cholesky!(Θ::AbstractMatrix, L::SparseMatrixCSC)
 

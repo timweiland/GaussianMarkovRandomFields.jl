@@ -1,11 +1,5 @@
-using LinearAlgebra
-using SparseArrays
-using Random
-using LinearSolve
 using Distributions: mean, var, _rand!
 import Distributions: logpdf
-
-export ConstrainedGMRF
 
 """
     ConstrainedGMRF{T,L,G} <: AbstractGMRF{T,L}

@@ -1,5 +1,3 @@
-using LinearSolve
-
 """
     ensure_factorization!(linsolve)
 

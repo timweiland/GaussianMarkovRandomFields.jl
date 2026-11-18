@@ -1,7 +1,5 @@
 import Base.Reverse
 
-export SupernodeClustering, form_supernodes
-
 """
     SupernodeClustering
 

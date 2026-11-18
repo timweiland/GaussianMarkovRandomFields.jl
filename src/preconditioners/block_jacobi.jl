@@ -1,8 +1,6 @@
 import LinearAlgebra: ldiv!
 import Base: \, size
 
-export BlockJacobiPreconditioner
-
 """
     BlockJacobiPreconditioner
 

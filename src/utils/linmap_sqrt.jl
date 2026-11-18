@@ -1,7 +1,3 @@
-using LinearMaps, LinearAlgebra
-
-export linmap_sqrt
-
 function linmap_sqrt(A::LinearMap)
     if issymmetric(A) && isposdef(A)
         return LinearMap(cholesky(to_matrix(A)))

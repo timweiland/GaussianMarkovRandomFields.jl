@@ -1,8 +1,3 @@
-using LinearAlgebra
-using SparseArrays
-
-export LinearlyTransformedObservationModel, LinearlyTransformedLikelihood, ParameterizedMatrix, ParameterizedOffset
-
 """
     ParameterizedMatrix(builder; hyperparameters::Tuple{Vararg{Symbol}}, n_latent=nothing)
 

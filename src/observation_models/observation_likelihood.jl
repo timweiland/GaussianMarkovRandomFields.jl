@@ -1,9 +1,3 @@
-using SparseArrays
-using Random
-import DifferentiationInterface as DI
-
-export ObservationLikelihood, loglik, loggrad, loghessian, pointwise_loglik, pointwise_loglik!
-
 """
     ObservationLikelihood
 
@@ -43,7 +37,6 @@ default_hessian_backend(grad_backend) = nothing
 autodiff_hessian_backend(obs_lik::ObservationLikelihood) = default_hessian_backend(autodiff_gradient_backend(obs_lik))
 autodiff_gradient_prep(::ObservationLikelihood) = nothing
 autodiff_hessian_prep(::ObservationLikelihood) = nothing
-
 
 """
     loggrad(x, obs_lik::ObservationLikelihood) -> Vector{Float64}

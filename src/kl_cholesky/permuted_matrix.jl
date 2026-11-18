@@ -1,7 +1,3 @@
-using LinearAlgebra
-
-export PermutedMatrix
-
 """
     PermutedMatrix{T, M <: AbstractMatrix{T}} <: AbstractMatrix{T}
 

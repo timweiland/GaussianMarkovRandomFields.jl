@@ -1,5 +1,3 @@
-export AbstractLatentWorkspace, AbstractLatentWorkspacePool
-
 """
     AbstractLatentWorkspace
 

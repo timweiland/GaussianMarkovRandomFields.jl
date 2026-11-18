@@ -9,13 +9,6 @@
 #
 ################################################################################
 
-export FEMDiscretization, MaternSPDE, AdvectionDiffusionSPDE,
-    MaternModel, BarrierModel,
-    ImplicitEulerSSM, ImplicitEulerJointSSMMatrices, JointSSMMatrices,
-    ImplicitEulerMetadata, ConcreteSTMetadata,
-    ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMeshSTGMRF,
-    ConstantMeshSTGMRF
-
 # --- FEM discretization ------------------------------------------------------
 """
     FEMDiscretization{D, S, G, I, Q, GI, H, CH}
@@ -34,7 +27,6 @@ struct FEMDiscretization{D, S, G, I, Q, GI, H, CH}
     constraint_handler::CH
     constraint_noise::Vector{Float64}
 end
-
 
 """
     ndim(f::FEMDiscretization)
@@ -72,7 +64,6 @@ struct MaternSPDE{D, Tv <: Real, Ti <: Integer} <: SPDE
     diffusion_factor::Matrix{Tv}
 end
 
-
 ndim(::MaternSPDE{D}) where {D} = D
 
 """
@@ -95,7 +86,6 @@ struct AdvectionDiffusionSPDE{D} <: SPDE
     spatial_spde::SPDE
     initial_spde::SPDE
 end
-
 
 # --- State-space models ------------------------------------------------------
 """
@@ -126,7 +116,6 @@ struct ImplicitEulerSSM{X, S, GF, MF, MIF, BF, BIF, TS, C, V}
     constraint_noise::V
 end
 
-
 """
     ImplicitEulerJointSSMMatrices
 
@@ -141,7 +130,6 @@ struct ImplicitEulerJointSSMMatrices{T, GM, MM, SM, SQRT, C, V} <: JointSSMMatri
     constraint_handler::C
     constraint_noise::V
 end
-
 
 # --- Spatiotemporal constant-mesh metadata ----------------------------------
 # Internal metadata wrappers for the implicit-Euler and concrete spatiotemporal
@@ -180,7 +168,6 @@ const ConcreteConstantMeshSTGMRF{D, T, P, G} =
 const ConstantMeshSTGMRF{D} =
     Union{ImplicitEulerConstantMeshSTGMRF{D}, ConcreteConstantMeshSTGMRF}
 
-
 # --- Matérn latent model -----------------------------------------------------
 """
     MaternModel{F, S, Alg, C, P, M} <: LatentModel
@@ -201,7 +188,6 @@ struct MaternModel{F, S <: Integer, Alg, C, P, M} <: LatentModel
     observation_points::P
     fem_matrices::M
 end
-
 
 # --- Barrier Matérn latent model ---------------------------------------------
 """

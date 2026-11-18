@@ -1,5 +1,3 @@
-export NegativeBinomialObservations
-
 """
     NegativeBinomialObservations <: AbstractVector{Tuple{Int, Float64}}
 
@@ -103,7 +101,6 @@ function Base.getproperty(y::NegativeBinomialObservations, name::Symbol)
         return getfield(y, name)
     end
 end
-
 
 function Base.show(io::IO, y::NegativeBinomialObservations)
     return print(io, "NegativeBinomialObservations($(length(y)) observations)")

@@ -1,8 +1,4 @@
-using ChainRulesCore
 using Distributions: logpdf
-using LinearAlgebra
-using SparseArrays
-using SelectedInversion
 
 """
     ChainRulesCore.rrule(::typeof(logpdf), x::AbstractGMRF, z::AbstractVector)

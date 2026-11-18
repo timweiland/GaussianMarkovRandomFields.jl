@@ -1,5 +1,3 @@
-export SPDE, ndim, intrinsic_dim, discretize
-
 """
     SPDE
 

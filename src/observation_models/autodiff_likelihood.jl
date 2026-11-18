@@ -1,7 +1,4 @@
-import DifferentiationInterface as DI
 using LinearAlgebra: Diagonal
-
-export AutoDiffLikelihood, AutoDiffObservationModel
 
 """
     _ADPrepCache

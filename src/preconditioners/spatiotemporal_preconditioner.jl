@@ -1,7 +1,3 @@
-using SparseArrays
-
-export temporal_block_gauss_seidel
-
 """
     temporal_block_gauss_seidel(A, block_size)
 

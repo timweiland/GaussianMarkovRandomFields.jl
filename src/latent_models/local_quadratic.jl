@@ -1,5 +1,3 @@
-export LocalLatentQuadratic, local_quadratic, prior_logdensity
-
 """
     LocalLatentQuadratic{TQ, Th, T, Tx}
 

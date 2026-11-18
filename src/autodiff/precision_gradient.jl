@@ -1,7 +1,3 @@
-using SparseArrays
-using LinearAlgebra
-using ChainRulesCore
-
 # TODO: Make PR for SymTridiagonal rrules into ChainRules, to avoid type piracy
 """
     ChainRulesCore.rrule(::typeof(*), Q::SymTridiagonal, v::AbstractVector)

@@ -1,8 +1,4 @@
-using Distributions
 using Distributions: product_distribution
-using Random
-
-export ExponentialFamily, conditional_distribution
 
 """
     ExponentialFamily{F<:Distribution, L<:LinkFunction} <: ObservationModel
@@ -272,7 +268,6 @@ function _conditional_distribution(obs_model::ExponentialFamily{Poisson}, x; off
     μ = apply_invlink.(Ref(obs_model.link), η)
     return product_distribution(Poisson.(μ))
 end
-
 
 # =======================================================================================
 # FACTORY PATTERN: Make ExponentialFamily callable to create materialized likelihoods

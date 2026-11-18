@@ -1,7 +1,3 @@
-using LinearAlgebra
-
-export MetaGMRF, GMRFMetadata
-
 """
     GMRFMetadata
 

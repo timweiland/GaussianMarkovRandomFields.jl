@@ -1,5 +1,3 @@
-export ExponentialFamilyLikelihood, NormalLikelihood, PoissonLikelihood, BernoulliLikelihood, BinomialLikelihood, NegBinLikelihood, GammaLikelihood, StudentTLikelihood
-
 """
     ExponentialFamilyLikelihood{L, I} <: ObservationLikelihood
 

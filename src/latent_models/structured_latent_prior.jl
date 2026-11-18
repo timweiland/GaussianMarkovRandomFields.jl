@@ -1,7 +1,3 @@
-import DifferentiationInterface as DI
-
-export StructuredLatentPrior, LatentFactorGroup
-
 """
     LatentFactorGroup{K, F}
 

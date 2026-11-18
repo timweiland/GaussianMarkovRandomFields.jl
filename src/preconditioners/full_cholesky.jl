@@ -1,8 +1,5 @@
-using LinearAlgebra, SparseArrays
 import LinearAlgebra: ldiv!
 import Base: \, size
-
-export FullCholeskyPreconditioner
 
 """
     FullCholeskyPreconditioner

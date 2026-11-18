@@ -1,8 +1,3 @@
-using LinearMaps, LinearAlgebra, SparseArrays
-
-export AbstractSpatiotemporalGMRF,
-    time_means, time_vars, time_stds, time_rands, discretization_at_time, N_t
-
 ################################################################################
 #
 #    AbstractSpatiotemporalGMRF

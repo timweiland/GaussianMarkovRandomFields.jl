@@ -1,5 +1,3 @@
-export marginal_loglikelihood
-
 """
     marginal_loglikelihood(prior::AbstractLatentPrior, obs_lik, posterior::AbstractGMRF; θ...) -> Real
 

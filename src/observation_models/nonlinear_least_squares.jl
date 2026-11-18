@@ -1,10 +1,4 @@
-using LinearAlgebra
-using SparseArrays
 using Distributions: Normal, product_distribution
-import DifferentiationInterface as DI
-import GaussianMarkovRandomFields: known_pattern_jacobian_backend, known_pattern_hessian_backend
-
-export NonlinearLeastSquaresModel, NonlinearLeastSquaresLikelihood
 
 # Per-model cache for the residual's sparse-AD backends. The Jacobian and
 # residual-curvature Hessian sparsity patterns are determined solely by the residual `f`

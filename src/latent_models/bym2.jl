@@ -1,9 +1,3 @@
-using SparseArrays
-using LinearAlgebra
-using LinearSolve
-
-export BYM2Model
-
 """
     BYM2Model(adjacency::AbstractMatrix; regularization::Float64 = 1e-5, normalize_var::Bool = true, singleton_policy::Symbol = :gaussian, alg=CHOLMODFactorization(), additional_constraints=nothing, iid_constraint=nothing)
 

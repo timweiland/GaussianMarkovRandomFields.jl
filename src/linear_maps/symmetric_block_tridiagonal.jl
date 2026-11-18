@@ -1,10 +1,7 @@
-using LinearAlgebra, LinearMaps
 import SparseArrays: sparse
 import LinearAlgebra: issymmetric
 
 import Base: size
-
-export SymmetricBlockTridiagonalMap
 
 """
     SymmetricBlockTridiagonalMap(

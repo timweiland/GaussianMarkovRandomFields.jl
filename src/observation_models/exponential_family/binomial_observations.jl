@@ -1,5 +1,3 @@
-export BinomialObservations, successes, trials
-
 """
     BinomialObservations <: AbstractVector{Tuple{Int, Int}}
 

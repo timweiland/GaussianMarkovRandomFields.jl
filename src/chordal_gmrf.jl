@@ -3,8 +3,6 @@ using LinearAlgebra: Hermitian, cholesky!, diag, ldiv!, axpy!, dot
 using SparseArrays: SparseMatrixCSC
 using Random: AbstractRNG, randn
 
-export ChordalGMRF
-
 """
     ChordalGMRF{T, Hrm, Fac, Mea} <: AbstractGMRF{T, Hrm}
 

@@ -1,7 +1,3 @@
-using LinearMaps, SparseArrays
-
-export ZeroMap
-
 """
     ZeroMap{T}(N::Int, M::Int)
 

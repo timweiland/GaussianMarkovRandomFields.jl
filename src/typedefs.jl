@@ -1,5 +1,3 @@
-export AbstractVarianceStrategy
-
 # Legacy solver types removed - now using LinearSolve.jl directly
 
 """

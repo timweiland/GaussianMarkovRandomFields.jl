@@ -1,5 +1,3 @@
-export ObservationIndependence, ConditionallyIndependent, ConditionallyDependent, observation_independence
-
 """
     ObservationIndependence
 

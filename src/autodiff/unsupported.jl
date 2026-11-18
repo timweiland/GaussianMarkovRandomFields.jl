@@ -1,5 +1,3 @@
-using ChainRulesCore
-
 # Rules whose only job is to stop reverse-mode AD with a useful message.
 #
 # The ChainRules counterpart of `ext/enzyme/unsupported.jl`, for the same reason:

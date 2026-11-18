@@ -1,9 +1,3 @@
-using SparseArrays
-using LinearAlgebra
-using LinearSolve
-
-export RWModel, RW1Model, RW2Model
-
 _default_rw_alg(::Val{1}) = LDLtFactorization()
 _default_rw_alg(::Val) = CHOLMODFactorization()
 

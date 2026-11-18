@@ -1,7 +1,4 @@
-using LinearAlgebra, SparseArrays
 import LinearMaps: _unsafe_mul!
-
-export CholeskySqrt
 
 function sparse_cho_sqrt(cho::SparseArrays.CHOLMOD.Factor)
     s = unsafe_load(pointer(cho))
@@ -31,6 +28,5 @@ factorization, i.e. for `A = L * L'`, this map represents `L`.
 """
 CholeskySqrt(cho::Cholesky) = LinearMap(cho.L)
 CholeskySqrt(cho::SparseArrays.CHOLMOD.Factor) = LinearMap(sparse_cho_sqrt(cho))
-
 
 linmap_sqrt(A::LinearMaps.WrappedMap) = CholeskySqrt(cholesky(to_matrix(A)))
