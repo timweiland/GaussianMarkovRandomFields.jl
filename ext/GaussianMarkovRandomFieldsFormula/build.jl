@@ -284,7 +284,7 @@ function GaussianMarkovRandomFields.build_formula_components(
             X isa AbstractMatrix || (X = reshape(X, :, 1))
             push!(fixed_cols, X)
         end
-        X_fixed = hcat(fixed_cols...)
+        X_fixed = reduce(hcat, fixed_cols)
         X_fixed = sparse(X_fixed)
         n_fixed = size(X_fixed, 2)
         push!(A_blocks, X_fixed)
@@ -295,7 +295,7 @@ function GaussianMarkovRandomFields.build_formula_components(
 
     # Assemble A and CombinedModel
     isempty(A_blocks) && throw(ArgumentError("No terms found in RHS to construct design matrix"))
-    A = hcat(A_blocks...)
+    A = reduce(hcat, A_blocks)
 
     isempty(models) && throw(ArgumentError("No latent components constructed (check formula RHS)"))
     combined_model = CombinedModel(models...)

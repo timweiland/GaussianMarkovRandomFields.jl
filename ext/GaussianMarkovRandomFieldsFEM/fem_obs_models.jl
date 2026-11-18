@@ -85,7 +85,7 @@ function PointDerivativeObsModel(fem::FEMDiscretization, points::AbstractMatrix,
     if length(derivative_mats) == 1
         design_matrix = derivative_mats[1]
     else
-        design_matrix = vcat(derivative_mats...)
+        design_matrix = reduce(vcat, derivative_mats)
     end
 
     base_model = ExponentialFamily(family)
@@ -134,7 +134,7 @@ function PointSecondDerivativeObsModel(fem::FEMDiscretization, points::AbstractM
     if length(second_derivative_mats) == 1
         design_matrix = second_derivative_mats[1]
     else
-        design_matrix = vcat(second_derivative_mats...)
+        design_matrix = reduce(vcat, second_derivative_mats)
     end
 
     base_model = ExponentialFamily(family)
