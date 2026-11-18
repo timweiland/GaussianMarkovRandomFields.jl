@@ -25,8 +25,8 @@ different situation. There the package differentiates *your* Julia function, not
 its own linear algebra, and it does so through
 [DifferentiationInterface.jl](https://github.com/JuliaDiff/DifferentiationInterface.jl).
 Any DI-compatible backend can be passed as `grad_backend`; the package does not
-need a rule for it. The default picks the first of Enzyme, Mooncake, Zygote or
-ForwardDiff that is loaded, and you can override it:
+need a rule for it. The default is `AutoForwardDiff()`. For high-dimensional latent
+fields, a reverse-mode backend is faster:
 
 ```julia
 using DifferentiationInterface, Enzyme
