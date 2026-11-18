@@ -9,8 +9,6 @@ Calling one of these without the extension raises a `MethodError` with a hint on
 what to load; see `src/extension_hints.jl`.
 """
 
-function default_sparse_jacobian_backend end
-
 """
     known_pattern_jacobian_backend(f, x_probe) -> AutoSparse
 
