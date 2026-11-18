@@ -38,36 +38,13 @@ The supernodal clustering threshold `λ` (default: 1.5) controls how columns are
 
 ```@docs
 approximate_gmrf_kl
-sparse_approximate_cholesky
-sparse_approximate_cholesky!
 ```
 
-## Supporting Functions
+## Supporting functions
 
-### Point Ordering
-
-```@docs
-reverse_maximin_ordering
-reverse_maximin_ordering_and_sparsity_pattern
-sparsity_pattern_from_ordering
-```
-
-### Supernodal Clustering
-
-```@docs
-SupernodeClustering
-form_supernodes
-```
-
-The `form_supernodes` function takes the sparsity pattern and maximin ordering and creates a supernodal clustering. This is used internally when `λ !== nothing`.
-
-### Matrix Utilities
-
-```@docs
-PermutedMatrix
-```
-
-The `PermutedMatrix` wrapper enables efficient access to permuted covariance matrices without materializing the full permuted matrix in memory.
+The four stages above are implemented by internal functions (`reverse_maximin_ordering`,
+`sparsity_pattern_from_ordering`, `form_supernodes`, `sparse_approximate_cholesky` and the
+`PermutedMatrix` wrapper), documented on the [Internals](@ref) page.
 
 ## Performance Considerations
 

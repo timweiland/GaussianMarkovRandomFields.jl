@@ -641,3 +641,18 @@ using Test
         @test eltype(Hf) <: AbstractFloat
     end
 end
+
+@testset "ForwardDiff with a LinearMap precision" begin
+    # A Dual mean with a plain LinearMap precision converts the precision to Duals
+    Q = sparse(SymTridiagonal(fill(2.0, 3), fill(-0.5, 2)))
+    z = [0.1, -0.2, 0.3]
+    f(θ) = logpdf(GMRF(θ[1] .* ones(3), LinearMap(Q)), z)
+    g(θ) = logpdf(GMRF(θ[1] .* ones(3), Q), z)
+    @test ForwardDiff.gradient(f, [0.5]) ≈ ForwardDiff.gradient(g, [0.5])
+
+    # The hyperparameter inside the LinearMap precision
+    f_Q(θ) = logpdf(GMRF(zeros(3), LinearMap(θ[1] * Q)), z)
+    g_Q(θ) = logpdf(GMRF(zeros(3), θ[1] * Q), z)
+    @test ForwardDiff.gradient(f_Q, [1.5]) ≈ ForwardDiff.gradient(g_Q, [1.5])
+    @test ForwardDiff.gradient(f_Q, [1.5]) ≈ FiniteDiff.finite_difference_gradient(g_Q, [1.5]) rtol = 1.0e-6
+end

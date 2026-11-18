@@ -22,7 +22,7 @@ function _construct_forwarddiff_gmrf(mean::AbstractVector, precision::PrecisionL
     if eltype(precision) === T
         precision
     elseif precision isa LinearMaps.LinearMap
-        LinearMaps.LinearMap{T}(convert(AbstractMatrix{T}, to_matrix(precision)))
+        LinearMaps.LinearMap{T}(convert(AbstractMatrix{T}, GMRFs.to_matrix(precision)))
     else
         convert(AbstractMatrix{T}, precision)
     end

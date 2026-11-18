@@ -6,7 +6,7 @@
 function logdetcov(x::GMRF{<:ForwardDiff.Dual})
     Qinv = GMRFs.selinv(x.linsolve_cache)
     primal = GMRFs.logdet_cov(x.linsolve_cache)
-    tangent = -dot(Qinv, x.precision)
+    tangent = -dot(Qinv, GMRFs.to_matrix(x.precision))
     return ForwardDiff.Dual{ForwardDiff.tagtype(tangent)}(primal, ForwardDiff.partials(tangent)...)
 end
 

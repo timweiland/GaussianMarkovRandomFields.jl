@@ -20,19 +20,12 @@ second_derivative_matrices
 ```
 
 ### Utilities
-```@docs
-assemble_mass_matrix
-assemble_diffusion_matrix
-assemble_advection_matrix
-lump_matrix
-assemble_streamline_diffusion_matrix
-apply_soft_constraints!
-```
+
+The FEM assembly helpers (mass, diffusion and advection matrices, lumping, soft
+constraints) are internals of the FEM extension; see [Internals](@ref).
 
 ## Temporal discretization and state-space models
-```@docs
-JointSSMMatrices
-joint_ssm
-ImplicitEulerSSM
-ImplicitEulerJointSSMMatrices
-```
+
+`discretize` builds spatiotemporal GMRFs from implicit-Euler state-space models. Their
+building blocks (`joint_ssm`, `ImplicitEulerSSM`, ...) are internals; see [Internals](@ref).
+

@@ -1,6 +1,16 @@
 module GaussianMarkovRandomFieldsTests
 
 using GaussianMarkovRandomFields
+# Internals the tests exercise directly; they are not exported.
+using GaussianMarkovRandomFields: BernoulliLikelihood, BinomialLikelihood,
+    CholeskyFactorizedMap, CholeskySqrt, ConcreteSTMetadata, ConditionallyDependent,
+    ConditionallyIndependent, ExponentialFamilyLikelihood, GammaLikelihood,
+    ImplicitEulerMetadata, LinearMapWithSqrt, NegBinLikelihood, NormalLikelihood,
+    ObservationIndependence, OuterProductMap, PermutedMatrix, PoissonLikelihood,
+    SSMBidiagonalMap, StudentTLikelihood, SymmetricBlockTridiagonalMap, ZeroMap,
+    apply_invlink, apply_link, counts, dimension, exposure, linmap_sqrt,
+    observation_independence, range_to_κ, reverse_maximin_ordering, smoothness_to_ν,
+    sparse_approximate_cholesky, sparse_approximate_cholesky!, to_matrix, trials
 # Load FEM weakdeps so the GaussianMarkovRandomFieldsFEM extension and the
 # GaussianMarkovRandomFieldsLibGEOS extension are active during testing.
 import Ferrite, FerriteGmsh, Gmsh, LibGEOS
