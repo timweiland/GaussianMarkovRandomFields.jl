@@ -1,6 +1,6 @@
 function linmap_sqrt(A::LinearMap)
     if issymmetric(A) && isposdef(A)
-        return LinearMap(cholesky(to_matrix(A)))
+        return CholeskySqrt(cholesky(Symmetric(to_matrix(A))))
     end
     throw(ArgumentError("No square root available for $A"))
 end
