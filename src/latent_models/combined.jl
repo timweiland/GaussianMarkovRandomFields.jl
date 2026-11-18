@@ -45,8 +45,8 @@ bym = CombinedModel([besag, iid], alg=LDLtFactorization())
 gmrf = bym(τ_besag=1.0, τ_iid=2.0)
 ```
 """
-struct CombinedModel{Alg} <: LatentModel
-    components::Vector{<:LatentModel}
+struct CombinedModel{Alg, V <: AbstractVector{<:LatentModel}} <: LatentModel
+    components::V
     component_sizes::Vector{Int}
     total_size::Int
     alg::Alg
@@ -58,7 +58,7 @@ struct CombinedModel{Alg} <: LatentModel
         sizes = [length(comp) for comp in components]
         total = sum(sizes)
 
-        return new{Alg}(components, sizes, total, alg)
+        return new{Alg, typeof(components)}(components, sizes, total, alg)
     end
 end
 

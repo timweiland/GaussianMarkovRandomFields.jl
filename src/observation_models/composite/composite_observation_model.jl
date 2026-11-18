@@ -80,15 +80,15 @@ contributions from all component likelihoods.
 - `hyperparameter_names::Tuple{Vararg{Symbol}}`: Outer hyperparameter names that were
   used to materialize this likelihood (matches `hyperparameters` on the source model).
 """
-struct CompositeLikelihood{T <: Tuple} <: ObservationLikelihood
+struct CompositeLikelihood{T <: Tuple, N <: Tuple{Vararg{Symbol}}} <: ObservationLikelihood
     components::T
-    hyperparameter_names::Tuple{Vararg{Symbol}}
+    hyperparameter_names::N
 
     function CompositeLikelihood(
             components::T,
             hyperparameter_names::Tuple{Vararg{Symbol}} = (),
         ) where {T <: Tuple}
-        return new{T}(components, hyperparameter_names)
+        return new{T, typeof(hyperparameter_names)}(components, hyperparameter_names)
     end
 end
 

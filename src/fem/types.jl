@@ -76,15 +76,28 @@ The advection velocity `γ` is either a constant vector or a function of the
 spatial coordinate returning a velocity vector (for spatially varying flows,
 e.g. tangential velocity fields on embedded manifolds).
 """
-struct AdvectionDiffusionSPDE{D} <: SPDE
-    κ::Real
-    α::Rational
-    H::AbstractMatrix
-    γ::Union{AbstractVector, Function}
-    c::Real
-    τ::Real
-    spatial_spde::SPDE
-    initial_spde::SPDE
+struct AdvectionDiffusionSPDE{
+        D, T <: Real, A <: Rational, M <: AbstractMatrix, V <: Union{AbstractVector, Function},
+        S <: SPDE, S₀ <: SPDE,
+    } <: SPDE
+    κ::T
+    α::A
+    H::M
+    γ::V
+    c::T
+    τ::T
+    spatial_spde::S
+    initial_spde::S₀
+end
+
+function AdvectionDiffusionSPDE{D}(
+        κ::Real, α::Rational, H::AbstractMatrix, γ::Union{AbstractVector, Function},
+        c::Real, τ::Real, spatial_spde::SPDE, initial_spde::SPDE,
+    ) where {D}
+    κ, c, τ = promote(κ, c, τ)
+    return AdvectionDiffusionSPDE{
+        D, typeof(κ), typeof(α), typeof(H), typeof(γ), typeof(spatial_spde), typeof(initial_spde),
+    }(κ, α, H, γ, c, τ, spatial_spde, initial_spde)
 end
 
 # --- State-space models ------------------------------------------------------
