@@ -134,44 +134,30 @@ end
 
 function precision_matrix(model::CombinedModel; kwargs...)
     # Build block diagonal precision matrix
-    component_matrices = []
-
-    for (i, component) in enumerate(model.components)
-        comp_params = _extract_component_params(component, i, model, kwargs...)
-        Q_comp = precision_matrix(component; comp_params...)
-        push!(component_matrices, Q_comp)
-    end
-
+    component_matrices = [
+        precision_matrix(component; _extract_component_params(component, i, model, kwargs...)...)
+            for (i, component) in enumerate(model.components)
+    ]
     return _blockdiag(component_matrices...)
 end
 
 function mean(model::CombinedModel; kwargs...)
     # Build stacked mean vector
-    component_means = []
-
-    for (i, component) in enumerate(model.components)
-        comp_params = _extract_component_params(component, i, model, kwargs...)
-        μ_comp = mean(component; comp_params...)
-        push!(component_means, μ_comp)
-    end
-
-    return vcat(component_means...)
+    component_means = [
+        mean(component; _extract_component_params(component, i, model, kwargs...)...)
+            for (i, component) in enumerate(model.components)
+    ]
+    return reduce(vcat, component_means)
 end
 
 function constraints(model::CombinedModel; kwargs...)
     # Collect constraints from all components
-    component_constraints = []
-    constrained_components = Int[]
-
-    for (i, component) in enumerate(model.components)
-        comp_params = _extract_component_params(component, i, model, kwargs...)
-        constraint_info = constraints(component; comp_params...)
-
-        if constraint_info !== nothing
-            push!(component_constraints, constraint_info)
-            push!(constrained_components, i)
-        end
-    end
+    constraint_infos = [
+        constraints(component; _extract_component_params(component, i, model, kwargs...)...)
+            for (i, component) in enumerate(model.components)
+    ]
+    constrained_components = findall(!isnothing, constraint_infos)
+    component_constraints = constraint_infos[constrained_components]
 
     # If no constraints, return nothing
     isempty(component_constraints) && return nothing

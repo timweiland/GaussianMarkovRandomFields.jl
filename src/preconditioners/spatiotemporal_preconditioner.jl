@@ -29,8 +29,9 @@ function _extract_blocks(I::Vector{Int}, J::Vector{Int}, V::Vector, block_size)
     J_off_diag_block = Int[]
     V_off_diag_block = eltype(V)[]  # Keep the element type of V for the new values
 
-    diag_blocks = []
-    off_diag_blocks = []
+    BlockEntries = Tuple{Vector{Int}, Vector{Int}, Vector{eltype(V)}}
+    diag_blocks = BlockEntries[]
+    off_diag_blocks = BlockEntries[]
 
     cur_diag_block_range = 1:block_size
     cur_off_diag_block_range = (1 - block_size):0

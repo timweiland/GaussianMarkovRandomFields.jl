@@ -172,8 +172,8 @@ function constraints(model::BYM2Model; kwargs...)
     # Build combined constraint matrix for 2n-dimensional space
     # Spatial component: indices 1:n
     # Unstructured component: indices (n+1):2n
-    A_blocks = []
-    e_blocks = []
+    A_blocks = Matrix{Float64}[]
+    e_blocks = Vector{Float64}[]
 
     if besag_constraints !== nothing
         A_besag, e_besag = besag_constraints
@@ -196,8 +196,8 @@ function constraints(model::BYM2Model; kwargs...)
     end
 
     # Combine all constraints
-    A_combined = vcat(A_blocks...)
-    e_combined = vcat(e_blocks...)
+    A_combined = reduce(vcat, A_blocks)
+    e_combined = reduce(vcat, e_blocks)
 
     return (A_combined, e_combined)
 end
