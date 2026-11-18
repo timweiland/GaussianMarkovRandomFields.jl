@@ -23,7 +23,7 @@ function _primal_precision(precision::Symmetric{<:ForwardDiff.Dual, <:SparseMatr
 end
 
 function _primal_precision(precision::LinearMaps.LinearMap)
-    return ForwardDiff.value.(to_matrix(precision))
+    return ForwardDiff.value.(GMRFs.to_matrix(precision))
 end
 
 # Extract primal values from observation likelihoods that may contain Dual hyperparameters.
