@@ -11,7 +11,9 @@
 # - A BYM latent field = Besag (structured spatial) + IID (unstructured spatial).
 # - Fixed effects (intercept + one covariate).
 #
-# In symbols, for district $i$ with observed count $y_i$ and expected count $E_i$,
+# In symbols, for district $i$ with observed count $y_i$, expected count $E_i$ and
+# covariate $\mathrm{AFF}_i$ (the fraction of the population working in agriculture,
+# fishing or forestry),
 # ```math
 # y_i \mid \eta_i \sim \mathrm{Poisson}\big(E_i \exp(\eta_i)\big), \quad
 # \eta_i = \beta_0 + \beta_1 \mathrm{AFF}_i + u_i + v_i,
@@ -85,11 +87,12 @@ id_to_node = Dict(ids[i] => i for i in eachindex(ids))
 W
 
 # ## Model in one picture
-# The (log) relative risk per district is modelled as
-#
-#   log RRᵢ = β₀ + β_aff · AFFᵢ + uᵢ (Besag) + vᵢ (IID)
-#
-# and counts as yᵢ ~ Poisson(Eᵢ · RRᵢ), where Eᵢ is the expected count (offset).
+# This is the model from the introduction. The log relative risk per district is
+# ```math
+# \log \mathrm{RR}_i = \eta_i = \beta_0 + \beta_1 \mathrm{AFF}_i + u_i + v_i,
+# ```
+# with the Besag effect $u_i$ and the IID effect $v_i$, and the counts are
+# $y_i \sim \mathrm{Poisson}(E_i \, \mathrm{RR}_i)$ with the expected count $E_i$ as offset.
 #
 # In code, we specify:
 # - `besag = Besag(W; id_to_node = Dict(code => i))` for the structured effect.
@@ -106,8 +109,8 @@ comp = build_formula_components(f, df; family = Poisson, exposure = :E)
 # ### Alternative: BYM2 model with improved parameterization
 # The BYM2 model (Riebler et al. 2016) offers an improved reparameterization of BYM
 # with more interpretable hyperparameters:
-# - τ: overall precision (total variance = 1/τ)
-# - φ ∈ (0,1): mixing parameter (proportion of variance that is unstructured)
+# - $\tau$: overall precision (total variance $1/\tau$)
+# - $\phi \in (0, 1)$: mixing parameter (proportion of variance that is unstructured)
 #
 # BYM2 is often preferred because:
 # 1. Easier to set informative priors (single precision scale)
@@ -126,13 +129,15 @@ bym2_constrained = BYM2(
 f_bym2 = @formula(y ~ 1 + aff + bym2_constrained(code))
 comp_bym2 = build_formula_components(f_bym2, df; family = Poisson, exposure = :E)
 
-# With BYM2, you specify τ (overall precision) and φ (mixing: 0=pure spatial, 1=pure IID):
+# With BYM2, you specify $\tau$ (overall precision) and $\phi$ (mixing: $\phi = 0$ is
+# purely spatial, $\phi = 1$ purely IID):
 lik_bym2 = comp_bym2.obs_model(comp_bym2.y)
 prior_bym2 = comp_bym2.combined_model(; τ_bym2 = 2.0, φ_bym2 = 0.4)
 post_bym2 = gaussian_approximation(prior_bym2, lik_bym2)
 
-# The BYM2 effects live in a 2n-dimensional space: [u* (spatial); v* (IID)]
-# In the linear predictor, they're added: η = β₀ + β_aff·AFF + u*ᵢ + v*ᵢ
+# The BYM2 effects live in a $2n$-dimensional space, the spatial part $u^*$ stacked on
+# the IID part $v^*$. In the linear predictor they are added:
+# $\eta_i = \beta_0 + \beta_1 \mathrm{AFF}_i + u^*_i + v^*_i$.
 η_bym2 = comp_bym2.A * mean(post_bym2)
 RR_bym2 = exp.(η_bym2)
 (minimum(RR_bym2), median(RR_bym2), maximum(RR_bym2))
@@ -150,7 +155,7 @@ lik = comp.obs_model(comp.y)
 prior = comp.combined_model(; τ_besag = 4.1, τ_iid = 3.9)
 post = gaussian_approximation(prior, lik)
 
-# Linear predictor on the observation scale (η = log RR) and relative risk
+# Linear predictor on the observation scale ($\eta = \log \mathrm{RR}$) and relative risk
 η = comp.A * mean(post)
 RR = exp.(η)
 (minimum(RR), median(RR), maximum(RR))
@@ -194,10 +199,12 @@ plt
 
 # ## Fixed effects summary (β and 95 CI)
 # Interpreting fixed effects is easy in a log‑link Poisson GLM:
-# - exp(β₀) is the baseline relative risk when AFF=0 and random effects are zero.
-# - exp(β_aff) is the multiplicative change in RR per unit increase in AFF
-#   (here AFF is a fraction; e.g. +0.10 = +10 percentage points). Larger positive
-#   β_aff means higher RR in districts with greater AFF.
+# - $\exp(\beta_0)$ is the baseline relative risk when $\mathrm{AFF} = 0$ and the random
+#   effects are zero.
+# - $\exp(\beta_1)$ is the multiplicative change in relative risk per unit increase in
+#   $\mathrm{AFF}$ (here $\mathrm{AFF}$ is a fraction, so an increase of 0.10 is 10
+#   percentage points). A larger positive $\beta_1$ means a higher relative risk in
+#   districts with greater $\mathrm{AFF}$.
 #
 # The code below simply extracts the fixed‑effects block and reports estimates and
 # approximate 95% intervals.
