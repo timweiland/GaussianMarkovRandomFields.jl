@@ -1,3 +1,7 @@
+```@meta
+CurrentModule = GaussianMarkovRandomFields
+```
+
 # Observation Models
 
 Observation models define the relationship between observations `y` and the latent GMRF field `x`, typically through likelihood functions. They enable Bayesian inference by connecting your data to the underlying Gaussian process through flexible probabilistic models.
@@ -68,10 +72,10 @@ Pointwise log-likelihoods are only well-defined when observations are **conditio
 You can check the independence structure using the trait system:
 
 ```julia
-obs_independence = observation_independence(obs_lik)
+obs_independence = GaussianMarkovRandomFields.observation_independence(obs_lik)
 
 # All current models return ConditionallyIndependent()
-obs_independence isa ConditionallyIndependent  # true
+obs_independence isa GaussianMarkovRandomFields.ConditionallyIndependent  # true
 ```
 
 Future extensions might add models with `ConditionallyDependent` observations (e.g., multivariate normal with correlated noise), which would not support `pointwise_loglik`.
@@ -339,8 +343,8 @@ poisson_model = ExponentialFamily(Poisson)  # LogLink by default
 obs_lik = poisson_model(y)
 
 # Access components
-counts(y)     # [5, 12, 8, 3]
-exposure(y)   # [100.0, 150.0, 120.0, 80.0]
+GaussianMarkovRandomFields.counts(y)     # [5, 12, 8, 3]
+GaussianMarkovRandomFields.exposure(y)   # [100.0, 150.0, 120.0, 80.0]
 y[1]          # (5, 100.0) - tuple access
 ```
 
@@ -449,8 +453,8 @@ binomial_model = ExponentialFamily(Binomial)
 obs_lik = binomial_model(y)
 
 # Access components
-successes(y)  # [3, 1, 4]
-trials(y)     # [5, 8, 6]
+GaussianMarkovRandomFields.successes(y)  # [3, 1, 4]
+GaussianMarkovRandomFields.trials(y)     # [5, 8, 6]
 y[1]          # (3, 5) - tuple access
 ```
 
@@ -548,14 +552,6 @@ observation_independence
 ```@docs
 ExponentialFamily
 conditional_distribution
-ExponentialFamilyLikelihood
-NormalLikelihood
-PoissonLikelihood
-BernoulliLikelihood
-BinomialLikelihood
-NegBinLikelihood
-GammaLikelihood
-StudentTLikelihood
 ```
 
 ### Link Functions
@@ -565,8 +561,6 @@ LinkFunction
 IdentityLink
 LogLink
 LogitLink
-apply_link
-apply_invlink
 ```
 
 ### Custom AutoDiff Models

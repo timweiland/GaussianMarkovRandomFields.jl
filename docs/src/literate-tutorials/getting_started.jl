@@ -47,7 +47,7 @@ plot(
 # with its immediate neighbours -- so much so that the package stores it in a
 # dedicated tridiagonal type rather than as a general sparse matrix:
 
-Q = to_matrix(precision_map(prior))
+Q = precision_matrix(prior)
 typeof(Q)
 
 # Either way, only a vanishing fraction of the entries are nonzero:

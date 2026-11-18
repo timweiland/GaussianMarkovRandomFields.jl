@@ -43,40 +43,31 @@ export IID, RandomWalk, AR1, AR, Besag, BYM2, Separable, Matern, build_formula_c
 
 # Observation models and likelihoods
 export ObservationModel, ObservationLikelihood, latent_dimension, conditional_distribution,
-    loglik, loggrad, loghessian, pointwise_loglik, pointwise_loglik!,
-    ObservationIndependence, ConditionallyIndependent, ConditionallyDependent,
-    observation_independence, ZeroLikelihood, AutoDiffObservationModel, AutoDiffLikelihood,
-    LinearlyTransformedObservationModel, LinearlyTransformedLikelihood,
-    ParameterizedMatrix, ParameterizedOffset, NonlinearLeastSquaresModel,
-    NonlinearLeastSquaresLikelihood, StructuredObservationModel, ObsFactorGroup,
-    CompositeObservations, CompositeObservationModel, CompositeLikelihood
+    loglik, loggrad, loghessian, pointwise_loglik, pointwise_loglik!, ZeroLikelihood,
+    AutoDiffObservationModel, AutoDiffLikelihood, LinearlyTransformedObservationModel,
+    LinearlyTransformedLikelihood, ParameterizedMatrix, ParameterizedOffset,
+    NonlinearLeastSquaresModel, NonlinearLeastSquaresLikelihood,
+    StructuredObservationModel, ObsFactorGroup, CompositeObservations,
+    CompositeObservationModel, CompositeLikelihood
 
 # Exponential families
-export ExponentialFamily, ExponentialFamilyLikelihood, NormalLikelihood, PoissonLikelihood,
-    BernoulliLikelihood, BinomialLikelihood, NegBinLikelihood, GammaLikelihood,
-    StudentTLikelihood, LinkFunction, IdentityLink, LogLink, LogitLink, apply_link,
-    apply_invlink, BinomialObservations, successes, trials, PoissonObservations,
-    NegativeBinomialObservations, counts, exposure
+export ExponentialFamily, LinkFunction, IdentityLink, LogLink, LogitLink,
+    BinomialObservations, PoissonObservations, NegativeBinomialObservations
 
 # SPDEs and SPDE-based models
 export SPDE, ndim, intrinsic_dim, discretize, MaternSPDE, AdvectionDiffusionSPDE,
-    MaternModel, BarrierModel, product_matern, range_to_κ, smoothness_to_ν,
-    barrier_triangles
+    MaternModel, BarrierModel, barrier_triangles
 
 # FEM discretizations and meshes
 export FEMDiscretization, evaluation_matrix, node_selection_matrix, derivative_matrices,
-    second_derivative_matrices, assemble_mass_matrix, assemble_diffusion_matrix,
-    assemble_advection_matrix, assemble_streamline_diffusion_matrix, lump_matrix,
-    apply_soft_constraints!, assemble_C_G_matrices, generate_mesh,
-    create_inflated_rectangle, PointEvaluationObsModel, PointDerivativeObsModel,
-    PointSecondDerivativeObsModel
+    second_derivative_matrices, generate_mesh, create_inflated_rectangle,
+    PointEvaluationObsModel, PointDerivativeObsModel, PointSecondDerivativeObsModel
 
 # Spatiotemporal GMRFs
 export AbstractSpatiotemporalGMRF, N_t, time_means, time_vars, time_stds, time_rands,
     discretization_at_time, spatial_to_spatiotemporal,
-    kronecker_product_spatiotemporal_model, joint_ssm, JointSSMMatrices, ImplicitEulerSSM,
-    ImplicitEulerJointSSMMatrices, ImplicitEulerMetadata, ConcreteSTMetadata,
-    ConstantMeshSTGMRF, ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMeshSTGMRF
+    kronecker_product_spatiotemporal_model, ConstantMeshSTGMRF,
+    ImplicitEulerConstantMeshSTGMRF, ConcreteConstantMeshSTGMRF
 
 # Spatial utilities
 export contiguity_adjacency, generate_car_model
@@ -86,15 +77,10 @@ export selinv, backward_solve, logdet_cov, AbstractVarianceStrategy, RBMCStrateg
     BlockRBMCStrategy
 
 # Workspaces
-export GMRFWorkspace, WorkspaceGMRF, ConstraintInfo, WorkspaceBackend, CHOLMODBackend,
-    CliqueTreesBackend, PinDenseColumns, ordering_permutation, update_precision!,
-    update_precision_values!, ensure_numeric!, ensure_selinv!, dimension,
+export GMRFWorkspace, WorkspaceGMRF, CHOLMODBackend, CliqueTreesBackend, PinDenseColumns,
+    ordering_permutation, update_precision!, update_precision_values!,
     AbstractLatentWorkspace, AbstractLatentWorkspacePool, make_workspace,
     make_workspace_pool, WorkspacePool, checkout, checkin, with_workspace
-
-# Linear maps
-export CholeskyFactorizedMap, CholeskySqrt, LinearMapWithSqrt, OuterProductMap,
-    SSMBidiagonalMap, SymmetricBlockTridiagonalMap, ZeroMap, linmap_sqrt, to_matrix
 
 # Preconditioners
 export AbstractPreconditioner, FullCholeskyPreconditioner, BlockJacobiPreconditioner,
@@ -102,9 +88,7 @@ export AbstractPreconditioner, FullCholeskyPreconditioner, BlockJacobiPreconditi
     TridiagSymmetricBlockGaussSeidelPreconditioner, temporal_block_gauss_seidel
 
 # Sparse approximate Cholesky (KL-optimal)
-export approximate_gmrf_kl, sparse_approximate_cholesky, sparse_approximate_cholesky!,
-    reverse_maximin_ordering, reverse_maximin_ordering_and_sparsity_pattern,
-    sparsity_pattern_from_ordering, form_supernodes, SupernodeClustering, PermutedMatrix
+export approximate_gmrf_kl
 
 # Graphical lasso
 export graphical_lasso
@@ -115,6 +99,14 @@ export graphical_lasso
 # Plotting (Makie extension)
 export gmrf_fem_1d_plot, gmrf_fem_1d_plot!, gmrf_fem_1d_spatiotemporal_plot,
     gmrf_fem_1d_spatiotemporal_plot!
+
+# Public but not exported: the interface for writing custom observation likelihoods, and
+# observation accessors whose generic names would clash with other packages (e.g. StatsBase).
+# (`public` is a keyword from Julia 1.11 on; on 1.10 these are simply not exported.)
+@static if VERSION >= v"1.11.0-DEV.469"
+    eval(Meta.parse("public ObservationIndependence, ConditionallyIndependent, ConditionallyDependent, observation_independence"))
+    eval(Meta.parse("public counts, exposure, successes, trials"))
+end
 
 include("typedefs.jl")
 include("utils/utils.jl")

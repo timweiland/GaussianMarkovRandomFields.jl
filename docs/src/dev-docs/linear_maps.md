@@ -1,5 +1,9 @@
 # Linear Maps
 
+```@meta
+CurrentModule = GaussianMarkovRandomFields
+```
+
 The construction of GMRFs involves various kinds of structured matrices.
 These structures may be leveraged in downstream computations to save compute
 and memory.

@@ -53,8 +53,6 @@ can be ignored until then.
 - [Preconditioners](preconditioners.md) — preconditioning for iterative solvers.
 - [Workspaces](workspaces.md) — reusing a symbolic factorization across many
   precision matrices with the same sparsity pattern.
-- [Linear maps](linear_maps.md) — the structured matrix types used to keep
-  precision matrices cheap.
 
 ## Further topics
 

@@ -68,7 +68,6 @@ makedocs(
                 "Solvers" => "reference/solvers.md",
                 "Preconditioners" => "reference/preconditioners.md",
                 "Workspaces" => "reference/workspaces.md",
-                "Linear maps" => "reference/linear_maps.md",
             ],
             "Further topics" => [
                 "KL Approximations" => "reference/kl_approximation.md",
@@ -82,6 +81,8 @@ makedocs(
             "Solvers" => "dev-docs/solvers.md",
             "SPDEs" => "dev-docs/spdes.md",
             "Discretizations" => "dev-docs/discretizations.md",
+            "Linear maps" => "dev-docs/linear_maps.md",
+            "Internals" => "dev-docs/internals.md",
         ],
     ],
     format = DocumenterVitepress.MarkdownVitepress(

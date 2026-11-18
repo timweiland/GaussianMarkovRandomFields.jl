@@ -1,3 +1,7 @@
+```@meta
+CurrentModule = GaussianMarkovRandomFields
+```
+
 # Workspaces
 
 Workspaces let you reuse a symbolic Cholesky factorization across many
@@ -142,9 +146,6 @@ make_workspace_pool
 GMRFWorkspace
 update_precision!
 update_precision_values!
-ensure_numeric!
-ensure_selinv!
-dimension
 ```
 
 The low-level linear-algebra operations `workspace_solve`,
@@ -157,7 +158,6 @@ returns only the diagonal of `selinv(ws)`).
 
 ```@docs
 WorkspaceGMRF
-ConstraintInfo
 ```
 
 ### WorkspacePool
@@ -172,7 +172,6 @@ with_workspace
 ### Backends
 
 ```@docs
-WorkspaceBackend
 CHOLMODBackend
 CliqueTreesBackend
 ```
