@@ -16,4 +16,15 @@ using GaussianMarkovRandomFields, LinearAlgebra, LinearMaps, SparseArrays
         @test gram(linmap_sqrt(kron(LinearMap(A), LinearMap(B)))) ≈ kron(A, B)
     end
 
+    @testset "to_matrix" begin
+        @test Matrix(to_matrix(LinearMap(2.5I, 3))) ≈ 2.5 * I(3)
+        @test Matrix(to_matrix(kron(LinearMap(A), LinearMap(B)))) ≈ kron(A, B)
+    end
+
+    @testset "symmetrize" begin
+        S = SymTridiagonal([2.0, 2.0], [1.0])
+        @test GaussianMarkovRandomFields.symmetrize(S) === S
+        T = Tridiagonal([1.0], [2.0, 2.0], [1.0])
+        @test GaussianMarkovRandomFields.symmetrize(T) == SymTridiagonal([2.0, 2.0], [1.0])
+    end
 end

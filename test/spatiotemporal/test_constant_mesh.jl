@@ -102,3 +102,15 @@ end
     @test occursin("spatial × 3 time", sprint(show, st.metadata))
     @test occursin("Time points: 3", repr(MIME"text/plain"(), st.metadata))
 end
+
+@testset "kronecker_product_spatiotemporal_model" begin
+    disc = FEMDiscretization(generate_grid(Line, (4,)), Lagrange{RefLine, 1}(), QuadratureRule{RefLine}(2))
+    n_s = ndofs(disc)
+    Q_t = sparse(SymTridiagonal(fill(2.0, 3), fill(-0.5, 2)))
+    Q_s = sparse(2.0I, n_s, n_s)
+    st = kronecker_product_spatiotemporal_model(Q_t, Q_s, disc)
+    @test st isa ConcreteConstantMeshSTGMRF
+    @test GaussianMarkovRandomFields.N_t(st) == 3
+    @test Matrix(precision_matrix(st)) ≈ kron(Matrix(Q_t), Matrix(Q_s))
+    @test mean(st) == zeros(3 * n_s)
+end
