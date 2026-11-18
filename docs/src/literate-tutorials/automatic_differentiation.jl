@@ -23,8 +23,9 @@
 #     linear algebra. When you supply your own log-likelihood to
 #     `AutoDiffObservationModel`, the package differentiates your function
 #     through [DifferentiationInterface.jl](https://github.com/JuliaDiff/DifferentiationInterface.jl)
-#     instead, and any DI-compatible backend works there -- no rule needed.
-#     If one of these backends breaks for your use case, please open an issue.
+#     instead, so any DI-compatible backend can be passed there -- no rule needed.
+#     Whether a given backend can differentiate your function then depends on that
+#     backend and on your code rather than on this package.
 
 # ## Basic Setup
 #
@@ -32,7 +33,7 @@
 
 using GaussianMarkovRandomFields
 using DifferentiationInterface
-using Zygote, Enzyme
+using ForwardDiff, Zygote, Enzyme
 using LinearAlgebra
 using LinearSolve
 using Distributions
@@ -74,12 +75,13 @@ println("Generated $n observations with τ = $τ_true, μ = $μ_true")
 # ## Computing Gradients with DifferentiationInterface
 #
 # Now we'll define an objective function that maps hyperparameters to a scalar loss,
-# and compute its gradient using both Zygote and Enzyme.
+# and compute its gradient with ForwardDiff. For comparison, we also compute it with
+# the reverse-mode backends Zygote and Enzyme.
 #
 # The objective function takes hyperparameters [log_τ, log_μ], builds a GMRF prior,
 # computes a Gaussian approximation to the posterior, and returns the negative log
 # marginal likelihood.
-function objective(θ::Vector{Float64}, y::PoissonObservations, n::Int)
+function objective(θ::AbstractVector, y::PoissonObservations, n::Int)
     log_τ, log_μ = θ
     prior = build_prior(log_τ, log_μ, n)
     obs_model = ExponentialFamily(Poisson)
@@ -91,6 +93,15 @@ end
 
 # Initialize hyperparameters (perturbed from truth)
 θ_init = [log(τ_true) + 0.2, log(μ_true) - 0.3]
+
+# Compute gradient with ForwardDiff
+grad_forwarddiff = DifferentiationInterface.gradient(
+    θ -> objective(θ, y_obs, n),
+    AutoForwardDiff(),
+    θ_init
+)
+
+println("ForwardDiff gradient computed, norm: $(norm(grad_forwarddiff))")
 
 # Compute gradient with Zygote
 backend_zygote = AutoZygote()
@@ -113,7 +124,10 @@ grad_enzyme = DifferentiationInterface.gradient(
 println("Enzyme gradient computed, norm: $(norm(grad_enzyme))")
 
 # Verify gradients match
-max_diff = maximum(abs.(grad_zygote - grad_enzyme))
+max_diff = max(
+    maximum(abs.(grad_zygote - grad_forwarddiff)),
+    maximum(abs.(grad_enzyme - grad_forwarddiff))
+)
 println("Maximum difference between backends: $(max_diff)")
 
 # ## Optimization with Optim.jl
@@ -124,12 +138,12 @@ println("Maximum difference between backends: $(max_diff)")
 
 using Optim
 
-# Optimize using L-BFGS with Zygote-based autodiff
+# Optimize using L-BFGS with ForwardDiff-based autodiff
 result = optimize(
     θ -> objective(θ, y_obs, n),
     θ_init,
     LBFGS(; alphaguess = Optim.LineSearches.InitialStatic(; alpha = 0.001)),
-    autodiff = AutoZygote()
+    autodiff = AutoForwardDiff()
 )
 
 # Extract optimal parameters
@@ -158,17 +172,16 @@ println("  Converged: $(Optim.converged(result))")
 # one handles varies, and a few combinations need a recent Julia version. The
 # [Automatic Differentiation Reference](@ref) has the support matrix, checked
 # against finite differences — worth a look before settling on a backend for a
-# long-running fit. For the model in this tutorial, Zygote and Enzyme agree, so
-# the choice comes down to performance and ease of use.
+# long-running fit. For the model in this tutorial, all three backends agree.
 #
-# Zygote has low pre-compilation times and works in most cases.
-# By contrast, Enzyme incurs large pre-compilation overheads and may not work in
-# some situations.
-# The upside is that once pre-compilation is complete, Enzyme is generally much
-# faster than Zygote.
+# In practice, our recommendation is: start with ForwardDiff. It supports every
+# GMRF type and operation, and with a handful of hyperparameters forward mode is
+# also the right shape for the problem. Switch to a reverse-mode backend only when
+# the number of inputs grows large, after checking the support matrix.
 #
-# In practice, our recommendation is:
-# Start with Zygote for prototyping. For large-scale problems, switch to Enzyme.
+# Among the reverse-mode backends, Zygote has low compilation times and works in
+# most cases. Enzyme incurs large compilation overheads and may not work in some
+# situations, but once compiled it is generally much faster than Zygote.
 #
 # ## Solver Considerations
 #
@@ -194,11 +207,10 @@ x_cholmod = GMRF(zeros(10), Q_sparse, LinearSolve.CHOLMODFactorization())
 
 # ## Conclusion
 #
-# GaussianMarkovRandomFields.jl provides custom chain rules for common GMRF
-# workflows.
-# As a user, you should not have to worry about the details of this.
-# AD should "just work".
-# If it doesn't, please open an issue on GitHub.
+# GaussianMarkovRandomFields.jl provides custom rules for common GMRF workflows.
+# For the combinations in the support matrix, you should not have to worry about
+# the details of these rules. If a combination you need is missing or gives wrong
+# results, please open an issue on GitHub.
 # For Enzyme, as mentioned above, pay extra attention to type stability.
 #
 # For more details on AD implementation and advanced usage, see the
