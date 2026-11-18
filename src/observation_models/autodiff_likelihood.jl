@@ -144,22 +144,7 @@ struct AutoDiffObservationModel{F, B, SB, H, PF} <: GaussianMarkovRandomFields.O
     diagonal_hessian_safe::Bool
 end
 
-const AD_PREFERRED_ORDER = (DI.AutoEnzyme(), DI.AutoMooncake(), DI.AutoZygote(), DI.AutoForwardDiff())
-function default_grad_backend()
-    ad_idx = findfirst(DI.check_available, AD_PREFERRED_ORDER)
-    if ad_idx === nothing
-        # Unreachable from the test suite, which always loads an AD backend.
-        # COV_EXCL_START
-        throw(
-            ArgumentError(
-                "None of the default AD backends are available."
-                    * " Please specify your own grad_backend."
-            )
-        )
-        # COV_EXCL_STOP
-    end
-    return AD_PREFERRED_ORDER[ad_idx]
-end
+default_grad_backend() = DI.AutoForwardDiff()
 
 """
     AutoDiffObservationModel(loglik_func; n_latent, hyperparams=(), grad_backend, hessian_backend, pointwise_loglik_func=nothing, diagonal_hessian_safe=false)
@@ -168,6 +153,9 @@ Construct an `AutoDiffObservationModel`.
 
 `loglik_func` should have signature `(x; y, hyperparam_kwargs...) -> Real`.
 `hyperparams` is a tuple of hyperparameter names (`Symbol`s) the model expects.
+
+`grad_backend` defaults to `AutoForwardDiff()`. For high-dimensional latent fields, a
+reverse-mode backend such as `AutoMooncake()` or `AutoEnzyme()` is faster.
 
 ## Differentiating through `y` or the hyperparameters
 

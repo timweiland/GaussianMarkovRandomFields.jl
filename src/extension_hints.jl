@@ -57,7 +57,6 @@ const _EXTENSION_REQUIREMENTS = Dict{Any, Tuple{Tuple{Vararg{Symbol}}, String}}(
     # Polygon contiguity
     contiguity_adjacency => _ADJACENCY_EXTENSIONS,
     # Sparse AD backends
-    default_sparse_jacobian_backend => _SPARSE_AD_EXTENSION,
     known_pattern_jacobian_backend => _SPARSE_AD_EXTENSION,
     known_pattern_hessian_backend => _SPARSE_AD_EXTENSION,
     residual_curvature => _SPARSE_AD_EXTENSION,

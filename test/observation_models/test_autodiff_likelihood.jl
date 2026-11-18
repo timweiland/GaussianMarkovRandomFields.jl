@@ -270,3 +270,9 @@ end
     @test occursin("n_latent=3", sprint(show, model))
     @test startswith(sprint(show, model([1.0, 2.0]; σ = 1.0)), "AutoDiffLikelihood(")
 end
+
+@testset "Default AD backend" begin
+    f(x; σ = 1.0) = -sum(abs2, x) / (2σ^2)
+    @test AutoDiffObservationModel(f; n_latent = 2, hyperparams = (:σ,)).grad_backend isa DI.AutoForwardDiff
+    @test AutoDiffLatentPrior(f; n = 2, hyperparams = (:σ,)).grad_backend isa DI.AutoForwardDiff
+end
