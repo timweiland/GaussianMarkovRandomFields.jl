@@ -123,7 +123,8 @@ accuracy
 
 # ## Visualization
 # A simple heatmap of predicted probabilities with all observed points overlaid.
-# Redder areas indicate higher probability of class "hickory".
+# Brighter areas indicate higher probability of class "hickory". The two classes
+# use different marker shapes as well as colours.
 xmin, xmax = extrema(X[:, 1])
 ymin, ymax = extrema(X[:, 2])
 nx, ny = 100, 100
@@ -143,14 +144,14 @@ probs = reshape(mean(pred_grid), (nx, ny))
 plt = heatmap(
     xs, ys, probs; xlabel = "x", ylabel = "y",
     title = "P(is_hickory=1) — acc=$(round(accuracy, digits = 3))",
-    colorbar = true, legend = :topright
+    color = :viridis, colorbar = true, legend = :topright
 )
 
 class0 = findall(==(0), y)
 class1 = findall(==(1), y)
 
-scatter!(plt, X[class1, 1], X[class1, 2]; m = :circle, ms = 1.5, c = :tomato, label = "hickory")
-scatter!(plt, X[class0, 1], X[class0, 2]; m = :circle, ms = 1.5, c = :royalblue, label = "other")
+scatter!(plt, X[class1, 1], X[class1, 2]; m = :utriangle, ms = 3, c = :tomato, label = "hickory")
+scatter!(plt, X[class0, 1], X[class0, 2]; m = :circle, ms = 2, c = :white, label = "other")
 plt
 
 # ## Notes and tips
