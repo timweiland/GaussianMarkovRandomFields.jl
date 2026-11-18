@@ -50,10 +50,12 @@ kilometres away. Encoding that structure in the precision matrix is what makes
 the field *Markov*.
 
 This brings nice computational benefits. The covariance matrix of such a distribution is
-usually completely dense, so working with it directly costs $O(n^3)$ and becomes
-hopeless as $n$ grows. The precision matrix is sparse, and sparse Cholesky
-factorization takes advantage of that — which is how GMRFs reach problem sizes
-where a naive Gaussian process cannot keep up.
+usually completely dense. Evaluating the log-density, drawing samples and conditioning
+on data all go through a Cholesky factorization of it, which costs $O(n^3)$ time and
+$O(n^2)$ memory and becomes hopeless as $n$ grows. The precision matrix is sparse, and
+a sparse Cholesky factorization takes advantage of that: for a field on a
+two-dimensional mesh it costs roughly $O(n^{3/2})$ time instead. That is how GMRFs
+reach problem sizes where a naive Gaussian process cannot keep up.
 
 The difficulty has always been that the interesting priors are awkward to write
 down in precision form. One answer for spatial problems is the SPDE approach:
