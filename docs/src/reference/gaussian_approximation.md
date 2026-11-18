@@ -2,7 +2,35 @@
 
 When using non-Gaussian observation models (Poisson, Bernoulli, etc.) with GMRF priors, the posterior distribution p(x|y) is no longer Gaussian. Gaussian approximation finds the "best" Gaussian distribution that approximates this intractable posterior, enabling efficient inference using the full power of GMRF machinery.
 
-The `gaussian_approximation` function constructs this approximation by finding the posterior mode and using the curvature at the mode to define a Gaussian with matching first and second moments. This unlocks fast sampling, marginal variance computation, and further conditioning operations.
+The `gaussian_approximation` function constructs a Laplace approximation: it finds the posterior mode and uses the curvature of the log-posterior at the mode as the precision of the approximating Gaussian. This unlocks fast sampling, marginal variance computation, and further conditioning operations.
+
+## What is computed
+
+Write the prior as $x \sim \mathcal{N}(\mu, Q^{-1})$ and the log-likelihood as $\ell(x) = \log p(y \mid x, \theta)$. Up to a constant, the log-posterior is
+
+```math
+\log p(x \mid y) = -\tfrac{1}{2} (x - \mu)^\top Q (x - \mu) + \ell(x) + \text{const}.
+```
+
+Its mode $x^*$ is found by damped Newton iterations, starting from $x_0 = \mu$ (or a user-supplied `x0`):
+
+```math
+x_{k+1} = x_k + \alpha_k \, (Q + H_k)^{-1} \big( \nabla \ell(x_k) - Q (x_k - \mu) \big),
+\qquad H_k = -\nabla^2 \ell(x_k),
+```
+
+where the step size $\alpha_k \in (0, 1]$ comes from a backtracking line search on the log-posterior. The result is the Gaussian
+
+```math
+p(x \mid y) \approx \mathcal{N}\big( x^*, (Q + H^*)^{-1} \big), \qquad H^* = -\nabla^2 \ell(x^*).
+```
+
+A few remarks on this computation:
+
+- **Sparsity is preserved.** For conditionally independent observations of a linear predictor $\eta = A x$, the log-likelihood is a sum $\ell(x) = \sum_i \log p(y_i \mid \eta_i)$, so $H = A^\top D A$ with $D$ diagonal. The posterior precision $Q + H$ therefore has the sparsity of $Q$ plus that of $A^\top A$: the approximation is again a GMRF, and each Newton step costs one sparse Cholesky factorization.
+- **Which Hessian.** $H_k$ is the observed (exact) Hessian of the log-likelihood. For exponential families with canonical links it coincides with the Fisher information, so the iteration is the same as Fisher scoring. [`NonlinearLeastSquaresModel`](@ref) uses the Gauss–Newton matrix $J^\top W J$ instead.
+- **Conjugate case.** For Gaussian observations with an identity link, $\ell$ is quadratic, a single Newton step is exact, and the package skips the iteration altogether (see below).
+- **Hard constraints.** With constraints $A_c x = e$ (see [Hard Constraints](hard_constraints.md)), each Newton step is projected onto the constraint set in the metric of $Q + H_k$, so every iterate stays feasible.
 
 ## Conjugate vs Non-Conjugate Cases
 
@@ -10,7 +38,7 @@ The package automatically detects two fundamentally different cases:
 
 **Conjugate Case (Exact)**: Normal observations with identity link result in a Gaussian posterior that can be computed exactly using linear conditioning. No approximation is needed.
 
-**Non-Conjugate Case (Approximate)**: All other observation models require iterative optimization using Fisher scoring to find the mode and Hessian of the log-posterior.
+**Non-Conjugate Case (Approximate)**: All other observation models need the Newton iterations above to find the mode and the Hessian of the log-posterior.
 
 ## Basic Usage Pattern
 
@@ -68,7 +96,7 @@ obs_model = ExponentialFamily(Poisson)  # Uses LogLink by default
 y_counts = [3, 1, 4, 1, 5, 2, 6, 3, 5, 4]  # Count data
 obs_lik = obs_model(y_counts)
 
-# Approximate Gaussian posterior via Fisher scoring
+# Approximate Gaussian posterior via Newton iterations
 posterior_gmrf = gaussian_approximation(prior_gmrf, obs_lik)
 ```
 
@@ -103,7 +131,7 @@ This covers standard GLM scenarios while maintaining computational efficiency.
 The package includes significant performance optimizations:
 
 - **Conjugate cases** are detected automatically and use exact linear conditioning instead of iterative optimization, providing both speed and numerical accuracy benefits
-- **Non-conjugate cases** use efficient Fisher scoring with good initial guesses from the prior mean
+- **Non-conjugate cases** run Newton iterations started from the prior mean
 - **MetaGMRF support** preserves metadata through the approximation process
 - **Type consistency** ensures optimal memory usage and dispatch efficiency
 
@@ -140,13 +168,13 @@ Poisson chain, versus `7e-15` with the tolerance — and meant that re-running
 `gaussian_approximation` from an already-converged mode moved away from it instead of
 staying put.
 
-## Iterated linearisation for non-Gaussian priors
+## Passing a latent prior directly
 
 `gaussian_approximation` also accepts an [`AbstractLatentPrior`](@ref) directly as the prior side, which is useful in two situations:
 
 1. **Gaussian latent prior + hyperparameters in scope.** Pass the [`LatentModel`](@ref) (e.g. `AR1Model(n)`) and its hyperparameters as keyword arguments — the call materialises the prior internally and dispatches to the existing `(::AbstractGMRF, obs_lik)` path. Behaviour is identical to first calling `model(; θ...)` and then `gaussian_approximation(prior_gmrf, obs_lik)`.
 
-2. **Non-Gaussian latent prior.** When the prior log-density is not quadratic in `x` (a [`NonGaussianLatentPrior`](@ref) — e.g. a nonlinear state-space model), fixed-Q Newton on a single Gaussian approximation is biased: the prior Hessian depends on `x`, so the linearisation has to track the current Newton iterate. The dispatch on `NonGaussianLatentPrior` runs *iterated re-linearisation* — at every Newton step the prior is re-quadratised at the current iterate via [`local_quadratic`](@ref), and the joint Newton system is solved against the re-linearised prior. The line-search merit uses the *exact* `log p(x | θ)`, evaluated at trial points through [`prior_logdensity`](@ref) (which defaults to `local_quadratic(prior, x; θ...).logp_ref` but can be overridden to evaluate the scalar log-density directly, avoiding a full Hessian rebuild per backtrack).
+2. **Non-Gaussian latent prior.** When the prior log-density is not quadratic in `x` (a [`NonGaussianLatentPrior`](@ref) — e.g. a nonlinear state-space model), fixed-Q Newton on a single Gaussian approximation is biased: the prior Hessian depends on `x`, so its quadratic approximation has to track the current Newton iterate. The dispatch on `NonGaussianLatentPrior` therefore re-expands the prior at every Newton step: [`local_quadratic`](@ref) returns its second-order Taylor expansion at the current iterate, and the joint Newton system is solved against that expansion. The line-search merit uses the *exact* `log p(x | θ)`, evaluated at trial points through [`prior_logdensity`](@ref) (which defaults to `local_quadratic(prior, x; θ...).logp_ref` but can be overridden to evaluate the scalar log-density directly, avoiding a full Hessian rebuild per backtrack).
 
 Both cases share the same Newton machinery (cache-backed via `LinearSolve` or workspace-backed via `GMRFWorkspace`); the prior side is only queried via a per-iterate local-quadratic hook (returning `(Q, h)` plus a line-search energy), so the loop body is identical regardless of whether the prior is Gaussian. For Gaussian priors that hook never evaluates `logpdf`, so the line search adds no factorization on a shared workspace.
 

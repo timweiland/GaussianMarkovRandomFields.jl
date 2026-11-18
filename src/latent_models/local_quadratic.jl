@@ -64,7 +64,7 @@ end
 
 Exact `log p(x | θ)` of the latent prior at `x`.
 
-The iterated-linearisation line search evaluates the prior log-density at trial
+The line search of the non-Gaussian-prior Newton iteration evaluates the prior log-density at trial
 points where it needs only this scalar — not the full local quadratic. The
 default delegates to `local_quadratic(m, x; θ...).logp_ref`, so models that
 don't override it keep working unchanged. A [`NonGaussianLatentPrior`](@ref)
@@ -131,7 +131,7 @@ end
 # the energy is the bare quadratic `½ xᵀQx - hᵀx`. Crucially this never
 # calls `logpdf`, so it does NOT trigger a `logdetcov` factorization of a
 # shared `GMRFWorkspace` (which stays factorized at `Q_post` for the
-# Newton step). For the `LatentPrior` adapter the prior re-linearises per
+# Newton step). For the `LatentPrior` adapter the prior is re-expanded per
 # iterate and the energy is the *exact* `-log p(x | θ)`.
 function _prior_local(prior::AbstractGMRF, x::AbstractVector)
     Q = precision_matrix(prior)

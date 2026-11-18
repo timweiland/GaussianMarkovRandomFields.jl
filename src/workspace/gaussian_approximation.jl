@@ -179,7 +179,7 @@ end
 """
     gaussian_approximation(prior::WorkspaceGMRF, obs_lik::ObservationLikelihood; kwargs...)
 
-Workspace-aware Gaussian approximation via Fisher scoring. Uses the
+Workspace-aware Gaussian approximation via Newton iterations. Uses the
 workspace's factorisation engine for numeric-only refactorisation on
 each Newton step.
 """
@@ -241,7 +241,7 @@ function _workspace_newton_loop(
     α = 1.0
     dec_prev = 0.0
 
-    verbose && println("Starting workspace Fisher scoring...")
+    verbose && println("Starting workspace Newton iterations...")
 
     for iter in 1:max_iter
         Q_p, h, energy_k = _prior_local(prior, x_k)

@@ -172,7 +172,7 @@ GaussianMarkovRandomFields.prior_logdensity(
         Q_post_expected = _qd_neg_hessian(x_gt, τ, a) + (1 / σ^2) * sparse(1.0I, n, n)
         @test Matrix(precision_matrix(post)) ≈ Matrix(Q_post_expected) atol = 1.0e-4
 
-        # `step_recovery` reaches the iterated-linearisation loop, whose line-search
+        # `step_recovery` reaches the non-Gaussian-prior Newton loop, whose line-search
         # merit is the exact (non-concave) `log p(x | θ)`. Both policies must find the
         # same mode; `:sqrt` is the opt-out for priors where probing the undamped step
         # is not wanted.
@@ -242,7 +242,7 @@ GaussianMarkovRandomFields.prior_logdensity(
         @test isposdef(Symmetric(Matrix(precision_matrix(post_hard))))
     end
 
-    @testset "Iterated linearisation through GMRFWorkspace" begin
+    @testset "Non-Gaussian prior Newton through GMRFWorkspace" begin
         # The workspace path must agree with the cache path. The workspace
         # is seeded with a tridiagonal pattern matching `local_quadratic`'s
         # pattern at non-zero x.

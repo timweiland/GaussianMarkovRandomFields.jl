@@ -1,4 +1,4 @@
-# `gaussian_approximation` finds the mode x* of the posterior by Fisher scoring.
+# `gaussian_approximation` finds the mode x* of the posterior by Newton iterations.
 # Differentiating the solver loop would be slow and unstable, so this rule applies
 # the Implicit Function Theorem to the optimality condition instead, mirroring the
 # backend-agnostic rrule in `src/autodiff/gaussian_approximation.jl` step for step.

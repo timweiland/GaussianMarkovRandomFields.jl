@@ -250,13 +250,13 @@ end
 
 Backend-agnostic automatic differentiation rule for `gaussian_approximation` using the Implicit Function Theorem.
 
-This rrule enables differentiation through the Fisher scoring optimization that finds the mode
+This rrule enables differentiation through the Newton iteration that finds the mode
 of the posterior distribution. It works with any AD backend that supports reverse mode (Zygote,
 ReverseDiff, Enzyme, etc.) via ChainRulesCore's `rrule_via_ad`.
 
 # Mathematical Approach
 Uses the Implicit Function Theorem on the optimality condition ∇ₓ neg_log_posterior(x*) = 0:
-- Forward: Solve via Fisher scoring (handled by forward pass)
+- Forward: Solve via Newton iterations (handled by forward pass)
 - Backward: Differentiate through the optimality condition:
   1. Compute λ = H⁻¹(x*) · ȳ_mean where H is the Hessian at mode
   2. VJP through ∇ₓ_neg_log_posterior gives gradients w.r.t. prior & likelihood

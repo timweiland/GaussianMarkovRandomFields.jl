@@ -134,10 +134,12 @@ end
 """
     gaussian_approximation(prior_gmrf, obs_lik; kwargs...) -> AbstractGMRF
 
-Find Gaussian approximation to the posterior using Fisher scoring.
+Find a Gaussian (Laplace) approximation to the posterior.
 
-This function finds the mode of the posterior distribution and constructs a Gaussian
-approximation around it using Fisher scoring (Newton-Raphson with Fisher information matrix).
+This function finds the mode of the posterior with damped Newton iterations and returns
+the Gaussian centred at the mode whose precision is the negative Hessian of the log-posterior
+there. For exponential families with canonical links the Newton step coincides with Fisher
+scoring.
 
 Works for `GMRF`, `ConstrainedGMRF`, and `ChordalGMRF` priors, automatically handling
 constraint projection when needed.
@@ -147,7 +149,7 @@ constraint projection when needed.
 - `obs_lik`: Materialized observation likelihood (contains data and hyperparameters)
 
 # Keyword Arguments
-- `max_iter::Int=50`: Maximum number of Fisher scoring iterations
+- `max_iter::Int=50`: Maximum number of Newton iterations
 - `mean_change_tol::Real=1e-4`: Convergence tolerance for mean change
 - `newton_dec_tol::Real=1e-5`: Newton decrement convergence tolerance
 - `adaptive_stepsize::Bool=true`: Enable adaptive stepsize with backtracking line search
@@ -411,7 +413,7 @@ here:
 
 - The prior side is queried per iterate via `_prior_local(prior, x_k) ->
   (Q, h, energy)`. For Gaussian priors `(Q, h)` are constant in `x_k`;
-  for the non-Gaussian `LatentPrior` adapter they re-linearise. The
+  for the non-Gaussian `LatentPrior` adapter they are re-expanded at `x_k`. The
   line-search merit never calls `logpdf`, so a shared `GMRFWorkspace` is
   not refactorized at the prior precision.
 - The linear-algebra side is the `solver`: a `LinearSolve` cache
@@ -436,7 +438,7 @@ function _newton_loop(
     x_k = copy(x_init)
     α = 1.0
     dec_prev = 0.0
-    verbose && println("Starting Fisher scoring...")
+    verbose && println("Starting Newton iterations...")
 
     for iter in 1:max_iter
         Q_p, h, energy_k = _prior_local(prior, x_k)

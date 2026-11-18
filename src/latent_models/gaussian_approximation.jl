@@ -73,9 +73,9 @@ end
 """
     gaussian_approximation(prior::NonGaussianLatentPrior, obs_lik; θ, ws=nothing, x0, kwargs...)
 
-Iterated-linearisation Gaussian approximation. The Newton loop calls
-`local_quadratic(prior, x_k; θ...)` per iterate to re-linearise the
-prior at the current iterate; the line-search merit uses the exact
+Gaussian approximation under a non-Gaussian prior. The Newton loop calls
+`local_quadratic(prior, x_k; θ...)` per iterate to re-expand the prior to
+second order at the current iterate; the line-search merit uses the exact
 `log p(x | θ)` carried in `LocalLatentQuadratic.logp_ref`.
 
 Hyperparameter values may be passed splatted (`τ = 1.0`) or as a
