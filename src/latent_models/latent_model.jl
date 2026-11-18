@@ -1,7 +1,3 @@
-export AbstractLatentPrior, LatentModel, NonGaussianLatentPrior,
-    hyperparameters, precision_matrix, mean, constraints, model_name,
-    precision_logdet
-
 """
     AbstractLatentPrior
 

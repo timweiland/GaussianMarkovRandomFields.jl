@@ -1,5 +1,3 @@
-export PoissonObservations, counts, exposure
-
 """
     PoissonObservations <: AbstractVector{Tuple{Int, Float64}}
 
@@ -114,7 +112,6 @@ function Base.getproperty(y::PoissonObservations, name::Symbol)
         return getfield(y, name)
     end
 end
-
 
 function Base.show(io::IO, y::PoissonObservations)
     return print(io, "PoissonObservations($(length(y)) observations)")

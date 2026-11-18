@@ -1,9 +1,3 @@
-using SparseArrays
-using LinearAlgebra
-using LinearSolve
-
-export ARModel, AR1Model
-
 _default_ar_alg(::Val{1}) = LDLtFactorization()
 _default_ar_alg(::Val) = CHOLMODFactorization()
 

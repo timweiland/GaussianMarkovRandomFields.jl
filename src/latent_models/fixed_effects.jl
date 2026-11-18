@@ -1,8 +1,3 @@
-using LinearAlgebra
-using LinearSolve
-
-export FixedEffectsModel
-
 """
     FixedEffectsModel(n::Int; λ::Real = 1e-6, alg=DiagonalFactorization())
 

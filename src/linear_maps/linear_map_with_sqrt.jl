@@ -1,4 +1,3 @@
-export LinearMapWithSqrt
 import LinearMaps: _unsafe_mul!
 import LinearAlgebra: issymmetric
 import Base: kron

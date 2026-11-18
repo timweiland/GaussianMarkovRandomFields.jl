@@ -1,7 +1,3 @@
-using LinearAlgebra, SparseArrays
-
-export generate_car_model
-
 @doc raw"""
     generate_car_model(W::SparseMatrixCSC, ρ::Real; σ=1.0, μ=nothing)
 

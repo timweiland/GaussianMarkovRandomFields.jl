@@ -1,9 +1,4 @@
-using LinearAlgebra
-using SparseArrays
-using LinearMaps
 using CliqueTrees.Multifrontal: ChordalCholesky
-
-export gaussian_approximation
 
 # Sparse-preserving subtraction for Hermitian matrices
 hermdiff(A::Hermitian, B) = Hermitian(parent(A) - B, Symbol(A.uplo))

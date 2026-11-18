@@ -1,7 +1,3 @@
-import DifferentiationInterface as DI
-
-export AutoDiffLatentPrior
-
 """
     AutoDiffLatentPrior{F, B, SB, HN, C} <: NonGaussianLatentPrior
 

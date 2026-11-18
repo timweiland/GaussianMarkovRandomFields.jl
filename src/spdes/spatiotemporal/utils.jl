@@ -1,5 +1,3 @@
-export spatial_to_spatiotemporal
-
 @views function make_chunks(X::AbstractVector, n::Integer)
     c = length(X) ÷ n
     return [X[(1 + c * k):(k == n - 1 ? end : c * k + c)] for k in 0:(n - 1)]

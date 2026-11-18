@@ -1,6 +1,3 @@
-export GMRFWorkspace, update_precision!, update_precision_values!,
-    ensure_numeric!, ensure_selinv!, dimension
-
 """
     GMRFWorkspace{T, B}
 

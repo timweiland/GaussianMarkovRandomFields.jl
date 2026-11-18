@@ -1,9 +1,6 @@
 import LinearAlgebra: ldiv!
 import Base: \, size, show
 
-export TridiagonalBlockGaussSeidelPreconditioner,
-    TridiagSymmetricBlockGaussSeidelPreconditioner
-
 @doc raw"""
     TridiagonalBlockGaussSeidelPreconditioner(D_blocks, L_blocks)
     TridiagonalBlockGaussSeidelPreconditioner(D⁻¹_blocks, L_blocks)
@@ -101,7 +98,6 @@ function \(P::TridiagonalBlockGaussSeidelPreconditioner, x::AbstractVector)
 end
 
 Base.size(P::TridiagonalBlockGaussSeidelPreconditioner) = reduce(.+, size.(P.D⁻¹_blocks))
-
 
 """
     TridiagSymmetricBlockGaussSeidelPreconditioner(D_blocks, L_blocks)

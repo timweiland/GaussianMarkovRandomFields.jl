@@ -1,5 +1,3 @@
-export StructuredObservationModel, ObsFactorGroup
-
 """
     ObsFactorGroup{K, F}
 

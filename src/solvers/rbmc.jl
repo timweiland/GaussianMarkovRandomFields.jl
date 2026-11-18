@@ -1,10 +1,3 @@
-using AMD
-using Random
-using SelectedInversion
-using LinearAlgebra
-
-export RBMCStrategy, BlockRBMCStrategy
-
 """
     RBMCStrategy(n_samples; rng)
 

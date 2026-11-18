@@ -1,8 +1,3 @@
-using LinearSolve
-using LinearAlgebra
-
-export backward_solve
-
 """
     supports_backward_solve(alg)
 

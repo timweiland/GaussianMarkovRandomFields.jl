@@ -1,7 +1,3 @@
-using LinearMaps
-
-export linear_condition
-
 """
     prepare_map(Q_prior, x) -> x_converted
 

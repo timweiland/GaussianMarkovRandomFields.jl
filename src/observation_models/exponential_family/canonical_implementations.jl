@@ -1,6 +1,3 @@
-using LinearAlgebra
-using StatsFuns
-using Distributions
 using Distributions: product_distribution
 using SpecialFunctions: loggamma
 

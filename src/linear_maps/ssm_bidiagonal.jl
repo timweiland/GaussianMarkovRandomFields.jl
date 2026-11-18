@@ -1,7 +1,3 @@
-using LinearMaps
-
-export SSMBidiagonalMap
-
 # TODO: Better naming for this?
 @doc raw"""
     SSMBidiagonalMap{T}(

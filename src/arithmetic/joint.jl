@@ -1,7 +1,3 @@
-using LinearAlgebra, SparseArrays
-
-export joint_gmrf
-
 """
     joint_gmrf(
         x1::AbstractGMRF,

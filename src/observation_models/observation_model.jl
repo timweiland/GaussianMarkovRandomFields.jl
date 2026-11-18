@@ -1,7 +1,3 @@
-using Random
-
-export ObservationModel, hyperparameters, latent_dimension, conditional_distribution
-
 """
     ObservationModel
 
@@ -26,7 +22,6 @@ ll = loglik(x, obs_lik)  # Fast x-only evaluation
 See also: [`ObservationLikelihood`](@ref), [`ExponentialFamily`](@ref)
 """
 abstract type ObservationModel end
-
 
 """
     hyperparameters(obs_model::ObservationModel) -> Tuple{Vararg{Symbol}}

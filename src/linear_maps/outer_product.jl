@@ -1,9 +1,6 @@
-using LinearAlgebra, LinearMaps
 import LinearAlgebra: issymmetric
 
 import Base: size
-
-export OuterProductMap
 
 """
     OuterProductMap(

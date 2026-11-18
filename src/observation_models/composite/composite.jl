@@ -4,5 +4,3 @@
 include("composite_observations.jl")
 include("composite_observation_model.jl")
 include("composite_evaluation.jl")
-
-export CompositeObservations, CompositeObservationModel, CompositeLikelihood

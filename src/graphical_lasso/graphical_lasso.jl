@@ -4,8 +4,6 @@ using LinearAlgebra: Hermitian, HermOrSym, mul!
 using Statistics: mean
 using SparseArrays: SparseMatrixCSC, sparse, nzrange, rowvals, nonzeros
 
-export graphical_lasso
-
 """
     graphical_lasso(X::AbstractMatrix, threshold; blocksize::Int=256, shift=zero(T), alg=nothing)
 

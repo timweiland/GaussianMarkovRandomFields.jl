@@ -1,11 +1,3 @@
-using SparseArrays
-using LinearAlgebra
-using Distributions
-using Graphs
-using LinearSolve
-
-export BesagModel
-
 """
     BesagModel(adjacency::AbstractMatrix; regularization::Float64 = 1e-5, normalize_var::Bool = true, singleton_policy::Symbol = :gaussian, alg=CHOLMODFactorization())
 

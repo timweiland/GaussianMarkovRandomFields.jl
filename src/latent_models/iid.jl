@@ -1,9 +1,3 @@
-using SparseArrays
-using LinearAlgebra
-using LinearSolve
-
-export IIDModel
-
 """
     IIDModel(n::Int; alg=DiagonalFactorization(), constraint=nothing)
 

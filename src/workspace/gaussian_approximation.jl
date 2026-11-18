@@ -1,6 +1,3 @@
-using LinearAlgebra
-using SparseArrays
-
 """
     _diagonal_indices(Q::SparseMatrixCSC) -> Vector{Int}
 

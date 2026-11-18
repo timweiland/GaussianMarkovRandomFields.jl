@@ -1,9 +1,3 @@
-using SparseArrays
-using LinearAlgebra
-using LinearSolve
-
-export CombinedModel, component_model
-
 """
     CombinedModel(components::Vector{<:LatentModel}; alg=CHOLMODFactorization())
 

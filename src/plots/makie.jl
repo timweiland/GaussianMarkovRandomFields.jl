@@ -1,7 +1,4 @@
 # COV_EXCL_START
-export gmrf_fem_1d_plot, gmrf_fem_1d_plot!
-export gmrf_fem_1d_spatiotemporal_plot, gmrf_fem_1d_spatiotemporal_plot!
-
 
 ### 1D ###
 

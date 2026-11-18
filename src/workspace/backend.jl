@@ -1,10 +1,3 @@
-using LinearAlgebra
-using SparseArrays
-using SelectedInversion
-import CliqueTrees
-
-export WorkspaceBackend, CHOLMODBackend, PinDenseColumns, ordering_permutation
-
 """
     WorkspaceBackend
 

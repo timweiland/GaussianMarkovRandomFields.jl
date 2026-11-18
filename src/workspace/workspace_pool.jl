@@ -1,7 +1,3 @@
-using SparseArrays
-
-export WorkspacePool, checkout, checkin, with_workspace
-
 """
     WorkspacePool{T, B}
 

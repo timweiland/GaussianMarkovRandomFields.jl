@@ -1,8 +1,3 @@
-using LinearSolve
-using LinearAlgebra
-
-export logdet_cov
-
 """
     logdet_cov(linsolve, alg)
 

@@ -14,7 +14,6 @@ efficiently without materializing full covariance matrices.
 """
 
 # Import ChainRulesCore for rrule definitions
-using ChainRulesCore
 
 # Include specific autodiff rule implementations (reverse-mode)
 include("constructors.jl")

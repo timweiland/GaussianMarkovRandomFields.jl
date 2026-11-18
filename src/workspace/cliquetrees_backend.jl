@@ -1,7 +1,4 @@
-import CliqueTrees
 import CliqueTrees.Multifrontal: ChordalCholesky, selinv!, triangular
-
-export CliqueTreesBackend
 
 """
     CliqueTreesBackend{T, I, F} <: WorkspaceBackend

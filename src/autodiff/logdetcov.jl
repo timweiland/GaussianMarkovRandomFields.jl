@@ -1,6 +1,3 @@
-using ChainRulesCore
-using LinearAlgebra
-
 # Reverse-mode rules for `logdetcov`.
 #
 # Without these, Zygote differentiates `logdetcov` by tracing into the Cholesky

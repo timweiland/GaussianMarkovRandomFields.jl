@@ -1,10 +1,3 @@
-using LinearAlgebra
-using SparseArrays
-using LinearMaps
-using ChainRulesCore
-
-export SeparableModel
-
 """
     SeparableModel{T<:Tuple{Vararg{LatentModel}}, Alg} <: LatentModel
 

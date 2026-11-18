@@ -11,14 +11,6 @@ import Distributions:
     _rand!,
     var,
     std
-using LinearAlgebra
-using Random
-using SparseArrays
-using LinearMaps
-using LinearSolve
-
-
-export AbstractGMRF, GMRF, precision_map, precision_matrix, InformationVector, information_vector, std
 
 ########################################################
 #
@@ -223,7 +215,6 @@ function GMRF(
 
     return GMRF{T, typeof(mean), typeof(information.data), typeof(precision), typeof(Q_sqrt), typeof(linsolve_cache), typeof(rbmc_strategy)}(mean, information.data, precision, Q_sqrt, linsolve_cache, rbmc_strategy)
 end
-
 
 length(d::GMRF) = length(d.mean)
 mean(d::GMRF) = d.mean
