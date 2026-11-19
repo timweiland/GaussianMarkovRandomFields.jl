@@ -109,8 +109,8 @@ comp = build_formula_components(f, df; family = Poisson, exposure = :E)
 # ### Alternative: BYM2 model with improved parameterization
 # The BYM2 model (Riebler et al. 2016) offers an improved reparameterization of BYM
 # with more interpretable hyperparameters:
-# - $\tau$: overall precision (total variance $1/\tau$)
-# - $\phi \in (0, 1)$: mixing parameter (proportion of variance that is unstructured)
+# - the overall precision $\tau$ (total variance $1/\tau$), and
+# - the mixing parameter $\phi \in (0, 1)$ (proportion of variance that is unstructured).
 #
 # BYM2 is often preferred because:
 # 1. Easier to set informative priors (single precision scale)
@@ -199,11 +199,11 @@ plt
 
 # ## Fixed effects summary (β and 95 CI)
 # Interpreting fixed effects is easy in a log‑link Poisson GLM:
-# - $\exp(\beta_0)$ is the baseline relative risk when $\mathrm{AFF} = 0$ and the random
-#   effects are zero.
-# - $\exp(\beta_1)$ is the multiplicative change in relative risk per unit increase in
-#   $\mathrm{AFF}$ (here $\mathrm{AFF}$ is a fraction, so an increase of 0.10 is 10
-#   percentage points). A larger positive $\beta_1$ means a higher relative risk in
+# - The baseline relative risk, when $\mathrm{AFF} = 0$ and the random effects are zero,
+#   is $\exp(\beta_0)$.
+# - The multiplicative change in relative risk per unit increase in $\mathrm{AFF}$ is
+#   $\exp(\beta_1)$. Here $\mathrm{AFF}$ is a fraction, so an increase of 0.10 is 10
+#   percentage points. A larger positive $\beta_1$ means a higher relative risk in
 #   districts with greater $\mathrm{AFF}$.
 #
 # The code below simply extracts the fixed‑effects block and reports estimates and
