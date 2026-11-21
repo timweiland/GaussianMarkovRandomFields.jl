@@ -34,9 +34,12 @@ As such, it is suitable for both research and teaching in spatial statistics and
 # Statement of Need
 
 GMRFs have become a cornerstone of modern spatial statistics, yet practical barriers limit their accessibility.
+The priors of interest are rarely specified through a sparse precision matrix: a Matérn field on an irregular domain, for instance, only becomes a GMRF once a stochastic partial differential equation has been discretized with finite elements, and intrinsic models such as random walks additionally need linear constraints.
 Implementing GMRF-based models requires navigating sparse linear algebra libraries and finite element discretizations, and choosing a linear solver suited to the problem (a sparse Cholesky factorization, an LDL$^\top$ factorization for tridiagonal precisions, or a preconditioned iterative method), all of which create a steep barrier to entry for domain scientists.
 
 `GaussianMarkovRandomFields.jl` eliminates these barriers by providing a feature-rich toolkit for creation and manipulation of GMRFs.
+Once constructed, a GMRF can be conditioned on Gaussian observations in closed form, approximated by a Gaussian under any other likelihood, constrained, sampled, and queried for log-densities and marginal variances, with gradients of all of these with respect to its hyperparameters.
+These operations are the building blocks of latent Gaussian inference schemes such as INLA and TMB (see the Research Impact Statement).
 The package offers utilities to create well-known latent models, ranging from simple autoregressive and Besag [@besagConditionalIntrinsicAutoregressions1995] models to more involved spatial and spatiotemporal finite element-based models [@lindgrenExplicitLinkGaussian2011; @clarottoSPDEApproachSpatiotemporal2024].
 For users requiring continuous spatial domains, the SPDE approach is implemented through integration with Ferrite.jl [@carlsson2025ferrite], enabling principled approximations of Matérn and related Gaussian processes on arbitrary geometries.
 As an alternative to SPDE-based constructions, the package also implements KL-minimizing sparse Cholesky approximations [@schaeferSparseCholeskyKL2021], which construct sparse precision matrices directly from covariance specifications and are particularly effective for covariance functions with strong screening effects.
@@ -59,12 +62,15 @@ The inlabru package [@bachl2019inlabru] adds a flexible modeling interface for n
 The rSPDE package [@bolin2025rspde] supports fractional SPDE models with non-integer smoothness.
 Template Model Builder (TMB) [@kristensen2016tmb] supports Laplace approximation and gradient-based inference over latent Gaussian models via C++ templates, but requires users to write C++ for their models.
 In Python, general-purpose probabilistic programming frameworks such as PyMC [@abril2023pymc] expose some GMRF primitives but lack specialized machinery.
+Such a framework can represent a GMRF as a multivariate normal distribution parameterized by its precision, but its default inference samples the latent field jointly with the hyperparameters.
+For large spatial fields this scales poorly, since the posterior is high-dimensional and strongly correlated; the efficient alternative integrates the field out with a Laplace approximation, which needs sparse factorizations, selected inversion and the approximation itself, the machinery this package provides.
 
 Across these packages, GMRFs appear as implementation details of a particular inference algorithm, buried in C or C++ code and not exposed as first-class objects that users can extend.
 `GaussianMarkovRandomFields.jl` instead treats the GMRF as the primary abstraction, exposed through a high-level interface, which enables workflows that are impractical elsewhere.
 
-Neither the observation likelihood nor the latent prior need come from a fixed catalogue: both may be ordinary Julia functions, and the sparsity of their Hessians is discovered automatically.
+The package is designed to be extended rather than to offer a closed catalogue of models: neither the observation likelihood nor the latent prior need come from a fixed list, as both may be ordinary Julia functions, and the sparsity of their Hessians is discovered automatically.
 A latent field whose own dynamics are nonlinear (e.g., a state-space model of the kind routinely written in C++ for TMB [@nielsen2014sam]) is therefore expressed directly, and the iterated Laplace approximation such a model requires follows from the same machinery.
+New latent models, GMRF types and solver backends plug in by implementing small interfaces, and then work with the existing inference routines.
 Because a GMRF is itself a distribution with automatic differentiation rules attached, it composes directly with probabilistic programming languages: gradient-based samplers such as NUTS [@hoffman2014nuts] target the latent field and its hyperparameters jointly, giving fully Bayesian inference [@ge2018turing].
 SPDE discretizations are delegated to a general finite element library [@carlsson2025ferrite], putting custom differential operators, meshes, and boundary conditions within reach; the capability underlying [@weiland2025gmrfpde].
 
