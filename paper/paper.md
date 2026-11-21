@@ -34,7 +34,7 @@ As such, it is suitable for both research and teaching in spatial statistics and
 # Statement of Need
 
 GMRFs have become a cornerstone of modern spatial statistics, yet practical barriers limit their accessibility.
-The priors of interest are rarely specified through a sparse precision matrix: a Matérn field on an irregular domain, for instance, only becomes a GMRF once a stochastic partial differential equation has been discretized with finite elements, and intrinsic models such as random walks additionally need linear constraints.
+The priors of interest are rarely specified directly through a sparse precision matrix: a Matérn field on an irregular domain, for instance, only becomes a GMRF once a stochastic partial differential equation has been discretized with finite elements, and intrinsic models such as random walks additionally need linear constraints.
 Implementing GMRF-based models requires navigating sparse linear algebra libraries and finite element discretizations, and choosing a linear solver suited to the problem (a sparse Cholesky factorization, an LDL$^\top$ factorization for tridiagonal precisions, or a preconditioned iterative method), all of which create a steep barrier to entry for domain scientists.
 
 `GaussianMarkovRandomFields.jl` eliminates these barriers by providing a feature-rich toolkit for creation and manipulation of GMRFs.
