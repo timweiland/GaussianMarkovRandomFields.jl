@@ -45,10 +45,11 @@ The package extends beyond Gaussian observations through Gaussian approximation 
 When working with non-Gaussian data such as counts or binary outcomes, the package seamlessly handles exponential family likelihoods.
 Users may also specify custom likelihood functions, for which the package exploits sparsity structure through automatic differentiation (AD) to maintain computational efficiency even for complex observation models, an approach established by Skaug and Fournier [@skaug2006automatic] and popularised by TMB [@kristensen2016tmb].
 For large-scale applications, the package provides efficient marginal variance computation methods [@lin2011selinv; @rueMarginalVariancesGaussian2005a; @sidenEfficientCovarianceApproximations2018a].
-\autoref{fig:bernoulli} demonstrates this capability on a spatial binary classification task.
+Because the posterior is Gaussian, or approximated by a Gaussian, its marginals are fully described by the mean and the marginal variances, which is all that marginal inference requires.
+\autoref{fig:bernoulli} demonstrates both capabilities on a spatial binary classification task.
 AD support via ForwardDiff.jl [@revels2016forward], Enzyme.jl [@moses2020enzyme], Zygote.jl [@innes2018zygote], Mooncake.jl [@tebbutt2024mooncake] and DifferentiationInterface.jl [@dalle2025differentiationinterface] enables gradient-based optimization and inference methods, making the package compatible with modern probabilistic programming frameworks including Turing.jl [@ge2018turing].
 
-![Spatial binary classification of tree species in the Lansing Woods dataset [@gerrard1969lansing; @baddeley2015spatstat] using a Matérn latent field with Bernoulli observations. Points show observed trees: \textcolor{red}{hickory (circles)} and \textcolor{blue}{other species (diamonds)}. The heatmap shows predicted probabilities, demonstrating the package's support for non-Gaussian likelihoods through efficient Gaussian approximation.\label{fig:bernoulli}](bernoulli_classification.pdf){ width=80% }
+![Spatial binary classification of tree species in the Lansing Woods dataset [@gerrard1969lansing; @baddeley2015spatstat] using a Matérn latent field with Bernoulli observations. Left: predicted probability of hickory, from a Gaussian approximation of the posterior; points show observed trees: \textcolor{red}{hickory (circles)} and \textcolor{blue}{other species (diamonds)}. Right: posterior marginal standard deviation of the latent field, computed by selected inversion. It is lowest where trees are dense and grows towards the edges of the domain, a known boundary effect of SPDE models.\label{fig:bernoulli}](bernoulli_classification.pdf){ width=100% }
 
 # State of the Field
 
@@ -75,6 +76,20 @@ Concrete subtypes, including the default `GMRF`, the hard-constrained `Constrain
 A separate `LatentModel` abstraction decouples model specification (hyperparameters mapped to sparse precision) from construction of GMRF instances.
 Provided models include autoregressive processes AR(p), random walks, IID, fixed effects, Besag, BYM2, Matérn SPDE, and compositions thereof; users add their own by implementing a small protocol.
 A formula interface built on StatsModels.jl offers the familiar R-style syntax for combined models.
+
+The following lines fit the model of \autoref{fig:bernoulli}, given point coordinates `X` and binary labels `y`.
+Both the prior and the approximate posterior are ordinary GMRFs, so everything that works on one works on the other:
+
+```julia
+using GaussianMarkovRandomFields, Distributions
+using Ferrite, FerriteGmsh, Gmsh, LibGEOS  # activate the FEM extension
+
+latent = MaternModel(X; smoothness = 1)  # SPDE prior on a mesh around X
+prior = latent(τ = 1.0, range = 0.2)     # a GMRF
+obs_model = PointEvaluationObsModel(latent.discretization, X, Bernoulli)
+post = gaussian_approximation(prior, obs_model(y))  # again a GMRF
+μ, σ = mean(post), std(post)             # σ via selected inversion
+```
 
 Linear solves are delegated to LinearSolve.jl [@kimmerer2026linearsolve], so users can swap CHOLMOD, Pardiso, LDL$^\top$ factorizations, or preconditioned conjugate gradient without touching model code.
 AD is provided through package extensions for ForwardDiff.jl, Zygote.jl/ChainRulesCore.jl, Enzyme.jl and Mooncake.jl, with chain rules written at the GMRF-construction level so gradients flow through composed models.
