@@ -290,12 +290,51 @@ Enzyme section for why the older versions are excluded.
 
 ## Testing your own gradients
 
-If you add a model or an observation likelihood, check its gradients against
-finite differences using a precision matrix **with Cholesky fill-in** — a 2D grid
-Laplacian, not a tridiagonal AR(1) precision. Several of the bugs behind the table
-above survived for a long time precisely because the tests used AR(1) precisions,
-whose factor has no fill-in and so cannot exercise the code path where a selected
-inverse is written back onto `Q`'s sparsity pattern.
+Before relying on a backend for your own pipeline — a long-running fit, or a model
+or observation likelihood you added — check its gradients against finite
+differences. [DifferentiationInterfaceTest.jl](https://github.com/JuliaDiff/DifferentiationInterface.jl/tree/main/DifferentiationInterfaceTest)
+does this for several backends at once:
+
+```julia
+using GaussianMarkovRandomFields, Distributions, LinearAlgebra, LinearSolve, SparseArrays
+using DifferentiationInterface, DifferentiationInterfaceTest
+using FiniteDiff, ForwardDiff, Zygote, Enzyme
+
+# A precision whose Cholesky factor has fill-in: the Laplacian of a 6 × 6 grid.
+m = 6
+D = spdiagm(-1 => -ones(m - 1), 0 => 2 * ones(m), 1 => -ones(m - 1))
+L = kron(D, I(m)) + kron(I(m), D)
+z = randn(m^2)
+
+# The objective takes the hyperparameters first; everything else is passed as a
+# constant context rather than captured from the enclosing scope.
+function f(θ, L, z)
+    Q = exp(θ[1]) * (L + exp(θ[2]) * I)
+    return logpdf(GMRF(zeros(length(z)), Q, LinearSolve.CHOLMODFactorization()), z)
+end
+
+θ = [0.5, -1.0]
+reference = FiniteDiff.finite_difference_gradient(θ -> f(θ, L, z), θ)
+scenario = Scenario{:gradient, :out}(f, θ, Constant(L), Constant(z); res1 = reference)
+test_differentiation([AutoForwardDiff(), AutoZygote(), AutoEnzyme()], [scenario])
+```
+
+`test_differentiation` runs inside a `@testset`, so it fits directly into a test
+suite. Replace `f` with your own objective, such as a Laplace marginal likelihood.
+A few points specific to GMRFs:
+
+- **Use a precision with Cholesky fill-in**, such as the 2D grid Laplacian above,
+  not a tridiagonal AR(1) precision. Several of the bugs behind the table above
+  survived for a long time precisely because the tests used AR(1) precisions, whose
+  factor has no fill-in and so cannot exercise the code path where a selected
+  inverse is written back onto `Q`'s sparsity pattern.
+- **Pass data as `Constant` contexts** instead of capturing it in a closure. Enzyme
+  cannot always prove that captured arrays are read-only. By default, a `Scenario`
+  also prepares the operator with `zero` applied to each argument, so keep contexts
+  to plain arrays (build e.g. `PoissonObservations` inside `f`) or pass `prep_args`.
+- **Mind the tolerance.** The default relative tolerance of `1e-3` leaves room for
+  the error of the finite-difference reference. To catch smaller discrepancies,
+  pass a tighter `rtol`, e.g. `1e-5`.
 
 ## See Also
 
