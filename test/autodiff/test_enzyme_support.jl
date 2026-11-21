@@ -451,4 +451,20 @@ end
         @test occursin("constraints", sprint(showerror, err))
         @test occursin("WorkspaceGMRF", sprint(showerror, err))
     end
+
+    @testset "AutoDiffLatentPrior capturing data under a Const annotation" begin
+        # The `AutoDiffLatentPrior` docstring recommends `function_annotation = Enzyme.Const`
+        # for a log-density that captures a mutable array: without an annotation, Enzyme
+        # raises `EnzymeMutabilityException` on such a closure.
+        data = randn(n)
+        logp = (x; σ) -> -0.5 * sum(abs2, data .- x) / σ^2 - 0.5 * sum(abs2, diff(x)) - length(data) * log(σ)
+        x0 = randn(n)
+        reference = AutoDiffLatentPrior(logp; n, hyperparams = (:σ,), grad_backend = AutoForwardDiff())
+        enzyme = AutoDiffLatentPrior(logp; n, hyperparams = (:σ,), grad_backend = ENZYME)
+        lq_ref = GMRFs.local_quadratic(reference, x0; σ = 0.7)
+        lq = GMRFs.local_quadratic(enzyme, x0; σ = 0.7)
+        @test lq.h ≈ lq_ref.h
+        @test lq.Q ≈ lq_ref.Q
+        @test lq.logp_ref ≈ lq_ref.logp_ref
+    end
 end

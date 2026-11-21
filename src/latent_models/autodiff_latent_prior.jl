@@ -32,12 +32,13 @@ likelihood) works equally well by composing this prior with any
     dense / `KnownHessianSparsityDetector` `hessian_backend`.
 
 !!! note "Capturing data with an Enzyme backend"
-    `grad_backend` defaults to `AutoForwardDiff()`. If you pass `AutoEnzyme()` instead,
-    note that Enzyme can't prove a `logp_func` that *captures* a mutable array (e.g.
-    observation data folded into a monolithic joint) is read-only, and raises
-    `EnzymeMutabilityException`. For such a `logp_func`, keep the ForwardDiff default
-    (its `hessian_backend` follows automatically). Functions that capture only scalars
-    are unaffected.
+    `grad_backend` defaults to `AutoForwardDiff()`. If you use Enzyme instead, pass
+    `AutoEnzyme(; function_annotation = Enzyme.Const)`. Without an annotation, Enzyme
+    has to infer whether the function it differentiates is constant, and for a
+    `logp_func` that *captures* a mutable array (e.g. observation data folded into a
+    monolithic joint) it cannot prove that the array is read-only and raises
+    `EnzymeMutabilityException`. `Const` tells it that nothing captured is
+    differentiated; the default `hessian_backend` inherits the annotation.
 
 # Hyperparameter gradients
 With the ForwardDiff extension loaded, the Laplace marginal likelihood is
