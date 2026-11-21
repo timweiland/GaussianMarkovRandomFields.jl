@@ -35,6 +35,46 @@ obs_model = AutoDiffObservationModel(my_loglik; n_latent = n, grad_backend = Aut
 
 The support matrix constrains the first kind, not the second.
 
+## What gets differentiated
+
+Hyperparameters $\theta$ enter a GMRF through its mean $\mu(\theta)$ and precision
+$Q(\theta)$. The rules in this package never differentiate the Cholesky factorization
+itself. Instead, each operation has a closed-form derivative in terms of $Q$, its
+factorization and a few solves.
+
+**Log-determinant.** For $\log p(z) = \tfrac{1}{2} \log\det Q - \tfrac{1}{2} (z - \mu)^\top Q (z - \mu) - \tfrac{n}{2} \log 2\pi$,
+the quadratic term is differentiated directly, and the log-determinant via
+
+```math
+\frac{\partial}{\partial \theta} \log\det Q
+= \operatorname{tr}\Big( Q^{-1} \frac{\partial Q}{\partial \theta} \Big)
+= \sum_{(i, j)} (Q^{-1})_{ij} \Big( \frac{\partial Q}{\partial \theta} \Big)_{ij}.
+```
+
+Since $\partial Q / \partial \theta$ is zero outside the sparsity pattern of $Q$, the sum
+only needs the entries of $Q^{-1}$ on that pattern. These entries form the **selected
+inverse**: the entries of $Q^{-1}$ on the sparsity pattern of the Cholesky factor
+$L + L^\top$, which contains the pattern of $Q$. Selected inversion computes them from
+$L$ at roughly the cost of the factorization, without ever forming the dense $Q^{-1}$.
+
+**Gaussian approximation.** The mode $x^*(\theta)$ of the posterior is defined
+implicitly by the optimality condition $\nabla_x \log p(x^* \mid y, \theta) = 0$
+(see [Gaussian Approximation](gaussian_approximation.md)). Rather than differentiating
+through the Newton iterations, the rules apply the implicit function theorem:
+
+```math
+\frac{\partial x^*}{\partial \theta}
+= \big( Q + H^* \big)^{-1} \, \frac{\partial}{\partial \theta} \nabla_x \log p(x \mid y, \theta) \Big|_{x = x^*},
+```
+
+where $Q + H^*$ is the posterior precision at the mode, whose factorization the last
+Newton step already computed. Under hard linear constraints, this tangent is projected
+onto the constraint set, just like the Newton steps. The posterior precision
+$Q(\theta) + H(x^*(\theta), \theta)$ depends on $\theta$ both directly and through the
+mode, so its derivative also contains the change of the log-likelihood Hessian along
+$\partial x^* / \partial \theta$. Downstream quantities such as the Laplace marginal
+likelihood are then differentiated with the log-determinant rule above.
+
 ## Choosing a backend
 
 **Start with ForwardDiff.jl.** It is the only backend that currently handles every
@@ -85,11 +125,6 @@ The single ⚠️ is `var`/`std` on a `ChordalGMRF` under Mooncake, whose gradie
 currently around 1% off. The cause sits upstream of this package, in the
 selected-inversion rule for the chordal factorization, and a fix is expected. Use
 ForwardDiff for marginal-variance gradients in the meantime.
-
-Everything else that is not ✅ raises an explicit, actionable error. Combinations
-that cannot be supported refuse rather than falling back to differentiating a
-sparse factorization, because doing the latter produces wrong gradients that no
-test without a finite-difference reference would catch.
 
 Every ❌ in this table is an explicit, actionable error. Combinations that cannot
 be supported raise rather than falling back to differentiating a sparse
@@ -170,7 +205,7 @@ observation likelihood's hyperparameters as well as the prior's, and precisions
 may be sparse, `Diagonal` or `SymTridiagonal`.
 
 `gaussian_approximation` is differentiated with the Implicit Function Theorem
-rather than through the Fisher-scoring loop, matching the backend-agnostic rule
+rather than through the Newton loop, matching the backend-agnostic rule
 the other backends use.
 
 Not supported, raising `ArgumentError`:
@@ -243,9 +278,9 @@ through the primal factorization and would drop every partial, so it raises
 instead.
 
 Second-order derivatives via nested Duals are not supported. For Hessians, use
-finite differences over a ForwardDiff gradient
-(`FiniteDiff.finite_difference_jacobian` of `ForwardDiff.gradient`), which is more
-stable than a pure finite-difference Hessian.
+finite differences over a ForwardDiff gradient, which is more stable than a pure
+finite-difference Hessian. With DifferentiationInterface this is
+`DI.hessian(f, DI.SecondOrder(AutoFiniteDiff(), AutoForwardDiff()), θ)`.
 
 ## Constrained GMRFs
 

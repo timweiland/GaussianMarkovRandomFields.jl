@@ -124,7 +124,7 @@ Constraints are also commonly used for identifiability in hierarchical models (e
 
 ## Gaussian Approximation with Constraints
 
-The real power emerges when combining constrained priors with non-Gaussian observation models. For non-conjugate cases, the `gaussian_approximation` function uses Fisher scoring while automatically respecting constraints throughout optimization:
+The real power emerges when combining constrained priors with non-Gaussian observation models. For non-conjugate cases, the `gaussian_approximation` function runs Newton iterations that keep every iterate on the constraint set:
 
 ```julia
 # Constrained prior for log-rates (sum-to-zero for identifiability)

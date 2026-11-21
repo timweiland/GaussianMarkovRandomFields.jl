@@ -6,7 +6,7 @@ Main include file for automatic differentiation functionality in GaussianMarkovR
 This module provides efficient ChainRulesCore-based automatic differentiation rules for:
 - GMRF construction
 - logpdf computation
-- gaussian_approximation (Fisher scoring optimization)
+- gaussian_approximation (Newton iterations for the posterior mode)
 - And other core GMRF operations
 
 The implementation uses selected inverses via SelectedInversion.jl to compute gradients

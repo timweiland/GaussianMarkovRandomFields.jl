@@ -18,7 +18,7 @@ end
 
 Forward-mode AD through `gaussian_approximation` using the Implicit Function Theorem.
 
-Instead of propagating Dual numbers through the iterative Fisher scoring, this method:
+Instead of propagating Dual numbers through the Newton iterations, this method:
 1. Runs the primal forward pass to find the posterior mode x*
 2. Uses the IFT to compute dx*/dθ via a linear solve with the already-factored Hessian
 3. Computes the posterior precision tangent via loghessian evaluated at Dual x*

@@ -56,7 +56,7 @@ subtype must implement:
 
 Models of this type cannot be called as `prior(; θ...)` because
 materialisation is x-dependent. Use `gaussian_approximation(prior, obs_lik; θ...)`
-to drive the iterated-linearisation Newton; pass `x0` explicitly if
+to drive the Newton iteration that re-expands the prior at every step; pass `x0` explicitly if
 zeros aren't an appropriate starting point.
 """
 abstract type NonGaussianLatentPrior <: AbstractLatentPrior end

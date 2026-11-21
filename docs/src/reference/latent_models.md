@@ -33,9 +33,10 @@ model that ships with this package (AR, RW, IID, Matérn, Besag, BYM2, …)
 is a `LatentModel`. `NonGaussianLatentPrior` is a separate sibling for
 priors whose log-density is *not* quadratic in `x`; instead of a
 materialised GMRF, they expose a [`local_quadratic`](@ref) method that
-re-linearises the prior around any reference point. The
-[Gaussian Approximation](gaussian_approximation.md) reference page
-covers the iterated-linearisation Newton driven by these priors.
+returns a second-order Taylor expansion of the prior's log-density around any
+reference point. The [Gaussian Approximation](gaussian_approximation.md)
+reference page covers the Newton iteration that re-expands these priors at every
+step.
 
 ```@docs
 AbstractLatentPrior
