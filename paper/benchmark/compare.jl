@@ -14,8 +14,8 @@ for (g, r) in zip(eachrow(gt), eachrow(rt))
     rs = CSV.read(joinpath(d, "rinla_field_summary.csv"), DataFrame)
     push!(
         rows, (;
-            g.n, g.m, gmrfs_s = g.t_median, rinla_s = r.t_median, rinla_running_s = r.running_median,
-            speedup = r.t_median / g.t_median, max_abs_dmean = maximum(abs.(gs.mean .- rs.mean)),
+            g.n, g.m, gmrfs_s = g.t_median, rinla_s = r.t_median, rinla_running_s = r.running_median, rinla_compute_s = r.compute_median,
+            speedup = r.t_median / g.t_median, speedup_compute = r.compute_median / g.t_median, max_abs_dmean = maximum(abs.(gs.mean .- rs.mean)),
             max_rel_dsd = maximum(abs.(gs.sd .- rs.sd) ./ rs.sd),
         )
     )

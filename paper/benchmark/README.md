@@ -19,9 +19,17 @@ julia --project=paper/benchmark paper/benchmark/compare.jl paper/benchmark/_work
 ```
 
 `fit_gmrfs.jl` also simulates the counts and writes them for `fit_rinla.R`, so it must
-run first. Times are medians over repeated fits: warm for GaussianMarkovRandomFields.jl
-(after compilation; the first fit is reported separately as `t_first`) and wall-clock
-`inla()` calls for R-INLA, whose `Running` phase excludes R-side pre- and
-post-processing.
+run first. Times are medians over repeated fits, warm for GaussianMarkovRandomFields.jl
+(after compilation; the first fit is reported separately as `t_first`). For R-INLA,
+`results.csv` reports three times:
+
+- `rinla_s`: the whole `inla()` call, as a user experiences it.
+- `rinla_running_s`: the external `inla` binary, without R-side preparation and
+  post-processing, but including process start-up and file input and output.
+- `rinla_compute_s`: the binary's own timing of its approximate inference
+  ("Approx inference (total)" in `cpu.intern`), which is the computation itself and the
+  fair counterpart of the GaussianMarkovRandomFields.jl time.
+
+Without a PARDISO licence, R-INLA uses its built-in TAUCS solver, as it did here.
 
 `results.csv` was produced on an Apple M1 Max with Julia 1.10.10 and R-INLA 25.6.7.

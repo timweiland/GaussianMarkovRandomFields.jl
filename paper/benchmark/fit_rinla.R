@@ -15,6 +15,13 @@ out <- if (length(argv) >= 1) argv[1] else "_workdir"
 RANGE <- 0.3
 SIGMA <- 1.0
 
+# The inla binary's own timing of the approximate inference: the computation itself,
+# without R-side preparation, process start-up, or reading and writing files.
+inference_seconds <- function(res) {
+    line <- grep("Approx inference \\(total\\)", res$cpu.intern, value = TRUE)
+    as.numeric(sub(".*:\\s*([0-9.]+) seconds.*", "\\1", line))
+}
+
 levels <- sort(as.integer(sub("level_", "", list.files(out, pattern = "^level_"))))
 rows <- list()
 for (level in levels) {
@@ -49,16 +56,19 @@ for (level in levels) {
     n_rep <- if (mesh$n > 20000) 3 else 7
     walls <- numeric(n_rep)
     running <- numeric(n_rep)
+    compute <- numeric(n_rep)
     for (r in seq_len(n_rep)) {
         walls[r] <- system.time(res <- fit())[["elapsed"]]
         running[r] <- as.numeric(res$cpu.used[["Running"]])
+        compute[r] <- inference_seconds(res)
     }
     fs <- res$summary.random$spatial
     write.csv(data.frame(mean = fs$mean, sd = fs$sd), file.path(d, "rinla_field_summary.csv"), row.names = FALSE)
 
     rows[[length(rows) + 1]] <- data.frame(
         level = level, n = mesh$n, m = length(y),
-        t_median = median(walls), t_min = min(walls), running_median = median(running)
+        t_median = median(walls), t_min = min(walls), running_median = median(running),
+        compute_median = median(compute)
     )
     print(rows[[length(rows)]])
 }
