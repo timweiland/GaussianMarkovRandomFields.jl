@@ -34,7 +34,7 @@ As such, it is suitable for both research and teaching in spatial statistics and
 # Statement of Need
 
 GMRFs have become a cornerstone of modern spatial statistics, yet practical barriers limit their accessibility.
-Implementing GMRF-based models requires navigating sparse linear algebra libraries, finite element discretizations, and problem-specific solver selection, all of which create a steep barrier to entry for domain scientists.
+Implementing GMRF-based models requires navigating sparse linear algebra libraries and finite element discretizations, and choosing a linear solver suited to the problem (a sparse Cholesky factorization, an LDL$^\top$ factorization for tridiagonal precisions, or a preconditioned iterative method), all of which create a steep barrier to entry for domain scientists.
 
 `GaussianMarkovRandomFields.jl` eliminates these barriers by providing a feature-rich toolkit for creation and manipulation of GMRFs.
 The package offers utilities to create well-known latent models, ranging from simple autoregressive and Besag [@besagConditionalIntrinsicAutoregressions1995] models to more involved spatial and spatiotemporal finite element-based models [@lindgrenExplicitLinkGaussian2011; @clarottoSPDEApproachSpatiotemporal2024].
@@ -43,10 +43,10 @@ As an alternative to SPDE-based constructions, the package also implements KL-mi
 
 The package extends beyond Gaussian observations through Gaussian approximation methods.
 When working with non-Gaussian data such as counts or binary outcomes, the package seamlessly handles exponential family likelihoods.
-Users may also specify custom likelihood functions, for which the package exploits sparsity structure through automatic differentiation to maintain computational efficiency even for complex observation models, an approach established by Skaug and Fournier [@skaug2006automatic] and popularised by TMB [@kristensen2016tmb].
+Users may also specify custom likelihood functions, for which the package exploits sparsity structure through automatic differentiation (AD) to maintain computational efficiency even for complex observation models, an approach established by Skaug and Fournier [@skaug2006automatic] and popularised by TMB [@kristensen2016tmb].
 For large-scale applications, the package provides efficient marginal variance computation methods [@lin2011selinv; @rueMarginalVariancesGaussian2005a; @sidenEfficientCovarianceApproximations2018a].
 \autoref{fig:bernoulli} demonstrates this capability on a spatial binary classification task.
-Automatic differentiation support via ForwardDiff.jl [@revels2016forward], Enzyme.jl [@moses2020enzyme], Zygote.jl [@innes2018zygote], Mooncake.jl [@tebbutt2024mooncake] and DifferentiationInterface.jl [@dalle2025differentiationinterface] enable gradient-based optimization and inference methods, making the package compatible with modern probabilistic programming frameworks including Turing.jl [@ge2018turing].
+AD support via ForwardDiff.jl [@revels2016forward], Enzyme.jl [@moses2020enzyme], Zygote.jl [@innes2018zygote], Mooncake.jl [@tebbutt2024mooncake] and DifferentiationInterface.jl [@dalle2025differentiationinterface] enables gradient-based optimization and inference methods, making the package compatible with modern probabilistic programming frameworks including Turing.jl [@ge2018turing].
 
 ![Spatial binary classification of tree species in the Lansing Woods dataset [@gerrard1969lansing; @baddeley2015spatstat] using a Matérn latent field with Bernoulli observations. Points show observed trees: \textcolor{red}{hickory (circles)} and \textcolor{blue}{other species (diamonds)}. The heatmap shows predicted probabilities, demonstrating the package's support for non-Gaussian likelihoods through efficient Gaussian approximation.\label{fig:bernoulli}](bernoulli_classification.pdf){ width=80% }
 
@@ -76,8 +76,8 @@ A separate `LatentModel` abstraction decouples model specification (hyperparamet
 Provided models include autoregressive processes AR(p), random walks, IID, fixed effects, Besag, BYM2, Matérn SPDE, and compositions thereof; users add their own by implementing a small protocol.
 A formula interface built on StatsModels.jl offers the familiar R-style syntax for combined models.
 
-Linear solves are delegated to LinearSolve.jl, so users can swap CHOLMOD, Pardiso, LDLt factorizations, or preconditioned conjugate gradient without touching model code.
-Automatic differentiation is provided through package extensions for ForwardDiff.jl, Zygote.jl/ChainRulesCore.jl, Enzyme.jl and Mooncake.jl, with chain rules written at the GMRF-construction level so gradients flow through composed models.
+Linear solves are delegated to LinearSolve.jl [@kimmerer2026linearsolve], so users can swap CHOLMOD, Pardiso, LDL$^\top$ factorizations, or preconditioned conjugate gradient without touching model code.
+AD is provided through package extensions for ForwardDiff.jl, Zygote.jl/ChainRulesCore.jl, Enzyme.jl and Mooncake.jl, with chain rules written at the GMRF-construction level so gradients flow through composed models.
 This split (abstract core, composable solver backends, AD via extensions) keeps the package's load-time cost small while preserving extensibility.
 
 # Research Impact Statement
@@ -90,7 +90,7 @@ The sparse-linear-algebra, automatic-differentiation, and latent-model abstracti
 `Latte.jl` [@weiland2026latte], a probabilistic programming language for latent Gaussian models built by the author on these abstractions, provides INLA, TMB-style Laplace approximation, and HMC-Laplace behind a model-specification syntax --- evidence that the machinery described here is sufficient for that purpose, not merely intended for it.
 Integration with Turing.jl [@ge2018turing] additionally enables full MCMC over GMRF hyperparameters, combining GMRF sub-models with arbitrary non-Gaussian components in a probabilistic program.
 
-The package targets researchers and practitioners working in spatial statistics, epidemiology, environmental science, and related fields, and can serve both as a turnkey toolkit and as a substrate for methodological development in Julia's AD- and SciML-aware ecosystem.
+The package targets researchers and practitioners working in spatial statistics, epidemiology, environmental science, and related fields, and can serve both as a turnkey toolkit and as a substrate for methodological development in Julia's ecosystem for AD and scientific machine learning.
 
 # AI Usage Disclosure
 
