@@ -93,7 +93,12 @@ post = gaussian_approximation(prior, obs_model(y))  # again a GMRF
 
 Linear solves are delegated to LinearSolve.jl [@kimmerer2026linearsolve], so users can swap CHOLMOD, Pardiso, LDL$^\top$ factorizations, or preconditioned conjugate gradient without touching model code.
 AD is provided through package extensions for ForwardDiff.jl, Zygote.jl/ChainRulesCore.jl, Enzyme.jl and Mooncake.jl, with chain rules written at the GMRF-construction level so gradients flow through composed models.
-This split (abstract core, composable solver backends, AD via extensions) keeps the package's load-time cost small while preserving extensibility.
+This split (abstract core, composable solver backends, AD via extensions) keeps optional dependencies optional while preserving extensibility.
+
+To assess performance, we timed a Gaussian approximation with all latent marginal variances for a Poisson model with a Matérn SPDE prior at fixed hyperparameters against R-INLA [@rueApproximateBayesianInference2009], on identical meshes and data and single-threaded.
+The two posteriors agree to within $10^{-7}$.
+Measured against R-INLA's own timing of its inference, which excludes its R-side preparation and solver start-up, `GaussianMarkovRandomFields.jl` was 3.4 to 4.2 times faster for latent dimensions from 529 to 57,030 (1.8 s versus 5.9 s at the largest), with R-INLA using its default TAUCS solver.
+The benchmark scripts are in the repository's `paper/benchmark` directory.
 
 # Research Impact Statement
 
